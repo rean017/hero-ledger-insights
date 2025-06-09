@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Location {
   id: string;
@@ -48,6 +48,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
   const [loading, setLoading] = useState(false);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Fetch agents on component mount and when dialog opens
   useEffect(() => {
@@ -144,6 +145,15 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
     }
   };
 
+  const invalidateRelatedQueries = () => {
+    // Invalidate all queries that depend on location assignments and P&L data
+    queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
+    queryClient.invalidateQueries({ queryKey: ['agent-location-pl-data'] });
+    queryClient.invalidateQueries({ queryKey: ['period-summary'] });
+    queryClient.invalidateQueries({ queryKey: ['agents-for-pl'] });
+    queryClient.invalidateQueries({ queryKey: ['locations'] });
+  };
+
   const handleAddAgent = async () => {
     if (!newAgent || !newRate || !location) {
       toast({
@@ -191,7 +201,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
 
         toast({
           title: "Success",
-          description: "Agent assignment reactivated successfully"
+          description: `Agent assignment reactivated successfully with ${newRate} BPS rate`
         });
       } else {
         // Create new assignment
@@ -208,13 +218,14 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
 
         toast({
           title: "Success",
-          description: "Agent assigned successfully"
+          description: `Agent assigned successfully with ${newRate} BPS rate`
         });
       }
 
       setNewAgent("");
       setNewRate("");
       fetchAssignments();
+      invalidateRelatedQueries();
     } catch (error: any) {
       console.error('Error assigning agent:', error);
       toast({
@@ -236,10 +247,11 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
 
       toast({
         title: "Success",
-        description: "Agent removed successfully"
+        description: "Agent removed successfully - P&L calculations will be updated"
       });
 
       fetchAssignments();
+      invalidateRelatedQueries();
     } catch (error: any) {
       console.error('Error removing agent:', error);
       toast({
@@ -276,10 +288,11 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
 
       toast({
         title: "Success",
-        description: "Location updated successfully"
+        description: "Location updated successfully - P&L data will refresh"
       });
 
       onLocationUpdated();
+      invalidateRelatedQueries();
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error updating location:', error);
