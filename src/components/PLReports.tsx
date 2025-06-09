@@ -151,25 +151,55 @@ const PLReports = () => {
 
       console.log('P&L Query - All transactions in date range:', allTransactions?.length || 0);
 
-      // Create a location volume map - aggregate by account_id
+      // Create a comprehensive volume map - try multiple matching strategies
       const locationVolumeMap = new Map();
+      
+      // Strategy 1: Match by account_id
       allTransactions?.forEach(transaction => {
-        if (!transaction.account_id) return;
-        
-        const key = transaction.account_id;
-        if (!locationVolumeMap.has(key)) {
-          locationVolumeMap.set(key, {
-            volume: 0,
-            debitVolume: 0,
-            transactionCount: 0
-          });
+        if (transaction.account_id) {
+          const key = transaction.account_id;
+          if (!locationVolumeMap.has(key)) {
+            locationVolumeMap.set(key, {
+              volume: 0,
+              debitVolume: 0,
+              transactionCount: 0,
+              matchedBy: 'account_id'
+            });
+          }
+          
+          const locationData = locationVolumeMap.get(key);
+          locationData.volume += transaction.volume || 0;
+          locationData.debitVolume += transaction.debit_volume || 0;
+          locationData.transactionCount += 1;
         }
-        
-        const locationData = locationVolumeMap.get(key);
-        locationData.volume += transaction.volume || 0;
-        locationData.debitVolume += transaction.debit_volume || 0;
-        locationData.transactionCount += 1;
       });
+
+      // Strategy 2: Also try to match by location name patterns (fuzzy matching)
+      const { data: allLocations } = await supabase
+        .from('locations')
+        .select('*');
+
+      if (allLocations) {
+        allTransactions?.forEach(transaction => {
+          // Try to find location by partial name match or other identifiers
+          const matchingLocation = allLocations.find(loc => {
+            // Check if transaction has any reference to this location
+            const transactionData = JSON.stringify(transaction.raw_data || {}).toLowerCase();
+            const locationName = loc.name.toLowerCase();
+            return transactionData.includes(locationName) || 
+                   (transaction.account_id && transaction.account_id === loc.account_id);
+          });
+
+          if (matchingLocation && !locationVolumeMap.has(matchingLocation.account_id)) {
+            locationVolumeMap.set(matchingLocation.account_id, {
+              volume: transaction.volume || 0,
+              debitVolume: transaction.debit_volume || 0,
+              transactionCount: 1,
+              matchedBy: 'location_name'
+            });
+          }
+        });
+      }
 
       console.log('Location volume map entries:', Array.from(locationVolumeMap.entries()));
 
@@ -183,32 +213,68 @@ const PLReports = () => {
         }
         
         const locationAccountId = assignment.locations.account_id;
-        const locationVolume = locationVolumeMap.get(locationAccountId) || {
-          volume: 0,
-          debitVolume: 0,
-          transactionCount: 0
-        };
+        
+        // Try to find volume data for this location
+        let locationVolume = locationVolumeMap.get(locationAccountId);
+        
+        // If no direct match by account_id, try to find by location name
+        if (!locationVolume) {
+          // Look for transactions that might match this location by name
+          const locationName = assignment.locations.name.toLowerCase();
+          
+          allTransactions?.forEach(transaction => {
+            const rawDataStr = JSON.stringify(transaction.raw_data || {}).toLowerCase();
+            if (rawDataStr.includes(locationName) || 
+                (transaction.account_id && transaction.account_id.toLowerCase().includes(locationName))) {
+              
+              if (!locationVolume) {
+                locationVolume = {
+                  volume: 0,
+                  debitVolume: 0,
+                  transactionCount: 0,
+                  matchedBy: 'name_fuzzy'
+                };
+              }
+              
+              locationVolume.volume += transaction.volume || 0;
+              locationVolume.debitVolume += transaction.debit_volume || 0;
+              locationVolume.transactionCount += 1;
+            }
+          });
+        }
+        
+        // Default to zero if still no match
+        if (!locationVolume) {
+          locationVolume = {
+            volume: 0,
+            debitVolume: 0,
+            transactionCount: 0,
+            matchedBy: 'no_match'
+          };
+        }
 
         // Calculate commission: volume * (commission_rate / 10000)
-        // commission_rate is stored as basis points (e.g., 75 = 0.75%)
+        // commission_rate is stored as basis points (e.g., 70 = 0.70%)
         const commission = locationVolume.volume * (assignment.commission_rate / 10000);
 
         console.log(`Calculating for ${assignment.agent_name} at ${assignment.locations.name}:`, {
           accountId: locationAccountId,
           volume: locationVolume.volume,
           bpsRate: assignment.commission_rate,
-          calculatedCommission: commission
+          calculatedCommission: commission,
+          matchedBy: locationVolume.matchedBy
         });
 
         agentLocationResults.push({
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: assignment.commission_rate * 100, // Convert to display BPS (75 BPS shown as 7500)
+          bpsRate: assignment.commission_rate, // Keep as stored (70 = 70 BPS)
           volume: locationVolume.volume,
           debitVolume: locationVolume.debitVolume,
           calculatedPayout: commission,
-          transactionCount: locationVolume.transactionCount
+          transactionCount: locationVolume.transactionCount,
+          matchedBy: locationVolume.matchedBy
         });
       });
 
