@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -105,107 +104,135 @@ const PLReports = () => {
   const { data: agentLocationData, isLoading } = useQuery({
     queryKey: ['agent-location-pl-data', selectedAgents, selectedPeriod],
     queryFn: async () => {
-      let query = supabase
+      console.log('P&L Query - Selected agents:', selectedAgents);
+      console.log('P&L Query - Date range:', dateRange);
+
+      // Get all active location assignments first
+      let assignmentsQuery = supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          locations(name, account_id)
+        `)
+        .eq('is_active', true);
+
+      // Filter by selected agents if any are selected
+      if (selectedAgents.length > 0) {
+        assignmentsQuery = assignmentsQuery.in('agent_name', selectedAgents);
+      }
+
+      const { data: assignments, error: assignmentError } = await assignmentsQuery;
+      if (assignmentError) {
+        console.error('Error fetching assignments:', assignmentError);
+        throw assignmentError;
+      }
+
+      console.log('P&L Query - Active assignments:', assignments);
+
+      if (!assignments || assignments.length === 0) {
+        console.log('No assignments found for selected agents');
+        return [];
+      }
+
+      // Get all transactions for the date range
+      const { data: allTransactions, error: transactionError } = await supabase
         .from('transactions')
         .select('transaction_date, volume, debit_volume, processor, agent_name, account_id')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end)
         .order('transaction_date', { ascending: false });
 
-      // Filter by selected agents if any are selected
-      if (selectedAgents.length > 0) {
-        query = query.in('agent_name', selectedAgents);
+      if (transactionError) {
+        console.error('Error fetching transactions:', transactionError);
+        throw transactionError;
       }
 
-      const { data: transactions, error } = await query;
-      if (error) throw error;
-
-      // Get location assignments for BPS rates
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          locations(name, account_id)
-        `)
-        .eq('is_active', true);
-
-      if (assignmentError) throw assignmentError;
-
-      // Get all locations for account mapping
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
-
-      if (locationError) throw locationError;
+      console.log('P&L Query - All transactions in date range:', allTransactions?.length || 0);
 
       // Process data by agent and location
       const agentLocationMap = new Map();
 
-      transactions?.forEach(t => {
-        if (!t.agent_name) return;
+      // Create entries for all agent-location assignments, even if no transactions
+      assignments.forEach(assignment => {
+        if (!assignment.locations) return;
         
-        // Find location by account_id
-        const location = locations?.find(loc => loc.account_id === t.account_id);
-        const locationName = location?.name || t.account_id || 'Unknown Location';
-        
-        // Find assignment for this agent and location
-        const assignment = assignments?.find(a => 
-          a.agent_name === t.agent_name && 
-          a.location_id === location?.id
-        );
-        
-        const key = `${t.agent_name}-${locationName}`;
-        
-        if (!agentLocationMap.has(key)) {
-          agentLocationMap.set(key, {
-            agentName: t.agent_name,
-            locationName,
-            accountId: t.account_id,
-            bpsRate: assignment ? (assignment.commission_rate * 100) : 0,
-            volume: 0,
-            debitVolume: 0,
-            calculatedPayout: 0,
-            transactionCount: 0
-          });
-        }
-        
-        const data = agentLocationMap.get(key);
-        data.volume += t.volume || 0;
-        data.debitVolume += t.debit_volume || 0;
-        data.transactionCount += 1;
-        
-        // Calculate payout: volume × (BPS rate / 10000)
-        if (assignment) {
-          data.calculatedPayout += (t.volume || 0) * (assignment.commission_rate / 10000);
-        }
+        const key = `${assignment.agent_name}-${assignment.locations.name}`;
+        agentLocationMap.set(key, {
+          agentName: assignment.agent_name,
+          locationName: assignment.locations.name,
+          accountId: assignment.locations.account_id,
+          bpsRate: assignment.commission_rate * 100, // Convert to BPS for display
+          volume: 0,
+          debitVolume: 0,
+          calculatedPayout: 0,
+          transactionCount: 0
+        });
       });
 
-      return Array.from(agentLocationMap.values()).sort((a, b) => 
+      console.log('P&L Query - Initial agent-location map entries:', agentLocationMap.size);
+
+      // Now process transactions and match them to assignments
+      allTransactions?.forEach(transaction => {
+        console.log('Processing transaction:', {
+          agent: transaction.agent_name,
+          account: transaction.account_id,
+          volume: transaction.volume
+        });
+
+        // Find assignments that match this transaction
+        assignments.forEach(assignment => {
+          if (!assignment.locations) return;
+
+          // Match by account_id OR agent_name
+          const accountMatches = assignment.locations.account_id === transaction.account_id;
+          const agentMatches = assignment.agent_name === transaction.agent_name;
+
+          if (accountMatches || agentMatches) {
+            const key = `${assignment.agent_name}-${assignment.locations.name}`;
+            console.log('Found matching assignment for transaction:', {
+              key,
+              accountMatches,
+              agentMatches,
+              volume: transaction.volume
+            });
+
+            const data = agentLocationMap.get(key);
+            if (data) {
+              data.volume += transaction.volume || 0;
+              data.debitVolume += transaction.debit_volume || 0;
+              data.transactionCount += 1;
+              
+              // Calculate payout: volume × (BPS rate / 10000)
+              const commission = (transaction.volume || 0) * (assignment.commission_rate / 10000);
+              data.calculatedPayout += commission;
+              
+              console.log('Updated data for', key, {
+                volume: data.volume,
+                commission: data.calculatedPayout
+              });
+            }
+          }
+        });
+      });
+
+      const result = Array.from(agentLocationMap.values()).sort((a, b) => 
         a.agentName.localeCompare(b.agentName) || a.locationName.localeCompare(b.locationName)
       );
+
+      console.log('P&L Query - Final result:', result);
+      return result;
     }
   });
 
   const { data: periodSummary } = useQuery({
     queryKey: ['period-summary', selectedAgents, selectedPeriod],
     queryFn: async () => {
-      let query = supabase
-        .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id')
-        .gte('transaction_date', dateRange.start)
-        .lt('transaction_date', dateRange.end);
+      console.log('Period summary - Selected agents:', selectedAgents);
 
-      if (selectedAgents.length > 0) {
-        query = query.in('agent_name', selectedAgents);
-      }
-
-      const { data: transactions, error } = await query;
-      if (error) throw error;
-
-      // Get location assignments for BPS rates
-      const { data: assignments, error: assignmentError } = await supabase
+      // Get active assignments for selected agents
+      let assignmentsQuery = supabase
         .from('location_agent_assignments')
         .select(`
           agent_name,
@@ -215,48 +242,100 @@ const PLReports = () => {
         `)
         .eq('is_active', true);
 
+      if (selectedAgents.length > 0) {
+        assignmentsQuery = assignmentsQuery.in('agent_name', selectedAgents);
+      }
+
+      const { data: assignments, error: assignmentError } = await assignmentsQuery;
       if (assignmentError) throw assignmentError;
 
-      // Get all locations for account mapping
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
+      console.log('Period summary - Assignments:', assignments);
 
-      if (locationError) throw locationError;
+      // Get all transactions for the date range
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('volume, debit_volume, agent_name, account_id')
+        .gte('transaction_date', dateRange.start)
+        .lt('transaction_date', dateRange.end);
 
-      const totalRevenue = transactions?.reduce((sum, t) => sum + (t.volume || 0), 0) || 0;
-      const totalDebitVolume = transactions?.reduce((sum, t) => sum + (t.debit_volume || 0), 0) || 0;
-      
+      if (error) throw error;
+
+      console.log('Period summary - Transactions:', transactions?.length || 0);
+
+      let totalRevenue = 0;
+      let totalDebitVolume = 0;
       let totalExpenses = 0;
-      transactions?.forEach(t => {
-        if (t.agent_name && t.account_id) {
-          // Find location by account_id
-          const location = locations?.find(loc => loc.account_id === t.account_id);
-          
-          if (location) {
-            // Find assignment for this agent and location
-            const assignment = assignments?.find(a => 
-              a.agent_name === t.agent_name && 
-              a.location_id === location.id
-            );
-            
-            if (assignment) {
-              // Calculate commission: volume × (BPS rate / 10000)
-              totalExpenses += (t.volume || 0) * (assignment.commission_rate / 10000);
+      let relevantTransactionCount = 0;
+
+      transactions?.forEach(transaction => {
+        // Check if this transaction is relevant to our selected agents
+        let isRelevantTransaction = false;
+
+        if (selectedAgents.length === 0) {
+          // If no agents selected, include all transactions
+          isRelevantTransaction = true;
+          totalRevenue += transaction.volume || 0;
+          totalDebitVolume += transaction.debit_volume || 0;
+        } else {
+          // Check if transaction matches any of our agent assignments
+          assignments?.forEach(assignment => {
+            if (!assignment.locations) return;
+
+            const accountMatches = assignment.locations.account_id === transaction.account_id;
+            const agentMatches = assignment.agent_name === transaction.agent_name;
+
+            if (accountMatches || agentMatches) {
+              if (!isRelevantTransaction) {
+                // Only count revenue once per transaction
+                totalRevenue += transaction.volume || 0;
+                totalDebitVolume += transaction.debit_volume || 0;
+                isRelevantTransaction = true;
+              }
+
+              // Calculate commission for this assignment
+              const commission = (transaction.volume || 0) * (assignment.commission_rate / 10000);
+              totalExpenses += commission;
             }
-          }
+          });
+        }
+
+        if (isRelevantTransaction) {
+          relevantTransactionCount++;
         }
       });
 
+      // If no agents selected, calculate expenses for all transactions
+      if (selectedAgents.length === 0) {
+        transactions?.forEach(transaction => {
+          assignments?.forEach(assignment => {
+            if (!assignment.locations) return;
+
+            const accountMatches = assignment.locations.account_id === transaction.account_id;
+            const agentMatches = assignment.agent_name === transaction.agent_name;
+
+            if (accountMatches || agentMatches) {
+              const commission = (transaction.volume || 0) * (assignment.commission_rate / 10000);
+              totalExpenses += commission;
+            }
+          });
+        });
+      }
+
       const netIncome = totalRevenue - totalExpenses;
-      const transactionCount = transactions?.length || 0;
       
+      console.log('Period summary - Final calculations:', {
+        totalRevenue,
+        totalExpenses,
+        netIncome,
+        transactionCount: relevantTransactionCount
+      });
+
       return {
         totalRevenue,
         totalExpenses,
         totalDebitVolume,
         netIncome,
-        transactionCount,
+        transactionCount: relevantTransactionCount,
         profitMargin: totalRevenue > 0 ? ((netIncome / totalRevenue) * 100).toFixed(1) : '0.0'
       };
     }
