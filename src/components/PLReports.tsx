@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -137,12 +136,20 @@ const PLReports = () => {
         return [];
       }
 
-      // Get all transactions for the date range
+      // Get all account IDs from assignments
+      const accountIds = assignments
+        .map(assignment => assignment.locations?.account_id)
+        .filter(Boolean);
+
+      console.log('P&L Query - Account IDs to search for:', accountIds);
+
+      // Get all transactions for the date range and specific account IDs
       const { data: allTransactions, error: transactionError } = await supabase
         .from('transactions')
         .select('transaction_date, volume, debit_volume, processor, agent_name, account_id, raw_data')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end)
+        .in('account_id', accountIds)
         .order('transaction_date', { ascending: false });
 
       if (transactionError) {
@@ -150,7 +157,7 @@ const PLReports = () => {
         throw transactionError;
       }
 
-      console.log('P&L Query - All transactions in date range:', allTransactions?.length || 0);
+      console.log('P&L Query - Filtered transactions for accounts:', allTransactions?.length || 0);
       console.log('P&L Query - Sample transactions:', allTransactions?.slice(0, 5));
 
       // Create a map of account_id to aggregated transaction data
@@ -160,7 +167,7 @@ const PLReports = () => {
         const accountId = transaction.account_id;
         if (!accountId) return;
 
-        console.log('Processing transaction for account:', accountId, 'Volume:', transaction.volume);
+        console.log('Processing transaction for account:', accountId, 'Volume:', transaction.volume, 'Debit Volume:', transaction.debit_volume);
 
         if (!accountVolumeMap.has(accountId)) {
           accountVolumeMap.set(accountId, {
@@ -196,15 +203,16 @@ const PLReports = () => {
           transactionCount: 0
         };
 
-        // Calculate commission: volume * (commission_rate / 100 / 100)
-        // commission_rate is stored as basis points (e.g., 70 = 0.70%)
-        // To convert basis points to decimal: 70 BPS = 70/10000 = 0.007
-        const commissionDecimal = assignment.commission_rate / 10000;
+        // Calculate commission: volume * (commission_rate / 10000)
+        // commission_rate is stored as basis points (e.g., 75 = 0.75%)
+        // To convert basis points to decimal: 75 BPS = 75/10000 = 0.0075
+        const commissionDecimal = (assignment.commission_rate || 0) / 10000;
         const commission = volumeData.volume * commissionDecimal;
 
         console.log(`Calculating for ${assignment.agent_name} at ${assignment.locations.name}:`, {
           accountId: locationAccountId,
           volume: volumeData.volume,
+          debitVolume: volumeData.debitVolume,
           bpsRate: assignment.commission_rate,
           commissionDecimal: commissionDecimal,
           calculatedCommission: commission
@@ -214,7 +222,7 @@ const PLReports = () => {
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: assignment.commission_rate, // Keep as stored (70 = 70 BPS)
+          bpsRate: assignment.commission_rate || 0, // Keep as stored (75 = 75 BPS)
           volume: volumeData.volume,
           debitVolume: volumeData.debitVolume,
           calculatedPayout: commission,
