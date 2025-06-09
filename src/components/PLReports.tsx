@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -260,24 +259,20 @@ const PLReports = () => {
 
         console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
 
-        // Calculate commission using the stored rate - CORRECTED LOGIC
+        // Calculate commission using the stored rate - FIXED BPS INTERPRETATION
         const dbRate = Number(assignment.commission_rate) || 0;
         console.log(`Database rate for ${assignment.agent_name} at ${assignment.locations.name}: ${dbRate}`);
         
-        // The commission_rate should already be stored as BPS (basis points)
-        // Convert BPS to decimal: BPS / 10000 (e.g., 100 BPS = 0.01 = 1%)
-        const decimalRate = dbRate / 10000;
+        // The commission_rate is stored as a decimal (e.g., 0.0075 for 75 BPS)
+        // Convert decimal to BPS for display: decimal * 10000
+        const displayBPS = Math.round(dbRate * 10000);
         
-        // Display BPS should be the database value (since it's already in BPS)
-        const displayBPS = Math.min(Math.round(dbRate), 10000); // Cap at reasonable max
-        
-        // Calculate commission: volume × decimal rate
-        const commission = volumeData.volume * decimalRate;
+        // Use the decimal rate directly for calculation (it's already in the right format)
+        const commission = volumeData.volume * dbRate;
 
         console.log('Commission calculation:', {
           volume: volumeData.volume,
-          dbRateInBPS: dbRate,
-          decimalRate: decimalRate,
+          dbRateAsDecimal: dbRate,
           displayBPS: displayBPS,
           calculatedCommission: commission
         });
