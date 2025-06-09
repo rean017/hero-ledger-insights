@@ -123,6 +123,10 @@ const AgentManagement = () => {
         const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
         const manualAgent = manualAgents?.find(a => a.name === agentName);
         
+        // Count unique locations assigned to this agent
+        const assignedLocations = assignments?.filter(a => a.agent_name === agentName && a.is_active) || [];
+        const locationsCount = assignedLocations.length;
+        
         // Calculate average rate as percentage of commission to volume
         const avgRate = volumeStats.totalVolume > 0 
           ? ((totalCommission / volumeStats.totalVolume) * 100).toFixed(2) + '%' 
@@ -132,6 +136,7 @@ const AgentManagement = () => {
           name: agentName,
           totalRevenue: volumeStats.totalVolume,
           accountsCount: volumeStats.accountsCount,
+          locationsCount, // Add locations count
           totalCommission,
           avgRate,
           status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active'
@@ -267,6 +272,7 @@ const AgentManagement = () => {
                   <tr className="border-b">
                     <th className="text-left p-4 font-medium text-muted-foreground">Agent</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Avg Rate</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Locations</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Accounts</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Total Volume</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Calculated Commission</th>
@@ -282,6 +288,7 @@ const AgentManagement = () => {
                         </div>
                       </td>
                       <td className="p-4 font-semibold">{agent.avgRate}</td>
+                      <td className="p-4">{agent.locationsCount}</td>
                       <td className="p-4">{agent.accountsCount}</td>
                       <td className="p-4 font-semibold text-emerald-600">${agent.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                       <td className="p-4 font-semibold text-emerald-600">${agent.totalCommission.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
