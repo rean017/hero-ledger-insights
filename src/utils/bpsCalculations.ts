@@ -1,19 +1,17 @@
 
 // Utility functions for BPS rate calculations and display
 export const convertToBPSDisplay = (storedRate: number): number => {
-  // Handle different storage formats:
-  // - Decimal format: 0.75 = 75 BPS
-  // - Raw BPS format: 7500 = 75 BPS  
-  // - Already correct: 75 = 75 BPS
+  // The rate is stored as decimal in database (e.g., 0.01 for 100 BPS)
+  // We need to convert it back to BPS display format (1-10000 range)
   
   if (storedRate <= 1) {
-    // Stored as decimal (0.75)
-    return Math.round(storedRate * 100);
+    // Stored as decimal (0.01 for 100 BPS) -> multiply by 10000
+    return Math.round(storedRate * 10000);
   } else if (storedRate > 100) {
-    // Stored as raw value (7500)
+    // Already in raw format (10000 for 100 BPS) -> divide by 100  
     return Math.round(storedRate / 100);
   } else {
-    // Already in correct BPS format (75)
+    // Already in correct BPS format (100)
     return Math.round(storedRate);
   }
 };
@@ -22,13 +20,13 @@ export const convertToDecimalRate = (storedRate: number): number => {
   // Convert any format to decimal for calculations
   
   if (storedRate <= 1) {
-    // Already decimal (0.75)
+    // Already decimal (0.01)
     return storedRate;
   } else if (storedRate > 100) {
-    // Raw value (7500) -> decimal (0.75)
+    // Raw value (10000) -> decimal (0.01)
     return storedRate / 10000;
   } else {
-    // BPS value (75) -> decimal (0.75)
+    // BPS value (100) -> decimal (0.01)
     return storedRate / 100;
   }
 };
