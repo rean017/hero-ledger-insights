@@ -1,8 +1,9 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Download, FileText, TrendingUp, TrendingDown, User } from "lucide-react";
+import { Download, FileText, TrendingUp, TrendingDown, User, MapPin, Percent } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
@@ -100,12 +101,13 @@ const PLReports = () => {
 
   const dateRange = getDateRange(selectedPeriod);
 
-  const { data: monthlyData, isLoading } = useQuery({
-    queryKey: ['monthly-pl-data', selectedAgents, selectedPeriod],
+  // Fetch detailed agent location data
+  const { data: agentLocationData, isLoading } = useQuery({
+    queryKey: ['agent-location-pl-data', selectedAgents, selectedPeriod],
     queryFn: async () => {
       let query = supabase
         .from('transactions')
-        .select('transaction_date, volume, debit_volume, agent_payout, processor, agent_name')
+        .select('transaction_date, volume, debit_volume, agent_payout, processor, agent_name, account_id')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end)
         .order('transaction_date', { ascending: false });
@@ -118,51 +120,67 @@ const PLReports = () => {
       const { data: transactions, error } = await query;
       if (error) throw error;
 
-      // Group by month
-      const monthlyStats = transactions?.reduce((acc, t) => {
-        if (!t.transaction_date) return acc;
+      // Get location assignments for BPS rates
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          locations(name, account_id)
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      // Get all locations for account mapping
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
+
+      // Process data by agent and location
+      const agentLocationMap = new Map();
+
+      transactions?.forEach(t => {
+        if (!t.agent_name) return;
         
-        const monthKey = t.transaction_date.substring(0, 7); // YYYY-MM
-        if (!acc[monthKey]) {
-          acc[monthKey] = {
-            month: new Date(monthKey + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' }),
-            revenue: 0,
-            expenses: 0,
-            netIncome: 0,
-            agentPayouts: 0,
+        // Find location by account_id
+        const location = locations?.find(loc => loc.account_id === t.account_id);
+        const locationName = location?.name || t.account_id || 'Unknown Location';
+        
+        // Find assignment for this agent and location
+        const assignment = assignments?.find(a => 
+          a.agent_name === t.agent_name && 
+          a.location_id === location?.id
+        );
+        
+        const key = `${t.agent_name}-${locationName}`;
+        
+        if (!agentLocationMap.has(key)) {
+          agentLocationMap.set(key, {
+            agentName: t.agent_name,
+            locationName,
+            accountId: t.account_id,
+            bpsRate: assignment ? (assignment.commission_rate * 100) : 0,
+            volume: 0,
+            debitVolume: 0,
+            agentPayout: 0,
             transactionCount: 0
-          };
+          });
         }
         
-        acc[monthKey].revenue += t.volume || 0;
-        acc[monthKey].agentPayouts += t.agent_payout || 0;
-        acc[monthKey].transactionCount += 1;
-        
-        return acc;
-      }, {} as Record<string, any>) || {};
+        const data = agentLocationMap.get(key);
+        data.volume += t.volume || 0;
+        data.debitVolume += t.debit_volume || 0;
+        data.agentPayout += t.agent_payout || 0;
+        data.transactionCount += 1;
+      });
 
-      // Calculate net income and growth
-      const sortedMonths = Object.entries(monthlyStats)
-        .sort(([a], [b]) => b.localeCompare(a))
-        .map(([key, data], index, array) => {
-          const netIncome = data.revenue - data.agentPayouts;
-          let growth = 0;
-          
-          if (index < array.length - 1) {
-            const prevNetIncome = array[index + 1][1].revenue - array[index + 1][1].agentPayouts;
-            if (prevNetIncome > 0) {
-              growth = ((netIncome - prevNetIncome) / prevNetIncome) * 100;
-            }
-          }
-          
-          return {
-            ...data,
-            netIncome,
-            growth: Number(growth.toFixed(1))
-          };
-        });
-
-      return sortedMonths.slice(0, 12); // Last 12 months
+      return Array.from(agentLocationMap.values()).sort((a, b) => 
+        a.agentName.localeCompare(b.agentName) || a.locationName.localeCompare(b.locationName)
+      );
     }
   });
 
@@ -351,29 +369,33 @@ const PLReports = () => {
             </div>
           </div>
 
-          <h3>Monthly Performance History</h3>
+          <h3>Agent Location Performance Details</h3>
           <table>
             <thead>
               <tr>
-                <th>Month</th>
+                <th>Agent</th>
+                <th>Location</th>
+                <th>Account ID</th>
+                <th>BPS Rate</th>
                 <th>Sales Volume</th>
-                <th>Agent Payouts</th>
-                <th>Net Income</th>
-                <th>Growth</th>
+                <th>Debit Volume</th>
+                <th>Agent Payout</th>
                 <th>Transactions</th>
               </tr>
             </thead>
             <tbody>
-              ${monthlyData?.map(data => `
+              ${agentLocationData?.map(data => `
                 <tr>
-                  <td>${data.month}</td>
-                  <td>$${data.revenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  <td class="negative">$${data.agentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  <td class="positive">$${data.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  <td class="${data.growth >= 0 ? 'positive' : 'negative'}">${data.growth > 0 ? '+' : ''}${data.growth}%</td>
+                  <td>${data.agentName}</td>
+                  <td>${data.locationName}</td>
+                  <td>${data.accountId || 'N/A'}</td>
+                  <td>${data.bpsRate.toFixed(2)} BPS</td>
+                  <td>$${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td>$${data.debitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td class="positive">$${data.agentPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td>${data.transactionCount}</td>
                 </tr>
-              `).join('') || '<tr><td colspan="6">No data available</td></tr>'}
+              `).join('') || '<tr><td colspan="8">No data available</td></tr>'}
             </tbody>
           </table>
 
@@ -520,44 +542,53 @@ const PLReports = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Performance History</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            Agent Location Performance Details
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {monthlyData && monthlyData.length > 0 ? (
+          {agentLocationData && agentLocationData.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-4 font-medium text-muted-foreground">Month</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        Agent
+                      </div>
+                    </th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        Location
+                      </div>
+                    </th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Account ID</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Percent className="h-4 w-4" />
+                        BPS Rate
+                      </div>
+                    </th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Sales Volume</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Agent Payouts</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Net Income</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Growth</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Debit Volume</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Agent Payout</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Transactions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {monthlyData.map((data, index) => (
+                  {agentLocationData.map((data, index) => (
                     <tr key={index} className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="p-4 font-medium">{data.month}</td>
-                      <td className="p-4 font-semibold">${data.revenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-4 font-semibold text-orange-600">
-                        ${data.agentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
+                      <td className="p-4 font-medium">{data.agentName}</td>
+                      <td className="p-4 font-medium">{data.locationName}</td>
+                      <td className="p-4 text-muted-foreground">{data.accountId || 'N/A'}</td>
+                      <td className="p-4 font-semibold text-blue-600">{data.bpsRate.toFixed(2)} BPS</td>
+                      <td className="p-4 font-semibold">${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-4 font-semibold">${data.debitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                       <td className="p-4 font-semibold text-emerald-600">
-                        ${data.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-1">
-                          {data.growth >= 0 ? (
-                            <TrendingUp className="h-4 w-4 text-emerald-600" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4 text-red-600" />
-                          )}
-                          <span className={`font-semibold ${data.growth >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {data.growth > 0 ? '+' : ''}{data.growth}%
-                          </span>
-                        </div>
+                        ${data.agentPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-4 font-medium">{data.transactionCount}</td>
                     </tr>
