@@ -1,22 +1,72 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, TrendingUp, Users, Building2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 
 const Dashboard = () => {
+  const [timeFrame, setTimeFrame] = useState("current-month");
+
+  const getDateRange = (period: string) => {
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+
+    switch (period) {
+      case "current-month":
+        return {
+          start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
+          label: "Current month"
+        };
+      case "last-month":
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+        return {
+          start: `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+          label: "Last month"
+        };
+      case "current-quarter":
+        const quarterStart = Math.floor(currentMonth / 3) * 3;
+        return {
+          start: `${currentYear}-${String(quarterStart + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(quarterStart + 4).padStart(2, '0')}-01`,
+          label: "Current quarter"
+        };
+      case "current-year":
+        return {
+          start: `${currentYear}-01-01`,
+          end: `${currentYear + 1}-01-01`,
+          label: "Current year"
+        };
+      case "last-12-months":
+        const twelveMonthsAgo = new Date(currentYear, currentMonth - 12, 1);
+        return {
+          start: `${twelveMonthsAgo.getFullYear()}-${String(twelveMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
+          label: "Last 12 months"
+        };
+      default:
+        return {
+          start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
+          label: "Current month"
+        };
+    }
+  };
+
+  const dateRange = getDateRange(timeFrame);
+
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['dashboard-stats'],
+    queryKey: ['dashboard-stats', timeFrame],
     queryFn: async () => {
-      // Get current month's data
-      const currentDate = new Date();
-      const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-      
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_payout, agent_name')
-        .gte('transaction_date', `${currentMonth}-01`)
-        .lt('transaction_date', `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 2).padStart(2, '0')}-01`);
+        .gte('transaction_date', dateRange.start)
+        .lt('transaction_date', dateRange.end);
 
       if (error) throw error;
 
@@ -40,16 +90,13 @@ const Dashboard = () => {
   });
 
   const { data: topAgents, isLoading: agentsLoading } = useQuery({
-    queryKey: ['top-agents'],
+    queryKey: ['top-agents', timeFrame],
     queryFn: async () => {
-      const currentDate = new Date();
-      const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-      
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('agent_name, volume, agent_payout')
-        .gte('transaction_date', `${currentMonth}-01`)
-        .lt('transaction_date', `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 2).padStart(2, '0')}-01`)
+        .gte('transaction_date', dateRange.start)
+        .lt('transaction_date', dateRange.end)
         .not('agent_name', 'is', null);
 
       if (error) throw error;
@@ -74,9 +121,26 @@ const Dashboard = () => {
   if (isLoading || agentsLoading) {
     return (
       <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">Dashboard Overview</h2>
-          <p className="text-muted-foreground">Welcome to your Merchant Hero admin dashboard</p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground mb-2">Dashboard Overview</h2>
+            <p className="text-muted-foreground">Welcome to your Merchant Hero admin dashboard</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-muted-foreground">Time Frame:</label>
+            <Select value={timeFrame} onValueChange={setTimeFrame}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Select time frame" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current-month">Current Month</SelectItem>
+                <SelectItem value="last-month">Last Month</SelectItem>
+                <SelectItem value="current-quarter">Current Quarter</SelectItem>
+                <SelectItem value="current-year">Current Year</SelectItem>
+                <SelectItem value="last-12-months">Last 12 Months</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <div className="flex items-center justify-center h-64">
           <p className="text-muted-foreground">Loading dashboard data...</p>
@@ -87,23 +151,23 @@ const Dashboard = () => {
 
   const dashboardStats = [
     {
-      title: "Monthly Revenue",
+      title: "Total Revenue",
       value: `$${stats?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
-      change: "Current month",
+      change: dateRange.label,
       trend: "up",
       icon: DollarSign,
     },
     {
       title: "Agent Payouts",
       value: `$${stats?.totalAgentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
-      change: "Current month",
+      change: dateRange.label,
       trend: "up",
       icon: Users,
     },
     {
       title: "Net Income",
       value: `$${stats?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
-      change: "Current month",
+      change: dateRange.label,
       trend: "up",
       icon: TrendingUp,
     },
@@ -118,9 +182,26 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground mb-2">Dashboard Overview</h2>
-        <p className="text-muted-foreground">Welcome to your Merchant Hero admin dashboard</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Dashboard Overview</h2>
+          <p className="text-muted-foreground">Welcome to your Merchant Hero admin dashboard</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-muted-foreground">Time Frame:</label>
+          <Select value={timeFrame} onValueChange={setTimeFrame}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Select time frame" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current-month">Current Month</SelectItem>
+              <SelectItem value="last-month">Last Month</SelectItem>
+              <SelectItem value="current-quarter">Current Quarter</SelectItem>
+              <SelectItem value="current-year">Current Year</SelectItem>
+              <SelectItem value="last-12-months">Last 12 Months</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -148,7 +229,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Current Month P&L Summary</CardTitle>
+            <CardTitle>{dateRange.label} P&L Summary</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -172,7 +253,7 @@ const Dashboard = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Top Performing Agents</CardTitle>
+            <CardTitle>Top Performing Agents ({dateRange.label})</CardTitle>
           </CardHeader>
           <CardContent>
             {topAgents && topAgents.length > 0 ? (
@@ -192,7 +273,7 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="flex items-center justify-center h-32">
-                <p className="text-muted-foreground">No agent data available. Upload transaction data to see performance.</p>
+                <p className="text-muted-foreground">No agent data available for this period. Upload transaction data to see performance.</p>
               </div>
             )}
           </CardContent>
