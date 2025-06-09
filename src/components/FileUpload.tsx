@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, FileText, AlertCircle, CheckCircle } from "lucide-react";
+import { Upload, FileText, AlertCircle, CheckCircle, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from 'xlsx';
@@ -21,6 +21,7 @@ interface ProcessedData {
 
 const FileUpload = () => {
   const [selectedProcessor, setSelectedProcessor] = useState<string>("");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
     status: 'idle' | 'processing' | 'success' | 'error';
@@ -36,6 +37,27 @@ const FileUpload = () => {
     { value: "SignaPay", label: "SignaPay" },
     { value: "Gren Payments", label: "Gren Payments" }
   ];
+
+  // Generate months for the last 2 years and next year
+  const generateMonthOptions = () => {
+    const months = [];
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    
+    // Add months from 2 years ago to next year
+    for (let year = currentYear - 2; year <= currentYear + 1; year++) {
+      for (let month = 0; month < 12; month++) {
+        const date = new Date(year, month, 1);
+        const value = `${year}-${String(month + 1).padStart(2, '0')}`;
+        const label = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        months.push({ value, label });
+      }
+    }
+    
+    return months.reverse(); // Most recent first
+  };
+
+  const monthOptions = generateMonthOptions();
 
   const processRow = (row: any, processor: string): ProcessedData | null => {
     try {
@@ -174,10 +196,10 @@ const FileUpload = () => {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !selectedProcessor) {
+    if (!file || !selectedProcessor || !selectedMonth) {
       toast({
         title: "Error",
-        description: "Please select a processor and a file",
+        description: "Please select a processor, month, and a file",
         variant: "destructive"
       });
       return;
@@ -221,6 +243,9 @@ const FileUpload = () => {
               locationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
             }
 
+            // Use the selected month instead of the transaction date from file
+            const transactionDate = `${selectedMonth}-01`;
+
             const { error } = await supabase
               .from('transactions')
               .insert({
@@ -230,7 +255,7 @@ const FileUpload = () => {
                 agent_payout: processedData.agentPayout,
                 agent_name: processedData.agentName,
                 account_id: processedData.accountId,
-                transaction_date: processedData.transactionDate,
+                transaction_date: transactionDate,
                 raw_data: processedData.rawData
               });
 
@@ -262,14 +287,14 @@ const FileUpload = () => {
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
-        message: `Processed ${successCount} rows successfully. ${errorCount} errors.`,
+        message: `Processed ${successCount} rows successfully for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.`,
         filename: file.name,
         rowsProcessed: successCount
       });
 
       toast({
         title: "Upload Complete",
-        description: `Successfully processed ${successCount} rows from ${file.name}`,
+        description: `Successfully processed ${successCount} rows from ${file.name} for ${monthOptions.find(m => m.value === selectedMonth)?.label}`,
       });
 
     } catch (error) {
@@ -319,27 +344,53 @@ const FileUpload = () => {
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Upload File (CSV or XLSX)</label>
-          <div className="flex items-center justify-center w-full">
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-border border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
-                <p className="mb-2 text-sm text-muted-foreground">
-                  <span className="font-semibold">Click to upload</span> or drag and drop
-                </p>
-                <p className="text-xs text-muted-foreground">CSV or XLSX files only</p>
-              </div>
-              <input
-                type="file"
-                className="hidden"
-                accept=".csv,.xlsx,.xls"
-                onChange={handleFileUpload}
-                disabled={uploading || !selectedProcessor}
-              />
-            </label>
+        {selectedProcessor && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Select Month</label>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose month..." />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      {month.label}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </div>
+        )}
+
+        {selectedProcessor && selectedMonth && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Upload File (CSV or XLSX)</label>
+            <div className="flex items-center justify-center w-full">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-border border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <FileText className="w-8 h-8 mb-4 text-muted-foreground" />
+                  <p className="mb-2 text-sm text-muted-foreground">
+                    <span className="font-semibold">Click to upload</span> or drag and drop
+                  </p>
+                  <p className="text-xs text-muted-foreground">CSV or XLSX files only</p>
+                  <p className="text-xs text-primary mt-1">
+                    Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
+                  </p>
+                </div>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileUpload}
+                  disabled={uploading || !selectedProcessor || !selectedMonth}
+                />
+              </label>
+            </div>
+          </div>
+        )}
 
         {uploadStatus.status !== 'idle' && (
           <div className={`p-4 rounded-lg flex items-center gap-3 ${
