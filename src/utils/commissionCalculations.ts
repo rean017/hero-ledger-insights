@@ -74,20 +74,25 @@ export const calculateLocationCommissions = (
       const decimalRate = convertToDecimalRate(assignment.commission_rate);
       const commission = locationVolume * decimalRate;
 
+      // Get the BPS rate for display - convert stored decimal back to BPS
+      const displayBPS = Math.round(assignment.commission_rate * 100);
+
       console.log(`Commission calculation:`, {
         agentName: assignment.agent_name,
         locationName: location.name,
         locationVolume,
         storedRate: assignment.commission_rate,
+        displayBPS,
         decimalRate,
-        commission
+        commission,
+        formula: `${locationVolume} × ${decimalRate} = ${commission}`
       });
 
       commissions.push({
         locationId: assignment.location_id,
         locationName: location.name,
         agentName: assignment.agent_name,
-        bpsRate: Math.round(assignment.commission_rate * 100), // Convert to BPS for display
+        bpsRate: displayBPS,
         decimalRate,
         locationVolume,
         commission
