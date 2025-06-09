@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,6 +9,7 @@ import AgentManagement from "./components/AgentManagement";
 import Locations from "./components/Locations";
 import PLReports from "./components/PLReports";
 import UploadManagement from "./components/UploadManagement";
+import LocationCommissionReport from "./components/LocationCommissionReport";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +28,8 @@ function App() {
         return <AgentManagement />;
       case "locations":
         return <Locations />;
+      case "commissions":
+        return <LocationCommissionReport />;
       case "pl-reports":
         return <PLReports />;
       default:

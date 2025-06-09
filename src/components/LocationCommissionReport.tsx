@@ -4,14 +4,50 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { MapPin, DollarSign, TrendingUp, Calculator } from "lucide-react";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
-interface LocationCommissionReportProps {
-  transactions: any[];
-  assignments: any[];
-  locations: any[];
-}
+const LocationCommissionReport = () => {
+  // Fetch transactions
+  const { data: transactions = [] } = useQuery({
+    queryKey: ['transactions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*');
 
-const LocationCommissionReport = ({ transactions, assignments, locations }: LocationCommissionReportProps) => {
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // Fetch assignments
+  const { data: assignments = [] } = useQuery({
+    queryKey: ['location_agent_assignments'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('location_agent_assignments')
+        .select('*')
+        .eq('is_active', true);
+
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // Fetch locations
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('locations')
+        .select('*');
+
+      if (error) throw error;
+      return data;
+    }
+  });
+
   const commissions = calculateLocationCommissions(transactions, assignments, locations);
   const agentSummaries = groupCommissionsByAgent(commissions);
 
