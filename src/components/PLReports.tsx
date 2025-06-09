@@ -89,33 +89,29 @@ const PLReports = () => {
 
       if (assignmentError) throw assignmentError;
 
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
-
-      if (locationError) throw locationError;
-
       let totalRevenue = 0;
       let totalExpenses = 0;
 
+      // Calculate total revenue from all transactions
       transactions?.forEach(t => {
-        totalRevenue += t.volume || 0;
-        
-        if (t.agent_name && t.account_id) {
-          const location = locations?.find(loc => loc.account_id === t.account_id);
+        totalRevenue += (t.volume || 0) + (t.debit_volume || 0);
+      });
+
+      // Calculate agent commissions
+      assignments?.forEach(assignment => {
+        if (assignment.locations?.account_id) {
+          const locationTransactions = transactions?.filter(t => t.account_id === assignment.locations.account_id) || [];
+          const locationVolume = locationTransactions.reduce((sum, t) => sum + (t.volume || 0) + (t.debit_volume || 0), 0);
           
-          if (location) {
-            const assignment = assignments?.find(a => 
-              a.agent_name === t.agent_name && 
-              a.location_id === location.id
-            );
-            
-            if (assignment) {
-              const properDecimalRate = convertToDecimalRate(assignment.commission_rate);
-              const commission = (t.volume || 0) * properDecimalRate;
-              totalExpenses += commission;
-            }
-          }
+          const decimalRate = convertToDecimalRate(assignment.commission_rate);
+          const commission = locationVolume * decimalRate;
+          totalExpenses += commission;
+          
+          console.log(`Commission for ${assignment.locations.name} (${assignment.agent_name}):`, {
+            volume: locationVolume,
+            rate: decimalRate,
+            commission
+          });
         }
       });
 
@@ -161,39 +157,34 @@ const PLReports = () => {
 
       console.log('Total transactions in date range:', transactions?.length);
 
-      const accountVolumeMap = new Map();
-      transactions?.forEach(t => {
-        if (t.account_id) {
-          const existing = accountVolumeMap.get(t.account_id) || { volume: 0, debitVolume: 0, count: 0 };
-          existing.volume += t.volume || 0;
-          existing.debitVolume += t.debit_volume || 0;
-          existing.count += 1;
-          accountVolumeMap.set(t.account_id, existing);
-        }
-      });
-
-      console.log('Account volume aggregation:');
-      accountVolumeMap.forEach((data, accountId) => {
-        console.log(`Account ${accountId}: Volume=$${data.volume}, Debit=$${data.debitVolume}, Count=${data.count}`);
-      });
-
       const agentLocationResults = assignments?.map(assignment => {
         if (!assignment.locations?.account_id) {
           return null;
         }
 
         const locationAccountId = assignment.locations.account_id;
-        const volumeData = accountVolumeMap.get(locationAccountId) || { volume: 0, debitVolume: 0 };
+        
+        // Find all transactions for this location and sum volume + debit_volume
+        const locationTransactions = transactions?.filter(t => t.account_id === locationAccountId) || [];
+        const totalVolume = locationTransactions.reduce((sum, t) => sum + (t.volume || 0), 0);
+        const totalDebitVolume = locationTransactions.reduce((sum, t) => sum + (t.debit_volume || 0), 0);
+        const combinedVolume = totalVolume + totalDebitVolume;
 
-        console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
+        console.log(`Volume calculation for ${assignment.locations.name} (${locationAccountId}):`, {
+          transactions: locationTransactions.length,
+          totalVolume,
+          totalDebitVolume,
+          combinedVolume
+        });
 
         // Use utility functions for consistent conversion
         const bpsDisplay = convertToBPSDisplay(assignment.commission_rate);
         const decimalRate = convertToDecimalRate(assignment.commission_rate);
-        const commission = volumeData.volume * decimalRate;
+        const commission = combinedVolume * decimalRate;
 
         console.log('Commission calculation:', {
-          volume: volumeData.volume,
+          location: assignment.locations.name,
+          combinedVolume,
           storedRate: assignment.commission_rate,
           bpsDisplay: bpsDisplay,
           decimalRate: decimalRate,
@@ -205,10 +196,10 @@ const PLReports = () => {
           locationName: assignment.locations.name,
           accountId: locationAccountId,
           bpsRate: bpsDisplay,
-          volume: volumeData.volume,
-          debitVolume: volumeData.debitVolume,
+          volume: combinedVolume,
+          debitVolume: totalDebitVolume,
           calculatedPayout: commission,
-          profitContribution: volumeData.volume - commission
+          profitContribution: combinedVolume - commission
         };
       }).filter(Boolean) || [];
 
@@ -414,8 +405,8 @@ const PLReports = () => {
                     <th className="text-left p-4 font-medium text-muted-foreground">Agent</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Location</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">BPS Rate</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Volume</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Calculated Payout</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Total Volume</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Agent Payout</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Profit Contribution</th>
                   </tr>
                 </thead>
