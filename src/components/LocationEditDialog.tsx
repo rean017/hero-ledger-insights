@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -153,7 +154,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
       return;
     }
 
-    // Check if agent is already assigned
+    // Check if agent is already assigned and active
     if (assignments.some(a => a.agent_name === newAgent)) {
       toast({
         title: "Error",
@@ -166,21 +167,50 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
     const rate = parseFloat(newRate) / 100; // Convert BPS to decimal
 
     try {
-      const { error } = await supabase
+      // First check if there's an existing inactive assignment for this agent and location
+      const { data: existingAssignments, error: fetchError } = await supabase
         .from('location_agent_assignments')
-        .insert({
-          location_id: location.id,
-          agent_name: newAgent,
-          commission_rate: rate,
-          is_active: true
+        .select('*')
+        .eq('location_id', location.id)
+        .eq('agent_name', newAgent)
+        .eq('is_active', false);
+
+      if (fetchError) throw fetchError;
+
+      if (existingAssignments && existingAssignments.length > 0) {
+        // Reactivate the existing assignment with the new rate
+        const { error: updateError } = await supabase
+          .from('location_agent_assignments')
+          .update({
+            commission_rate: rate,
+            is_active: true
+          })
+          .eq('id', existingAssignments[0].id);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: "Success",
+          description: "Agent assignment reactivated successfully"
         });
+      } else {
+        // Create new assignment
+        const { error: insertError } = await supabase
+          .from('location_agent_assignments')
+          .insert({
+            location_id: location.id,
+            agent_name: newAgent,
+            commission_rate: rate,
+            is_active: true
+          });
 
-      if (error) throw error;
+        if (insertError) throw insertError;
 
-      toast({
-        title: "Success",
-        description: "Agent assigned successfully"
-      });
+        toast({
+          title: "Success",
+          description: "Agent assigned successfully"
+        });
+      }
 
       setNewAgent("");
       setNewRate("");

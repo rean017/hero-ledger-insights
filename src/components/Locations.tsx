@@ -153,12 +153,12 @@ const Locations = () => {
       return;
     }
 
-    // Check if agent is already assigned to this location
-    const existingAssignment = assignments.find(
+    // Check if agent is already assigned and active to this location
+    const existingActiveAssignment = assignments.find(
       a => a.location_id === selectedLocation && a.agent_name === selectedAgent
     );
 
-    if (existingAssignment) {
+    if (existingActiveAssignment) {
       toast({
         title: "Error",
         description: "Agent is already assigned to this location",
@@ -170,21 +170,50 @@ const Locations = () => {
     const rate = parseFloat(commissionRate) / 100; // Convert BPS to decimal
 
     try {
-      const { error } = await supabase
+      // First check if there's an existing inactive assignment for this agent and location
+      const { data: existingAssignments, error: fetchError } = await supabase
         .from('location_agent_assignments')
-        .insert({
-          location_id: selectedLocation,
-          agent_name: selectedAgent,
-          commission_rate: rate,
-          is_active: true
+        .select('*')
+        .eq('location_id', selectedLocation)
+        .eq('agent_name', selectedAgent)
+        .eq('is_active', false);
+
+      if (fetchError) throw fetchError;
+
+      if (existingAssignments && existingAssignments.length > 0) {
+        // Reactivate the existing assignment with the new rate
+        const { error: updateError } = await supabase
+          .from('location_agent_assignments')
+          .update({
+            commission_rate: rate,
+            is_active: true
+          })
+          .eq('id', existingAssignments[0].id);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: "Success",
+          description: "Agent assignment reactivated successfully"
         });
+      } else {
+        // Create new assignment
+        const { error: insertError } = await supabase
+          .from('location_agent_assignments')
+          .insert({
+            location_id: selectedLocation,
+            agent_name: selectedAgent,
+            commission_rate: rate,
+            is_active: true
+          });
 
-      if (error) throw error;
+        if (insertError) throw insertError;
 
-      toast({
-        title: "Success",
-        description: "Agent assigned successfully"
-      });
+        toast({
+          title: "Success",
+          description: "Agent assigned successfully"
+        });
+      }
 
       // Reset form and refresh data
       setSelectedLocation("");
