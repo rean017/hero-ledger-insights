@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,12 +23,13 @@ const AgentManagement = () => {
     queryFn: async () => {
       console.log('Fetching agents data for AgentManagement...');
       
-      const { data: transactions, error } = await supabase
+      // Fetch all required data
+      const { data: transactions, error: transactionError } = await supabase
         .from('transactions')
         .select('agent_name, volume, debit_volume, account_id')
         .not('agent_name', 'is', null);
 
-      if (error) throw error;
+      if (transactionError) throw transactionError;
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -47,33 +49,6 @@ const AgentManagement = () => {
 
       if (locationError) throw locationError;
 
-      // Use the standardized commission calculation
-      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-      const agentSummaries = groupCommissionsByAgent(commissions);
-
-      console.log('Commission calculations for agents:', agentSummaries);
-
-      // Calculate total revenue and account counts for each agent
-      const agentStats = transactions?.reduce((acc, t) => {
-        const name = t.agent_name!;
-        if (!acc[name]) {
-          acc[name] = { 
-            name, 
-            totalRevenue: 0, 
-            accountsCount: new Set(),
-            status: 'active'
-          };
-        }
-        acc[name].totalRevenue += (t.volume || 0) + (t.debit_volume || 0);
-        
-        if (t.account_id) {
-          acc[name].accountsCount.add(t.account_id);
-        }
-        
-        return acc;
-      }, {} as Record<string, any>) || {};
-
-      // Get manual agents from database
       const { data: manualAgents, error: manualError } = await supabase
         .from('agents')
         .select('name, is_active');
@@ -83,33 +58,87 @@ const AgentManagement = () => {
         throw manualError;
       }
 
-      console.log('Manual agents from database:', manualAgents);
-
-      // Add manual agents that don't have transaction data
-      manualAgents?.forEach(agent => {
-        if (!agentStats[agent.name]) {
-          agentStats[agent.name] = {
-            name: agent.name,
-            totalRevenue: 0,
-            accountsCount: 0,
-            status: agent.is_active ? 'active' : 'inactive'
-          };
-        } else {
-          agentStats[agent.name].status = agent.is_active ? 'active' : 'inactive';
-        }
+      console.log('Raw data loaded:', {
+        transactions: transactions?.length,
+        assignments: assignments?.length,
+        locations: locations?.length,
+        manualAgents: manualAgents?.length
       });
 
-      // Merge commission data with agent stats
-      const result = Object.values(agentStats).map(agent => {
-        const agentCommissionSummary = agentSummaries.find(summary => summary.agentName === agent.name);
-        const totalCommission = agentCommissionSummary ? agentCommissionSummary.totalCommission : 0;
+      // Use the standardized commission calculation
+      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
+      const agentCommissionSummaries = groupCommissionsByAgent(commissions);
+
+      console.log('Commission summaries:', agentCommissionSummaries);
+
+      // Calculate volume and account stats for each agent from transactions
+      const agentVolumeStats = transactions?.reduce((acc, t) => {
+        const name = t.agent_name!;
+        if (!acc[name]) {
+          acc[name] = { 
+            totalVolume: 0, 
+            accountIds: new Set(),
+            accountsCount: 0
+          };
+        }
+        acc[name].totalVolume += (t.volume || 0) + (t.debit_volume || 0);
         
-        return {
-          ...agent,
-          accountsCount: typeof agent.accountsCount === 'object' ? agent.accountsCount.size : agent.accountsCount,
+        if (t.account_id) {
+          acc[name].accountIds.add(t.account_id);
+        }
+        
+        return acc;
+      }, {} as Record<string, any>) || {};
+
+      // Convert Sets to counts
+      Object.keys(agentVolumeStats).forEach(agentName => {
+        agentVolumeStats[agentName].accountsCount = agentVolumeStats[agentName].accountIds.size;
+        delete agentVolumeStats[agentName].accountIds; // Remove the Set to avoid serialization issues
+      });
+
+      // Get all unique agent names from all sources
+      const allAgentNames = new Set<string>();
+      
+      // Add agents from transactions
+      transactions?.forEach(t => {
+        if (t.agent_name) allAgentNames.add(t.agent_name);
+      });
+      
+      // Add agents from assignments
+      assignments?.forEach(a => {
+        if (a.agent_name) allAgentNames.add(a.agent_name);
+      });
+      
+      // Add manual agents
+      manualAgents?.forEach(a => {
+        if (a.name) allAgentNames.add(a.name);
+      });
+
+      console.log('All unique agent names:', Array.from(allAgentNames));
+
+      // Build final agent data
+      const result = Array.from(allAgentNames).map(agentName => {
+        const volumeStats = agentVolumeStats[agentName] || { totalVolume: 0, accountsCount: 0 };
+        const commissionSummary = agentCommissionSummaries.find(summary => summary.agentName === agentName);
+        const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
+        const manualAgent = manualAgents?.find(a => a.name === agentName);
+        
+        // Calculate average rate as percentage of commission to volume
+        const avgRate = volumeStats.totalVolume > 0 
+          ? ((totalCommission / volumeStats.totalVolume) * 100).toFixed(2) + '%' 
+          : '0%';
+
+        const agentData = {
+          name: agentName,
+          totalRevenue: volumeStats.totalVolume,
+          accountsCount: volumeStats.accountsCount,
           totalCommission,
-          avgRate: agent.totalRevenue > 0 ? ((totalCommission / agent.totalRevenue) * 100).toFixed(2) + '%' : '0%'
+          avgRate,
+          status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active'
         };
+
+        console.log(`Agent ${agentName} data:`, agentData);
+        return agentData;
       });
 
       console.log('Final agents data:', result);
