@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Upload, FileText, AlertCircle, CheckCircle, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
@@ -30,13 +31,7 @@ const FileUpload = () => {
     rowsProcessed?: number;
   }>({ status: 'idle', message: '' });
   const { toast } = useToast();
-
-  const processors = [
-    { value: "TRNXN", label: "TRNXN" },
-    { value: "Maverick", label: "Maverick" },
-    { value: "SignaPay", label: "SignaPay" },
-    { value: "Gren Payments", label: "Gren Payments" }
-  ];
+  const queryClient = useQueryClient();
 
   // Generate months for the last 2 years and next year
   const generateMonthOptions = () => {
@@ -58,6 +53,13 @@ const FileUpload = () => {
   };
 
   const monthOptions = generateMonthOptions();
+
+  const processors = [
+    { value: "TRNXN", label: "TRNXN" },
+    { value: "Maverick", label: "Maverick" },
+    { value: "SignaPay", label: "SignaPay" },
+    { value: "Gren Payments", label: "Gren Payments" }
+  ];
 
   const processRow = (row: any, processor: string): ProcessedData | null => {
     try {
@@ -151,6 +153,7 @@ const FileUpload = () => {
         return null;
       }
 
+      console.log('Created new location:', newLocation);
       return newLocation.id;
     } catch (error) {
       console.error('Error in ensureLocationExists:', error);
@@ -224,10 +227,11 @@ const FileUpload = () => {
 
       // Parse the file
       const rawData = await parseFile(file);
-      console.log('Parsed data:', rawData);
+      console.log('Parsed data sample:', rawData.slice(0, 3));
 
       let successCount = 0;
       let errorCount = 0;
+      let locationsCreated = 0;
       const errors: any[] = [];
 
       // Process each row
@@ -240,7 +244,20 @@ const FileUpload = () => {
             // Ensure location exists if we have location data
             let locationId = null;
             if (processedData.locationName) {
-              locationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
+              const existingLocationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
+              if (existingLocationId) {
+                locationId = existingLocationId;
+                // Check if this was a newly created location
+                const { data: locationCheck } = await supabase
+                  .from('locations')
+                  .select('created_at')
+                  .eq('id', existingLocationId)
+                  .single();
+                
+                if (locationCheck && new Date(locationCheck.created_at).getTime() > Date.now() - 5000) {
+                  locationsCreated++;
+                }
+              }
             }
 
             // Use the selected month instead of the transaction date from file
@@ -285,16 +302,24 @@ const FileUpload = () => {
         })
         .eq('id', uploadRecord.id);
 
+      // Invalidate all relevant queries to refresh dashboard and other components
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['top-agents'] });
+      queryClient.invalidateQueries({ queryKey: ['agents-data'] });
+      queryClient.invalidateQueries({ queryKey: ['file-uploads'] });
+
+      const successMessage = `Processed ${successCount} rows successfully for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}`;
+
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
-        message: `Processed ${successCount} rows successfully for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.`,
+        message: successMessage,
         filename: file.name,
         rowsProcessed: successCount
       });
 
       toast({
         title: "Upload Complete",
-        description: `Successfully processed ${successCount} rows from ${file.name} for ${monthOptions.find(m => m.value === selectedMonth)?.label}`,
+        description: successMessage,
       });
 
     } catch (error) {

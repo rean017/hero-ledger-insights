@@ -50,8 +50,7 @@ const Index = () => {
       <Header onMenuClick={toggleSidebar} />
       <div className="flex w-full">
         <Sidebar 
-          isOpen={sidebarOpen} 
-          currentTab={currentTab} 
+          activeTab={currentTab} 
           onTabChange={setCurrentTab} 
         />
         <main className="flex-1 p-6 overflow-auto">
