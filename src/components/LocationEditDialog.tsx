@@ -305,7 +305,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
                         </SelectItem>
                       ))
                     ) : (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-agents-available" disabled>
                         {agentsLoading ? "Loading..." : "No available agents"}
                       </SelectItem>
                     )}
@@ -334,7 +334,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
                 <Button 
                   onClick={handleAddAgent} 
                   className="gap-2 w-full"
-                  disabled={!newAgent || !newRate || agentsLoading}
+                  disabled={!newAgent || !newRate || agentsLoading || newAgent === "no-agents-available"}
                 >
                   <Plus className="h-4 w-4" />
                   Add Agent
