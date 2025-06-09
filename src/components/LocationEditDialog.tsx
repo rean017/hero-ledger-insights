@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -25,6 +24,11 @@ interface LocationAssignment {
   is_active: boolean;
 }
 
+interface Agent {
+  id: string;
+  name: string;
+}
+
 interface LocationEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -37,21 +41,16 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
   const [accountId, setAccountId] = useState("");
   const [accountType, setAccountType] = useState("");
   const [assignments, setAssignments] = useState<LocationAssignment[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [newAgent, setNewAgent] = useState("");
   const [newRate, setNewRate] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const availableAgents = [
-    "Sarah Johnson",
-    "Mike Chen", 
-    "Emily Davis",
-    "David Wilson",
-    "Alex Rodriguez",
-    "Jessica Smith"
-  ];
-
   useEffect(() => {
+    if (open) {
+      fetchAgents();
+    }
     if (location && open) {
       setLocationName(location.name);
       setAccountId(location.account_id || "");
@@ -59,6 +58,26 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
       fetchAssignments();
     }
   }, [location, open]);
+
+  const fetchAgents = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('agents')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setAgents(data || []);
+    } catch (error) {
+      console.error('Error fetching agents:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load agents",
+        variant: "destructive"
+      });
+    }
+  };
 
   const fetchAssignments = async () => {
     if (!location) return;
@@ -197,8 +216,8 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
     }
   };
 
-  const availableAgentsForSelection = availableAgents.filter(
-    agent => !assignments.some(a => a.agent_name === agent)
+  const availableAgentsForSelection = agents.filter(
+    agent => !assignments.some(a => a.agent_name === agent.name)
   );
 
   return (
@@ -258,8 +277,8 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
                 </SelectTrigger>
                 <SelectContent>
                   {availableAgentsForSelection.map((agent) => (
-                    <SelectItem key={agent} value={agent}>
-                      {agent}
+                    <SelectItem key={agent.id} value={agent.name}>
+                      {agent.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

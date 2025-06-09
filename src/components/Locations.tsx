@@ -26,9 +26,15 @@ interface LocationAssignment {
   is_active: boolean;
 }
 
+interface Agent {
+  id: string;
+  name: string;
+}
+
 const Locations = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [assignments, setAssignments] = useState<LocationAssignment[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<string>("");
   const [selectedAgent, setSelectedAgent] = useState<string>("");
@@ -38,19 +44,31 @@ const Locations = () => {
   const [locationToEdit, setLocationToEdit] = useState<Location | null>(null);
   const { toast } = useToast();
 
-  const availableAgents = [
-    "Sarah Johnson",
-    "Mike Chen", 
-    "Emily Davis",
-    "David Wilson",
-    "Alex Rodriguez",
-    "Jessica Smith"
-  ];
-
   useEffect(() => {
     fetchLocations();
     fetchAssignments();
+    fetchAgents();
   }, []);
+
+  const fetchAgents = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('agents')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setAgents(data || []);
+    } catch (error) {
+      console.error('Error fetching agents:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load agents",
+        variant: "destructive"
+      });
+    }
+  };
 
   const fetchLocations = async () => {
     try {
@@ -217,9 +235,9 @@ const Locations = () => {
                 <SelectValue placeholder="Select Agent" />
               </SelectTrigger>
               <SelectContent>
-                {availableAgents.map((agent) => (
-                  <SelectItem key={agent} value={agent}>
-                    {agent}
+                {agents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.name}>
+                    {agent.name}
                   </SelectItem>
                 ))}
               </SelectContent>
