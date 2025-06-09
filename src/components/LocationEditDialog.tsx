@@ -76,7 +76,6 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
     try {
       console.log('Fetching agents in LocationEditDialog...');
       
-      // First try to get agents from the agents table
       const { data: agentsData, error: agentsError } = await supabase
         .from('agents')
         .select('id, name')
@@ -87,7 +86,6 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
         console.error('Error fetching from agents table:', agentsError);
       }
 
-      // Also get unique agent names from transactions as fallback
       const { data: transactionAgents, error: transactionError } = await supabase
         .from('transactions')
         .select('agent_name')
@@ -97,18 +95,13 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
         console.error('Error fetching from transactions:', transactionError);
       }
 
-      // Combine both sources
       const allAgents = new Set<string>();
       
-      // Add agents from agents table
       agentsData?.forEach(agent => allAgents.add(agent.name));
-      
-      // Add agents from transactions
       transactionAgents?.forEach(t => {
         if (t.agent_name) allAgents.add(t.agent_name);
       });
 
-      // Convert to agent objects
       const combinedAgents = Array.from(allAgents).map((name, index) => ({
         id: agentsData?.find(a => a.name === name)?.id || `transaction-${index}`,
         name
@@ -171,7 +164,6 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
       return;
     }
 
-    // Check if agent is already assigned and active
     if (assignments.some(a => a.agent_name === newAgent)) {
       toast({
         title: "Error",
@@ -181,10 +173,11 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
       return;
     }
 
-    const rate = parseFloat(newRate) / 10000; // Convert BPS to decimal (divide by 10,000)
+    // Convert BPS to proper decimal format for storage
+    const bpsValue = parseFloat(newRate);
+    const decimalRate = bpsValue / 10000; // Convert BPS to decimal (e.g., 75 BPS = 0.0075)
 
     try {
-      // First check if there's an existing inactive assignment for this agent and location
       const { data: existingAssignments, error: fetchError } = await supabase
         .from('location_agent_assignments')
         .select('*')
@@ -195,11 +188,10 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
       if (fetchError) throw fetchError;
 
       if (existingAssignments && existingAssignments.length > 0) {
-        // Reactivate the existing assignment with the new rate
         const { error: updateError } = await supabase
           .from('location_agent_assignments')
           .update({
-            commission_rate: rate,
+            commission_rate: decimalRate,
             is_active: true
           })
           .eq('id', existingAssignments[0].id);
@@ -211,13 +203,12 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
           description: `Agent assignment reactivated successfully with ${newRate} BPS rate`
         });
       } else {
-        // Create new assignment
         const { error: insertError } = await supabase
           .from('location_agent_assignments')
           .insert({
             location_id: location.id,
             agent_name: newAgent,
-            commission_rate: rate,
+            commission_rate: decimalRate,
             is_active: true
           });
 
@@ -422,26 +413,32 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
             {/* Current Assignments */}
             <div className="space-y-2">
               {assignments.length > 0 ? (
-                assignments.map((assignment) => (
-                  <div key={assignment.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">
-                        {assignment.agent_name}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {Math.round(assignment.commission_rate * 10000)} BPS
-                      </span>
+                assignments.map((assignment) => {
+                  // Fix: Convert stored rate to proper BPS display
+                  const storedRate = assignment.commission_rate;
+                  const displayBPS = storedRate > 1 ? Math.round(storedRate / 100) : Math.round(storedRate * 10000);
+                  
+                  return (
+                    <div key={assignment.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="secondary">
+                          {assignment.agent_name}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {displayBPS} BPS
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveAgent(assignment.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveAgent(assignment.id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-muted-foreground text-center py-4">
                   No agents assigned to this location

@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +21,6 @@ const AgentManagement = () => {
     queryFn: async () => {
       console.log('Fetching agents data for AgentManagement...');
       
-      // Get unique agents from transactions
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('agent_name, volume, account_id')
@@ -30,7 +28,6 @@ const AgentManagement = () => {
 
       if (error) throw error;
 
-      // Get location assignments for BPS rates
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
         .select(`
@@ -43,7 +40,6 @@ const AgentManagement = () => {
 
       if (assignmentError) throw assignmentError;
 
-      // Get all locations for account mapping
       const { data: locations, error: locationError } = await supabase
         .from('locations')
         .select('id, name, account_id');
@@ -63,21 +59,20 @@ const AgentManagement = () => {
         }
         acc[name].totalRevenue += t.volume || 0;
         
-        // Calculate commission based on location-specific BPS rate
         if (t.account_id) {
-          // Find location by account_id
           const location = locations?.find(loc => loc.account_id === t.account_id);
           
           if (location) {
-            // Find assignment for this agent and location
             const assignment = assignments?.find(a => 
               a.agent_name === name && 
               a.location_id === location.id
             );
             
             if (assignment) {
-              // Calculate commission: volume × (BPS rate / 10000)
-              const commission = (t.volume || 0) * (assignment.commission_rate / 10000);
+              // Fix: Convert stored rate to proper decimal for calculation
+              const storedRate = assignment.commission_rate;
+              const properRate = storedRate > 1 ? storedRate / 10000 : storedRate;
+              const commission = (t.volume || 0) * properRate;
               acc[name].totalCommission += commission;
             }
           }
@@ -86,7 +81,6 @@ const AgentManagement = () => {
         return acc;
       }, {} as Record<string, any>) || {};
 
-      // Get account counts per agent
       const { data: accountData, error: accountError } = await supabase
         .from('transactions')
         .select('agent_name, account_id')
@@ -101,7 +95,6 @@ const AgentManagement = () => {
         }
       });
 
-      // Get manually added agents from the agents table
       const { data: manualAgents, error: manualError } = await supabase
         .from('agents')
         .select('name, is_active');
@@ -113,7 +106,6 @@ const AgentManagement = () => {
 
       console.log('Manual agents from database:', manualAgents);
 
-      // Add manually created agents that might not have transactions yet
       manualAgents?.forEach(agent => {
         if (!agentStats[agent.name]) {
           agentStats[agent.name] = {
@@ -124,7 +116,6 @@ const AgentManagement = () => {
             status: agent.is_active ? 'active' : 'inactive'
           };
         } else {
-          // Update status based on database record
           agentStats[agent.name].status = agent.is_active ? 'active' : 'inactive';
         }
       });

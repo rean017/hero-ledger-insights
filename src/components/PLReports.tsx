@@ -110,9 +110,13 @@ const PLReports = () => {
             );
             
             if (assignment) {
-              // Calculate commission: volume × (stored commission_rate)
-              // commission_rate is already stored as decimal (BPS/10000)
-              const commission = (t.volume || 0) * assignment.commission_rate;
+              // Fix: Convert stored rate to proper decimal for calculation
+              // If rate > 1, it's stored incorrectly and needs to be divided by 10000
+              const properRate = assignment.commission_rate > 1 ? 
+                assignment.commission_rate / 10000 : 
+                assignment.commission_rate;
+              
+              const commission = (t.volume || 0) * properRate;
               totalExpenses += commission;
             }
           }
@@ -187,13 +191,19 @@ const PLReports = () => {
 
         console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
 
-        // Calculate commission using stored rate (already as decimal BPS/10000)
-        const commission = volumeData.volume * assignment.commission_rate;
+        // Fix: Convert stored rate to proper BPS and decimal for calculation
+        // If rate > 1, it's stored incorrectly as raw value instead of decimal
+        const storedRate = assignment.commission_rate;
+        const properBPS = storedRate > 1 ? Math.round(storedRate / 100) : Math.round(storedRate * 10000);
+        const properDecimalRate = storedRate > 1 ? storedRate / 10000 : storedRate;
+        
+        const commission = volumeData.volume * properDecimalRate;
 
         console.log('Commission calculation:', {
           volume: volumeData.volume,
-          storedRate: assignment.commission_rate,
-          displayBPS: Math.round(assignment.commission_rate * 10000),
+          storedRate: storedRate,
+          properBPS: properBPS,
+          properDecimalRate: properDecimalRate,
           calculatedCommission: commission
         });
 
@@ -201,7 +211,7 @@ const PLReports = () => {
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: Math.round(assignment.commission_rate * 10000), // Convert to BPS for display
+          bpsRate: properBPS, // Display proper BPS
           volume: volumeData.volume,
           debitVolume: volumeData.debitVolume,
           calculatedPayout: commission,
