@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -165,9 +164,12 @@ const PLReports = () => {
         // Use account_id if available, otherwise try to use MID from raw_data
         let accountId = transaction.account_id;
         
-        if (!accountId && transaction.raw_data && transaction.raw_data.MID) {
-          accountId = transaction.raw_data.MID;
-          console.log(`Using MID as account_id: ${accountId} for transaction`);
+        if (!accountId && transaction.raw_data && typeof transaction.raw_data === 'object' && transaction.raw_data !== null && !Array.isArray(transaction.raw_data)) {
+          const rawData = transaction.raw_data as Record<string, any>;
+          if (rawData.MID) {
+            accountId = rawData.MID;
+            console.log(`Using MID as account_id: ${accountId} for transaction`);
+          }
         }
         
         if (!accountId) {
