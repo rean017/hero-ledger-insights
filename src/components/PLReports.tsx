@@ -195,7 +195,7 @@ const PLReports = () => {
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: bpsDisplay,
+          bpsRate: bpsDisplay, // This should now be the corrected BPS display (75, not 7500)
           volume: combinedVolume,
           debitVolume: totalDebitVolume,
           calculatedPayout: commission,
