@@ -1,53 +1,52 @@
 
-import { Home, Users, Building2, FileText, TrendingUp, Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BarChart3, Upload, Users, MapPin, DollarSign, FileText } from "lucide-react";
 
 interface SidebarProps {
-  isOpen: boolean;
-  currentTab: string;
+  activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
-const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: Home },
-  { id: 'agents', label: 'Agent Management', icon: Users },
-  { id: 'accounts', label: 'Account Assignment', icon: Building2 },
-  { id: 'reports', label: 'P&L Reports', icon: FileText },
-  { id: 'analytics', label: 'Analytics', icon: TrendingUp },
-  { id: 'settings', label: 'Settings', icon: Settings },
-];
+const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
+  const menuItems = [
+    { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+    { id: "upload", label: "Upload Data", icon: Upload },
+    { id: "upload-management", label: "Upload Management", icon: FileText },
+    { id: "agents", label: "Agent Management", icon: Users },
+    { id: "locations", label: "Locations", icon: MapPin },
+    { id: "pl-reports", label: "P&L Reports", icon: DollarSign },
+  ];
 
-const Sidebar = ({ isOpen, currentTab, onTabChange }: SidebarProps) => {
   return (
-    <aside className={cn(
-      "bg-card border-r border-border transition-all duration-300 flex flex-col",
-      isOpen ? "w-64" : "w-16"
-    )}>
-      <nav className="flex-1 p-4">
-        <div className="space-y-2">
+    <div className="w-64 bg-card border-r border-border h-full">
+      <div className="p-6 border-b border-border">
+        <h1 className="text-xl font-bold text-foreground">Merchant Hero</h1>
+        <p className="text-sm text-muted-foreground">Revenue Management</p>
+      </div>
+      <nav className="p-4">
+        <ul className="space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentTab === item.id;
-            
             return (
-              <Button
-                key={item.id}
-                variant={isActive ? "default" : "ghost"}
-                className={cn(
-                  "w-full justify-start gap-3 transition-all",
-                  !isOpen && "px-2"
-                )}
-                onClick={() => onTabChange(item.id)}
-              >
-                <Icon className="h-5 w-5 flex-shrink-0" />
-                {isOpen && <span>{item.label}</span>}
-              </Button>
+              <li key={item.id}>
+                <button
+                  onClick={() => onTabChange(item.id)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors",
+                    activeTab === item.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              </li>
             );
           })}
-        </div>
+        </ul>
       </nav>
-    </aside>
+    </div>
   );
 };
 
