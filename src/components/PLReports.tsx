@@ -157,41 +157,59 @@ const PLReports = () => {
 
       console.log('Total transactions in date range:', allTransactions?.length || 0);
 
-      // Create a map of account_id to aggregated transaction data
+      // Create a comprehensive map of account identifiers to transaction data
       const accountVolumeMap = new Map();
       
       allTransactions?.forEach(transaction => {
-        // Use account_id if available, otherwise try to use MID from raw_data
-        let accountId = transaction.account_id;
+        // Try multiple ways to get account identifier
+        let accountIdentifiers = [];
         
-        if (!accountId && transaction.raw_data && typeof transaction.raw_data === 'object' && transaction.raw_data !== null && !Array.isArray(transaction.raw_data)) {
+        // Primary: use account_id from transaction
+        if (transaction.account_id) {
+          accountIdentifiers.push(transaction.account_id);
+        }
+        
+        // Secondary: try to extract MID from raw_data
+        if (transaction.raw_data && typeof transaction.raw_data === 'object' && transaction.raw_data !== null && !Array.isArray(transaction.raw_data)) {
           const rawData = transaction.raw_data as Record<string, any>;
           if (rawData.MID) {
-            accountId = rawData.MID;
-            console.log(`Using MID as account_id: ${accountId} for transaction`);
+            accountIdentifiers.push(rawData.MID);
+          }
+          // Also try other common identifier fields
+          if (rawData.merchantId) {
+            accountIdentifiers.push(rawData.merchantId);
+          }
+          if (rawData.merchant_id) {
+            accountIdentifiers.push(rawData.merchant_id);
+          }
+          if (rawData.account) {
+            accountIdentifiers.push(rawData.account);
           }
         }
         
-        if (!accountId) {
-          console.log('Transaction missing account_id and MID:', transaction);
+        if (accountIdentifiers.length === 0) {
+          console.log('Transaction missing account identifiers:', transaction);
           return;
         }
 
-        if (!accountVolumeMap.has(accountId)) {
-          accountVolumeMap.set(accountId, {
-            volume: 0,
-            debitVolume: 0,
-            transactionCount: 0
-          });
-        }
-        
-        const accountData = accountVolumeMap.get(accountId);
-        const volume = Number(transaction.volume) || 0;
-        const debitVolume = Number(transaction.debit_volume) || 0;
-        
-        accountData.volume += volume;
-        accountData.debitVolume += debitVolume;
-        accountData.transactionCount += 1;
+        // Store data for all account identifiers found
+        accountIdentifiers.forEach(accountId => {
+          if (!accountVolumeMap.has(accountId)) {
+            accountVolumeMap.set(accountId, {
+              volume: 0,
+              debitVolume: 0,
+              transactionCount: 0
+            });
+          }
+          
+          const accountData = accountVolumeMap.get(accountId);
+          const volume = Number(transaction.volume) || 0;
+          const debitVolume = Number(transaction.debit_volume) || 0;
+          
+          accountData.volume += volume;
+          accountData.debitVolume += debitVolume;
+          accountData.transactionCount += 1;
+        });
       });
 
       console.log('Account volume aggregation:');
@@ -211,33 +229,53 @@ const PLReports = () => {
         const locationAccountId = assignment.locations.account_id;
         console.log(`\nProcessing ${assignment.agent_name} at ${assignment.locations.name} (Account: ${locationAccountId})`);
         
-        // Get volume data for this location's account ID - try both the stored account_id and as a potential MID
-        let volumeData = accountVolumeMap.get(locationAccountId) || {
+        // Initialize volume data
+        let volumeData = {
           volume: 0,
           debitVolume: 0,
           transactionCount: 0
         };
 
-        console.log(`Volume data for account ${locationAccountId}:`, volumeData);
+        // Try to find volume data for this location's account ID
+        if (locationAccountId && accountVolumeMap.has(locationAccountId)) {
+          volumeData = accountVolumeMap.get(locationAccountId);
+          console.log(`Found exact match for account ${locationAccountId}:`, volumeData);
+        } else {
+          // If no exact match, try partial matching or similar account IDs
+          console.log(`No exact match found for account ${locationAccountId}, checking for partial matches...`);
+          
+          // Look for partial matches (case insensitive)
+          for (const [mapAccountId, mapData] of accountVolumeMap.entries()) {
+            if (locationAccountId && mapAccountId && 
+                (mapAccountId.toLowerCase().includes(locationAccountId.toLowerCase()) ||
+                 locationAccountId.toLowerCase().includes(mapAccountId.toLowerCase()))) {
+              console.log(`Found partial match: ${mapAccountId} for location account ${locationAccountId}`);
+              volumeData.volume += mapData.volume;
+              volumeData.debitVolume += mapData.debitVolume;
+              volumeData.transactionCount += mapData.transactionCount;
+            }
+          }
+        }
 
-        // Commission rate should be stored as decimal (e.g., 0.0075 for 75 BPS)
-        // But let's check what we actually have in the database
+        console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
+
+        // Calculate commission using the stored rate
         const dbRate = Number(assignment.commission_rate) || 0;
         console.log(`Database rate for ${assignment.agent_name} at ${assignment.locations.name}: ${dbRate}`);
         
-        // If the rate is greater than 1, it's likely stored as BPS (e.g., 75), so convert to decimal
-        // If the rate is less than 1, it's already a decimal (e.g., 0.0075)
+        // The rate should be stored as decimal (e.g., 0.0075 for 75 BPS)
+        // But handle both formats for backward compatibility
         let decimalRate;
         let displayBPS;
         
         if (dbRate > 1) {
-          // Rate stored as BPS (e.g., 75)
+          // Rate stored as BPS (e.g., 75) - convert to decimal
           decimalRate = dbRate / 10000;
-          displayBPS = Math.min(dbRate, 100);
+          displayBPS = Math.min(Math.round(dbRate), 100);
         } else {
-          // Rate stored as decimal (e.g., 0.0075)
+          // Rate stored as decimal (e.g., 0.0075) - use as is
           decimalRate = dbRate;
-          displayBPS = Math.min(dbRate * 10000, 100);
+          displayBPS = Math.min(Math.round(dbRate * 10000), 100);
         }
 
         const commission = volumeData.volume * decimalRate;
@@ -504,7 +542,7 @@ const PLReports = () => {
                   <td>${data.agentName}</td>
                   <td>${data.locationName}</td>
                   <td>${data.accountId || 'N/A'}</td>
-                  <td>${Math.min(data.bpsRate.toFixed(2), 100)} BPS</td>
+                  <td>${data.bpsRate} BPS</td>
                   <td>$${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td>$${data.debitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td class="positive">$${data.calculatedPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
@@ -703,7 +741,7 @@ const PLReports = () => {
                       <td className="p-4 font-medium">{data.agentName}</td>
                       <td className="p-4 font-medium">{data.locationName}</td>
                       <td className="p-4 text-muted-foreground">{data.accountId || 'N/A'}</td>
-                      <td className="p-4 font-semibold text-blue-600">{Math.min(data.bpsRate, 100).toFixed(0)} BPS</td>
+                      <td className="p-4 font-semibold text-blue-600">{data.bpsRate} BPS</td>
                       <td className="p-4">
                         <div className="flex flex-col">
                           <span className="font-semibold">${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
