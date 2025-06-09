@@ -100,7 +100,7 @@ const PLReports = () => {
 
   const dateRange = getDateRange(selectedPeriod);
 
-  // Fetch detailed agent location data with flexible calculation approach
+  // Fetch detailed agent location data with proper volume calculation
   const { data: agentLocationData, isLoading } = useQuery({
     queryKey: ['agent-location-pl-data', selectedAgents, selectedPeriod],
     queryFn: async () => {
@@ -151,7 +151,7 @@ const PLReports = () => {
 
       console.log('P&L Query - All transactions in date range:', allTransactions?.length || 0);
 
-      // Create a location volume map first - aggregate all volume by location
+      // Create a location volume map - aggregate by account_id
       const locationVolumeMap = new Map();
       allTransactions?.forEach(transaction => {
         if (!transaction.account_id) return;
@@ -171,45 +171,48 @@ const PLReports = () => {
         locationData.transactionCount += 1;
       });
 
-      console.log('Location volume map:', Array.from(locationVolumeMap.entries()));
+      console.log('Location volume map entries:', Array.from(locationVolumeMap.entries()));
 
-      // Now calculate earnings for each agent based on their assignments
-      const agentLocationMap = new Map();
+      // Calculate earnings for each agent-location combination
+      const agentLocationResults = [];
 
       assignments.forEach(assignment => {
-        if (!assignment.locations) return;
+        if (!assignment.locations) {
+          console.log('Assignment missing location data:', assignment);
+          return;
+        }
         
-        const key = `${assignment.agent_name}-${assignment.locations.name}`;
-        
-        // Get the volume for this location from our location volume map
-        const locationVolume = locationVolumeMap.get(assignment.locations.account_id) || {
+        const locationAccountId = assignment.locations.account_id;
+        const locationVolume = locationVolumeMap.get(locationAccountId) || {
           volume: 0,
           debitVolume: 0,
           transactionCount: 0
         };
 
-        // Calculate commission for this agent on this location's volume
+        // Calculate commission: volume * (commission_rate / 10000)
+        // commission_rate is stored as basis points (e.g., 75 = 0.75%)
         const commission = locationVolume.volume * (assignment.commission_rate / 10000);
 
-        agentLocationMap.set(key, {
+        console.log(`Calculating for ${assignment.agent_name} at ${assignment.locations.name}:`, {
+          accountId: locationAccountId,
+          volume: locationVolume.volume,
+          bpsRate: assignment.commission_rate,
+          calculatedCommission: commission
+        });
+
+        agentLocationResults.push({
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
-          accountId: assignment.locations.account_id,
-          bpsRate: assignment.commission_rate * 100, // Convert to BPS for display
+          accountId: locationAccountId,
+          bpsRate: assignment.commission_rate * 100, // Convert to display BPS (75 BPS shown as 7500)
           volume: locationVolume.volume,
           debitVolume: locationVolume.debitVolume,
           calculatedPayout: commission,
           transactionCount: locationVolume.transactionCount
         });
-
-        console.log('Calculated for agent', assignment.agent_name, 'at location', assignment.locations.name, {
-          volume: locationVolume.volume,
-          bpsRate: assignment.commission_rate,
-          commission: commission
-        });
       });
 
-      const result = Array.from(agentLocationMap.values()).sort((a, b) => 
+      const result = agentLocationResults.sort((a, b) => 
         a.agentName.localeCompare(b.agentName) || a.locationName.localeCompare(b.locationName)
       );
 
@@ -223,27 +226,7 @@ const PLReports = () => {
     queryFn: async () => {
       console.log('Period summary - Selected agents:', selectedAgents);
 
-      // Get active assignments for selected agents
-      let assignmentsQuery = supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          locations(name, account_id)
-        `)
-        .eq('is_active', true);
-
-      if (selectedAgents.length > 0) {
-        assignmentsQuery = assignmentsQuery.in('agent_name', selectedAgents);
-      }
-
-      const { data: assignments, error: assignmentError } = await assignmentsQuery;
-      if (assignmentError) throw assignmentError;
-
-      console.log('Period summary - Assignments:', assignments);
-
-      // Get all transactions for the date range
+      // Get all transactions for the date range first to calculate total revenue
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id')
@@ -252,48 +235,26 @@ const PLReports = () => {
 
       if (error) throw error;
 
-      console.log('Period summary - Transactions:', transactions?.length || 0);
+      console.log('Period summary - Total transactions:', transactions?.length || 0);
 
-      // Calculate totals - use all transaction volume as revenue
+      // Calculate total revenue and debit volume from all transactions
       let totalRevenue = 0;
       let totalDebitVolume = 0;
-      let totalExpenses = 0;
       let transactionCount = transactions?.length || 0;
 
-      // Aggregate total revenue and debit volume from all transactions
       transactions?.forEach(transaction => {
         totalRevenue += transaction.volume || 0;
         totalDebitVolume += transaction.debit_volume || 0;
       });
 
-      // Calculate expenses based on agent assignments and location volumes
-      const locationVolumeMap = new Map();
-      transactions?.forEach(transaction => {
-        if (!transaction.account_id) return;
-        
-        const key = transaction.account_id;
-        if (!locationVolumeMap.has(key)) {
-          locationVolumeMap.set(key, 0);
-        }
-        locationVolumeMap.set(key, locationVolumeMap.get(key) + (transaction.volume || 0));
-      });
-
-      // Calculate total expenses based on all agent assignments
-      assignments?.forEach(assignment => {
-        if (!assignment.locations) return;
-        
-        const locationVolume = locationVolumeMap.get(assignment.locations.account_id) || 0;
-        const commission = locationVolume * (assignment.commission_rate / 10000);
-        totalExpenses += commission;
-        
-        console.log('Commission calculated for summary:', {
-          agent: assignment.agent_name,
-          location: assignment.locations.name,
-          volume: locationVolume,
-          rate: assignment.commission_rate,
-          commission: commission
+      // Calculate total expenses based on agent assignments
+      let totalExpenses = 0;
+      
+      if (agentLocationData) {
+        agentLocationData.forEach(data => {
+          totalExpenses += data.calculatedPayout;
         });
-      });
+      }
 
       const netIncome = totalRevenue - totalExpenses;
       
@@ -312,7 +273,8 @@ const PLReports = () => {
         transactionCount,
         profitMargin: totalRevenue > 0 ? ((netIncome / totalRevenue) * 100).toFixed(1) : '0.0'
       };
-    }
+    },
+    enabled: !!agentLocationData
   });
 
   const generatePDFReport = async () => {
