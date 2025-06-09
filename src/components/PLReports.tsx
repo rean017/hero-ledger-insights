@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -195,14 +196,17 @@ const PLReports = () => {
           transactionCount: 0
         };
 
-        // Calculate commission: volume * (commission_rate / 10000)
+        // Calculate commission: volume * (commission_rate / 100 / 100)
         // commission_rate is stored as basis points (e.g., 70 = 0.70%)
-        const commission = volumeData.volume * (assignment.commission_rate / 10000);
+        // To convert basis points to decimal: 70 BPS = 70/10000 = 0.007
+        const commissionDecimal = assignment.commission_rate / 10000;
+        const commission = volumeData.volume * commissionDecimal;
 
         console.log(`Calculating for ${assignment.agent_name} at ${assignment.locations.name}:`, {
           accountId: locationAccountId,
           volume: volumeData.volume,
           bpsRate: assignment.commission_rate,
+          commissionDecimal: commissionDecimal,
           calculatedCommission: commission
         });
 
@@ -638,8 +642,12 @@ const PLReports = () => {
                         BPS Rate
                       </div>
                     </th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Sales Volume</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Debit Volume</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">
+                      <div className="flex flex-col">
+                        <span>Sales Volume</span>
+                        <span className="text-xs text-muted-foreground/70">(Sales / Debit)</span>
+                      </div>
+                    </th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Calculated Payout</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Transactions</th>
                   </tr>
@@ -651,8 +659,12 @@ const PLReports = () => {
                       <td className="p-4 font-medium">{data.locationName}</td>
                       <td className="p-4 text-muted-foreground">{data.accountId || 'N/A'}</td>
                       <td className="p-4 font-semibold text-blue-600">{data.bpsRate.toFixed(2)} BPS</td>
-                      <td className="p-4 font-semibold">${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-4 font-semibold">${data.debitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-4">
+                        <div className="flex flex-col">
+                          <span className="font-semibold">${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                          <span className="text-sm text-muted-foreground">${data.debitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </td>
                       <td className="p-4 font-semibold text-emerald-600">
                         ${data.calculatedPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
