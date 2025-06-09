@@ -151,7 +151,7 @@ const Dashboard = () => {
 
   const dashboardStats = [
     {
-      title: "Total Revenue",
+      title: "Total Sales Volume",
       value: `$${stats?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
       change: dateRange.label,
       trend: "up",
@@ -234,7 +234,7 @@ const Dashboard = () => {
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Revenue</span>
+                <span className="text-sm text-muted-foreground">Total Sales Volume</span>
                 <span className="font-semibold">${stats?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
               </div>
               <div className="flex justify-between items-center">
