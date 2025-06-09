@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -45,29 +46,46 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
   const [newAgent, setNewAgent] = useState("");
   const [newRate, setNewRate] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const { toast } = useToast();
 
+  // Fetch agents on component mount and when dialog opens
   useEffect(() => {
     if (open) {
       fetchAgents();
-    }
-    if (location && open) {
-      setLocationName(location.name);
-      setAccountId(location.account_id || "");
-      setAccountType(location.account_type || "");
-      fetchAssignments();
+      if (location) {
+        setLocationName(location.name);
+        setAccountId(location.account_id || "");
+        setAccountType(location.account_type || "");
+        fetchAssignments();
+      }
+    } else {
+      // Reset form when dialog closes
+      setLocationName("");
+      setAccountId("");
+      setAccountType("");
+      setAssignments([]);
+      setNewAgent("");
+      setNewRate("");
     }
   }, [location, open]);
 
   const fetchAgents = async () => {
+    setAgentsLoading(true);
     try {
+      console.log('Fetching agents...');
       const { data, error } = await supabase
         .from('agents')
         .select('id, name')
         .eq('is_active', true)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Fetched agents:', data);
       setAgents(data || []);
     } catch (error) {
       console.error('Error fetching agents:', error);
@@ -76,6 +94,8 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
         description: "Failed to load agents",
         variant: "destructive"
       });
+    } finally {
+      setAgentsLoading(false);
     }
   };
 
@@ -271,35 +291,55 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
             
             {/* Add New Agent */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg bg-muted/50">
-              <Select value={newAgent} onValueChange={setNewAgent}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableAgentsForSelection.map((agent) => (
-                    <SelectItem key={agent.id} value={agent.name}>
-                      {agent.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Label>Select Agent</Label>
+                <Select value={newAgent} onValueChange={setNewAgent} disabled={agentsLoading}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select Agent"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableAgentsForSelection.length > 0 ? (
+                      availableAgentsForSelection.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.name}>
+                          {agent.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="" disabled>
+                        {agentsLoading ? "Loading..." : "No available agents"}
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {agents.length === 0 && !agentsLoading && (
+                  <p className="text-sm text-muted-foreground">
+                    No agents found. Add agents in Agent Management first.
+                  </p>
+                )}
+              </div>
               
-              <Input
-                placeholder="BPS Rate (e.g., 150)"
-                value={newRate}
-                onChange={(e) => setNewRate(e.target.value)}
-                type="number"
-                step="0.01"
-              />
+              <div className="space-y-2">
+                <Label>BPS Rate</Label>
+                <Input
+                  placeholder="BPS Rate (e.g., 150)"
+                  value={newRate}
+                  onChange={(e) => setNewRate(e.target.value)}
+                  type="number"
+                  step="0.01"
+                />
+              </div>
               
-              <Button 
-                onClick={handleAddAgent} 
-                className="gap-2"
-                disabled={!newAgent || !newRate}
-              >
-                <Plus className="h-4 w-4" />
-                Add Agent
-              </Button>
+              <div className="space-y-2">
+                <Label>&nbsp;</Label>
+                <Button 
+                  onClick={handleAddAgent} 
+                  className="gap-2 w-full"
+                  disabled={!newAgent || !newRate || agentsLoading}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Agent
+                </Button>
+              </div>
             </div>
 
             {/* Current Assignments */}
