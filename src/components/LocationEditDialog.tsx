@@ -9,6 +9,7 @@ import { Trash2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { convertToBPSDisplay, convertToDecimalRate } from "@/utils/bpsCalculations";
 
 interface Location {
   id: string;
@@ -414,9 +415,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
             <div className="space-y-2">
               {assignments.length > 0 ? (
                 assignments.map((assignment) => {
-                  // Fix: Convert stored rate to proper BPS display
-                  const storedRate = assignment.commission_rate;
-                  const displayBPS = storedRate > 1 ? Math.round(storedRate / 100) : Math.round(storedRate * 10000);
+                  const displayBPS = convertToBPSDisplay(assignment.commission_rate);
                   
                   return (
                     <div key={assignment.id} className="flex items-center justify-between p-3 border rounded-lg">

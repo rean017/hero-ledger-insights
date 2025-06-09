@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import LocationEditDialog from "./LocationEditDialog";
+import { convertToBPSDisplay, convertToDecimalRate } from "@/utils/bpsCalculations";
 
 interface Location {
   id: string;
@@ -304,7 +304,7 @@ const Locations = () => {
               <span className="text-muted-foreground">Avg. Rate</span>
               <span className="font-semibold">
                 {assignments && assignments.length > 0 
-                  ? `${Math.min(Math.round(assignments.reduce((sum, a) => sum + a.commission_rate, 0) / assignments.length * 10000), 100)} BPS`
+                  ? `${Math.round(assignments.reduce((sum, a) => sum + convertToBPSDisplay(a.commission_rate), 0) / assignments.length)} BPS`
                   : '0 BPS'
                 }
               </span>
@@ -364,7 +364,7 @@ const Locations = () => {
                       {locationAssignments.map((assignment) => (
                         <div key={assignment.id} className="flex items-center gap-1">
                           <Badge variant="secondary" className="text-xs">
-                            {assignment.agent_name} ({Math.min(Math.round(assignment.commission_rate * 10000), 100)} BPS)
+                            {assignment.agent_name} ({convertToBPSDisplay(assignment.commission_rate)} BPS)
                           </Badge>
                           <Button
                             variant="ghost"
