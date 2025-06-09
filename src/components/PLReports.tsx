@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -131,6 +132,11 @@ const PLReports = () => {
       }
 
       console.log('Active assignments found:', assignments?.length || 0);
+      
+      // Log each assignment for debugging
+      assignments?.forEach(a => {
+        console.log(`Assignment: ${a.agent_name} -> ${a.locations?.name} (Account: ${a.locations?.account_id}) at ${a.commission_rate} BPS`);
+      });
 
       if (!assignments || assignments.length === 0) {
         console.log('No assignments found for selected agents');
@@ -157,7 +163,10 @@ const PLReports = () => {
       
       allTransactions?.forEach(transaction => {
         const accountId = transaction.account_id;
-        if (!accountId) return;
+        if (!accountId) {
+          console.log('Transaction missing account_id:', transaction);
+          return;
+        }
 
         if (!accountVolumeMap.has(accountId)) {
           accountVolumeMap.set(accountId, {
@@ -176,7 +185,10 @@ const PLReports = () => {
         accountData.transactionCount += 1;
       });
 
-      console.log('Account volume aggregation completed, accounts found:', accountVolumeMap.size);
+      console.log('Account volume aggregation:');
+      accountVolumeMap.forEach((data, accountId) => {
+        console.log(`Account ${accountId}: Volume=$${data.volume}, Debit=$${data.debitVolume}, Count=${data.transactionCount}`);
+      });
 
       // Calculate earnings for each agent-location combination
       const agentLocationResults = [];
@@ -197,7 +209,7 @@ const PLReports = () => {
           transactionCount: 0
         };
 
-        console.log('Volume data for account:', volumeData);
+        console.log(`Volume data for account ${locationAccountId}:`, volumeData);
 
         // Calculate commission: volume * (commission_rate / 10000)
         // commission_rate is stored as basis points (e.g., 70 = 70 BPS = 0.7%)
@@ -230,7 +242,7 @@ const PLReports = () => {
 
       console.log('=== FINAL RESULTS ===');
       result.forEach(r => {
-        console.log(`${r.agentName} - ${r.locationName}: Volume=$${r.volume}, Payout=$${r.calculatedPayout}`);
+        console.log(`${r.agentName} - ${r.locationName}: Account=${r.accountId}, Volume=$${r.volume}, BPS=${r.bpsRate}, Payout=$${r.calculatedPayout}`);
       });
       console.log('=== P&L CALCULATION END ===');
 
