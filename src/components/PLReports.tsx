@@ -131,9 +131,6 @@ const PLReports = () => {
       }
 
       console.log('Active assignments found:', assignments?.length || 0);
-      assignments?.forEach(a => {
-        console.log(`Assignment: ${a.agent_name} -> ${a.locations?.name} (Account: ${a.locations?.account_id}) at ${a.commission_rate} BPS`);
-      });
 
       if (!assignments || assignments.length === 0) {
         console.log('No assignments found for selected agents');
@@ -171,18 +168,15 @@ const PLReports = () => {
         }
         
         const accountData = accountVolumeMap.get(accountId);
-        const volume = parseFloat(transaction.volume) || 0;
-        const debitVolume = parseFloat(transaction.debit_volume) || 0;
+        const volume = Number(transaction.volume) || 0;
+        const debitVolume = Number(transaction.debit_volume) || 0;
         
         accountData.volume += volume;
         accountData.debitVolume += debitVolume;
         accountData.transactionCount += 1;
       });
 
-      console.log('Account volume aggregation:');
-      accountVolumeMap.forEach((data, accountId) => {
-        console.log(`Account ${accountId}: Volume=${data.volume}, Debit=${data.debitVolume}, Count=${data.transactionCount}`);
-      });
+      console.log('Account volume aggregation completed, accounts found:', accountVolumeMap.size);
 
       // Calculate earnings for each agent-location combination
       const agentLocationResults = [];
@@ -207,7 +201,7 @@ const PLReports = () => {
 
         // Calculate commission: volume * (commission_rate / 10000)
         // commission_rate is stored as basis points (e.g., 70 = 70 BPS = 0.7%)
-        const bpsRate = parseFloat(assignment.commission_rate) || 0;
+        const bpsRate = Number(assignment.commission_rate) || 0;
         const commissionDecimal = bpsRate / 10000;
         const commission = volumeData.volume * commissionDecimal;
 
@@ -266,8 +260,8 @@ const PLReports = () => {
       let transactionCount = transactions?.length || 0;
 
       transactions?.forEach(transaction => {
-        totalRevenue += transaction.volume || 0;
-        totalDebitVolume += transaction.debit_volume || 0;
+        totalRevenue += Number(transaction.volume) || 0;
+        totalDebitVolume += Number(transaction.debit_volume) || 0;
       });
 
       // Calculate total expenses based on agent assignments
