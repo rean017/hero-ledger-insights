@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download, FileText, TrendingUp, TrendingDown, User } from "lucide-react";
-import FileUpload from "./FileUpload";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
@@ -27,12 +26,65 @@ const PLReports = () => {
     }
   });
 
+  const getDateRange = (period: string) => {
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+
+    switch (period) {
+      case "current-month":
+        return {
+          start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
+          label: new Date(currentYear, currentMonth).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
+        };
+      case "last-month":
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+        return {
+          start: `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+          label: new Date(lastMonthYear, lastMonth).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
+        };
+      case "current-quarter":
+        const quarterStart = Math.floor(currentMonth / 3) * 3;
+        return {
+          start: `${currentYear}-${String(quarterStart + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(quarterStart + 4).padStart(2, '0')}-01`,
+          label: `Q${Math.floor(currentMonth / 3) + 1} ${currentYear}`
+        };
+      case "current-year":
+        return {
+          start: `${currentYear}-01-01`,
+          end: `${currentYear + 1}-01-01`,
+          label: currentYear.toString()
+        };
+      case "last-12-months":
+        const twelveMonthsAgo = new Date(currentYear, currentMonth - 12, 1);
+        return {
+          start: `${twelveMonthsAgo.getFullYear()}-${String(twelveMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
+          label: "Last 12 Months"
+        };
+      default:
+        return {
+          start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
+          label: new Date(currentYear, currentMonth).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
+        };
+    }
+  };
+
+  const dateRange = getDateRange(selectedPeriod);
+
   const { data: monthlyData, isLoading } = useQuery({
-    queryKey: ['monthly-pl-data', selectedAgent],
+    queryKey: ['monthly-pl-data', selectedAgent, selectedPeriod],
     queryFn: async () => {
       let query = supabase
         .from('transactions')
         .select('transaction_date, volume, debit_volume, agent_payout, processor, agent_name')
+        .gte('transaction_date', dateRange.start)
+        .lt('transaction_date', dateRange.end)
         .order('transaction_date', { ascending: false });
 
       // Filter by agent if selected
@@ -91,17 +143,14 @@ const PLReports = () => {
     }
   });
 
-  const { data: currentMonthSummary } = useQuery({
-    queryKey: ['current-month-summary', selectedAgent],
+  const { data: periodSummary } = useQuery({
+    queryKey: ['period-summary', selectedAgent, selectedPeriod],
     queryFn: async () => {
-      const currentDate = new Date();
-      const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-      
       let query = supabase
         .from('transactions')
         .select('volume, agent_payout, debit_volume')
-        .gte('transaction_date', `${currentMonth}-01`)
-        .lt('transaction_date', `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 2).padStart(2, '0')}-01`);
+        .gte('transaction_date', dateRange.start)
+        .lt('transaction_date', dateRange.end);
 
       if (selectedAgent !== 'all') {
         query = query.eq('agent_name', selectedAgent);
@@ -238,38 +287,38 @@ const PLReports = () => {
             <img src="/lovable-uploads/e5192b97-a74b-44d2-b5ab-f72d228fbad9.png" alt="Merchant Hero Logo" class="logo">
             <div class="company-name">MERCHANT HERO</div>
             <div class="report-title">Profit & Loss Report</div>
-            <div class="report-period">Agent: ${agentName} | Generated: ${reportDate}</div>
+            <div class="report-period">Agent: ${agentName} | Period: ${dateRange.label} | Generated: ${reportDate}</div>
           </div>
 
           <div class="summary-section">
-            <h3>Current Month Summary</h3>
+            <h3>${dateRange.label} Summary</h3>
             <div class="summary-grid">
               <div>
                 <div class="summary-item">
-                  <span class="label">Total Revenue:</span>
-                  <span class="value">$${currentMonthSummary?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                  <span class="label">Total Sales Volume:</span>
+                  <span class="value">$${periodSummary?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
                 </div>
                 <div class="summary-item">
                   <span class="label">Total Expenses:</span>
-                  <span class="value negative">$${currentMonthSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                  <span class="value negative">$${periodSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
                 </div>
                 <div class="summary-item">
                   <span class="label">Net Income:</span>
-                  <span class="value positive">$${currentMonthSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                  <span class="value positive">$${periodSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
                 </div>
               </div>
               <div>
                 <div class="summary-item">
                   <span class="label">Debit Volume:</span>
-                  <span class="value">$${currentMonthSummary?.totalDebitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                  <span class="value">$${periodSummary?.totalDebitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
                 </div>
                 <div class="summary-item">
                   <span class="label">Transaction Count:</span>
-                  <span class="value">${currentMonthSummary?.transactionCount.toLocaleString() || '0'}</span>
+                  <span class="value">${periodSummary?.transactionCount.toLocaleString() || '0'}</span>
                 </div>
                 <div class="summary-item">
                   <span class="label">Profit Margin:</span>
-                  <span class="value positive">${currentMonthSummary?.profitMargin || '0.0'}%</span>
+                  <span class="value positive">${periodSummary?.profitMargin || '0.0'}%</span>
                 </div>
               </div>
             </div>
@@ -280,7 +329,7 @@ const PLReports = () => {
             <thead>
               <tr>
                 <th>Month</th>
-                <th>Revenue</th>
+                <th>Sales Volume</th>
                 <th>Agent Payouts</th>
                 <th>Net Income</th>
                 <th>Growth</th>
@@ -323,7 +372,7 @@ const PLReports = () => {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
-          <p className="text-muted-foreground">Upload transaction data and view comprehensive profit and loss analysis</p>
+          <p className="text-muted-foreground">Generate comprehensive profit and loss reports by agent and time period</p>
         </div>
         <div className="flex items-center justify-center h-64">
           <p className="text-muted-foreground">Loading P&L data...</p>
@@ -337,7 +386,7 @@ const PLReports = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
-          <p className="text-muted-foreground">Upload transaction data and view comprehensive profit and loss analysis</p>
+          <p className="text-muted-foreground">Generate comprehensive profit and loss reports by agent and time period</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={generatePDFReport}>
@@ -350,9 +399,6 @@ const PLReports = () => {
           </Button>
         </div>
       </div>
-
-      {/* File Upload Section */}
-      <FileUpload />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card>
@@ -385,9 +431,9 @@ const PLReports = () => {
                 <SelectContent>
                   <SelectItem value="current-month">Current Month</SelectItem>
                   <SelectItem value="last-month">Last Month</SelectItem>
-                  <SelectItem value="quarter">Current Quarter</SelectItem>
-                  <SelectItem value="year">Current Year</SelectItem>
-                  <SelectItem value="trailing-12">Trailing 12 Months</SelectItem>
+                  <SelectItem value="current-quarter">Current Quarter</SelectItem>
+                  <SelectItem value="current-year">Current Year</SelectItem>
+                  <SelectItem value="last-12-months">Last 12 Months</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -404,21 +450,21 @@ const PLReports = () => {
           <CardContent className="space-y-4">
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total Revenue</span>
-                <span className="font-semibold">${currentMonthSummary?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                <span className="text-muted-foreground">Total Sales Volume</span>
+                <span className="font-semibold">${periodSummary?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Expenses</span>
-                <span className="font-semibold text-red-600">${currentMonthSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                <span className="font-semibold text-red-600">${periodSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Debit Volume</span>
-                <span className="font-semibold">${currentMonthSummary?.totalDebitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                <span className="font-semibold">${periodSummary?.totalDebitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
               </div>
               <div className="border-t pt-2">
                 <div className="flex justify-between">
                   <span className="font-semibold">Net Income</span>
-                  <span className="font-bold text-emerald-600">${currentMonthSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                  <span className="font-bold text-emerald-600">${periodSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
                 </div>
               </div>
             </div>
@@ -433,15 +479,15 @@ const PLReports = () => {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Profit Margin</span>
-                <span className="font-semibold">{currentMonthSummary?.profitMargin || '0.0'}%</span>
+                <span className="font-semibold">{periodSummary?.profitMargin || '0.0'}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Transactions</span>
-                <span className="font-semibold">{currentMonthSummary?.transactionCount.toLocaleString() || '0'}</span>
+                <span className="font-semibold">{periodSummary?.transactionCount.toLocaleString() || '0'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Data Source</span>
-                <span className="font-semibold">Live Uploads</span>
+                <span className="text-muted-foreground">Period</span>
+                <span className="font-semibold">{dateRange.label}</span>
               </div>
             </div>
           </CardContent>
@@ -459,7 +505,7 @@ const PLReports = () => {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-4 font-medium text-muted-foreground">Month</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Revenue</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Sales Volume</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Agent Payouts</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Net Income</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Growth</th>
@@ -497,7 +543,7 @@ const PLReports = () => {
             </div>
           ) : (
             <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No historical data available. Upload transaction data to see reports.</p>
+              <p className="text-muted-foreground">No data available for the selected agent and period. Upload transaction data to see reports.</p>
             </div>
           )}
         </CardContent>
