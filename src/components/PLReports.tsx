@@ -259,25 +259,18 @@ const PLReports = () => {
 
         console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
 
-        // Calculate commission using the stored rate
+        // Calculate commission using the stored rate - FIXED LOGIC HERE
         const dbRate = Number(assignment.commission_rate) || 0;
         console.log(`Database rate for ${assignment.agent_name} at ${assignment.locations.name}: ${dbRate}`);
         
-        // The rate should be stored as decimal (e.g., 0.0075 for 75 BPS)
-        // But handle both formats for backward compatibility
-        let decimalRate;
-        let displayBPS;
+        // Convert BPS to decimal rate for calculation
+        // BPS (basis points) means rate/10000, so 100 BPS = 0.01 = 1%
+        const decimalRate = dbRate / 10000;
         
-        if (dbRate > 1) {
-          // Rate stored as BPS (e.g., 75) - convert to decimal
-          decimalRate = dbRate / 10000;
-          displayBPS = Math.min(Math.round(dbRate), 100);
-        } else {
-          // Rate stored as decimal (e.g., 0.0075) - use as is
-          decimalRate = dbRate;
-          displayBPS = Math.min(Math.round(dbRate * 10000), 100);
-        }
-
+        // Display BPS should be the original rate (capped at reasonable max)
+        const displayBPS = Math.min(Math.round(dbRate), 100);
+        
+        // Calculate commission: volume × decimal rate
         const commission = volumeData.volume * decimalRate;
 
         console.log('Commission calculation:', {
