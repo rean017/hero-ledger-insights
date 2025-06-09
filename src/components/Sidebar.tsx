@@ -1,6 +1,6 @@
 
 import { cn } from "@/lib/utils";
-import { BarChart3, Upload, Users, MapPin, DollarSign, FileText } from "lucide-react";
+import { BarChart3, Upload, Users, MapPin, DollarSign, FileText, Calculator } from "lucide-react";
 
 interface SidebarProps {
   activeTab: string;
@@ -14,6 +14,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: "upload-management", label: "Upload Management", icon: FileText },
     { id: "agents", label: "Agent Management", icon: Users },
     { id: "locations", label: "Locations", icon: MapPin },
+    { id: "commissions", label: "Commission Reports", icon: Calculator },
     { id: "pl-reports", label: "P&L Reports", icon: DollarSign },
   ];
 
