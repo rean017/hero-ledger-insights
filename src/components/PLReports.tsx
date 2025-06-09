@@ -181,20 +181,19 @@ const PLReports = () => {
           volume: transaction.volume
         });
 
-        // Find assignments that match this transaction
+        // Find assignments that match this transaction by account_id
         assignments.forEach(assignment => {
           if (!assignment.locations) return;
 
-          // Match by account_id OR agent_name
+          // Primary match: by account_id (this is the main way to link transactions to locations)
           const accountMatches = assignment.locations.account_id === transaction.account_id;
-          const agentMatches = assignment.agent_name === transaction.agent_name;
-
-          if (accountMatches || agentMatches) {
+          
+          if (accountMatches) {
             const key = `${assignment.agent_name}-${assignment.locations.name}`;
-            console.log('Found matching assignment for transaction:', {
+            console.log('Found matching assignment for transaction by account_id:', {
               key,
-              accountMatches,
-              agentMatches,
+              transactionAccount: transaction.account_id,
+              locationAccount: assignment.locations.account_id,
               volume: transaction.volume
             });
 
@@ -210,7 +209,8 @@ const PLReports = () => {
               
               console.log('Updated data for', key, {
                 volume: data.volume,
-                commission: data.calculatedPayout
+                commission: data.calculatedPayout,
+                bpsRate: assignment.commission_rate
               });
             }
           }
@@ -265,61 +265,47 @@ const PLReports = () => {
       let totalRevenue = 0;
       let totalDebitVolume = 0;
       let totalExpenses = 0;
-      let relevantTransactionCount = 0;
+      let processedTransactionIds = new Set();
 
       transactions?.forEach(transaction => {
-        // Check if this transaction is relevant to our selected agents
-        let isRelevantTransaction = false;
-
-        if (selectedAgents.length === 0) {
-          // If no agents selected, include all transactions
-          isRelevantTransaction = true;
-          totalRevenue += transaction.volume || 0;
-          totalDebitVolume += transaction.debit_volume || 0;
-        } else {
-          // Check if transaction matches any of our agent assignments
-          assignments?.forEach(assignment => {
-            if (!assignment.locations) return;
-
-            const accountMatches = assignment.locations.account_id === transaction.account_id;
-            const agentMatches = assignment.agent_name === transaction.agent_name;
-
-            if (accountMatches || agentMatches) {
-              if (!isRelevantTransaction) {
-                // Only count revenue once per transaction
-                totalRevenue += transaction.volume || 0;
-                totalDebitVolume += transaction.debit_volume || 0;
-                isRelevantTransaction = true;
-              }
-
-              // Calculate commission for this assignment
-              const commission = (transaction.volume || 0) * (assignment.commission_rate / 10000);
-              totalExpenses += commission;
-            }
-          });
+        const transactionKey = `${transaction.account_id}-${transaction.volume}-${transaction.debit_volume}`;
+        
+        // Avoid double-counting the same transaction
+        if (processedTransactionIds.has(transactionKey)) {
+          return;
         }
 
-        if (isRelevantTransaction) {
-          relevantTransactionCount++;
-        }
-      });
+        let transactionMatched = false;
 
-      // If no agents selected, calculate expenses for all transactions
-      if (selectedAgents.length === 0) {
-        transactions?.forEach(transaction => {
-          assignments?.forEach(assignment => {
-            if (!assignment.locations) return;
+        // Check if this transaction matches any of our agent assignments
+        assignments?.forEach(assignment => {
+          if (!assignment.locations) return;
 
-            const accountMatches = assignment.locations.account_id === transaction.account_id;
-            const agentMatches = assignment.agent_name === transaction.agent_name;
+          const accountMatches = assignment.locations.account_id === transaction.account_id;
 
-            if (accountMatches || agentMatches) {
-              const commission = (transaction.volume || 0) * (assignment.commission_rate / 10000);
-              totalExpenses += commission;
+          if (accountMatches) {
+            if (!transactionMatched) {
+              // Only count revenue once per transaction
+              totalRevenue += transaction.volume || 0;
+              totalDebitVolume += transaction.debit_volume || 0;
+              transactionMatched = true;
+              processedTransactionIds.add(transactionKey);
             }
-          });
+
+            // Calculate commission for this assignment
+            const commission = (transaction.volume || 0) * (assignment.commission_rate / 10000);
+            totalExpenses += commission;
+            
+            console.log('Commission calculated:', {
+              agent: assignment.agent_name,
+              location: assignment.locations.name,
+              volume: transaction.volume,
+              rate: assignment.commission_rate,
+              commission: commission
+            });
+          }
         });
-      }
+      });
 
       const netIncome = totalRevenue - totalExpenses;
       
@@ -327,7 +313,7 @@ const PLReports = () => {
         totalRevenue,
         totalExpenses,
         netIncome,
-        transactionCount: relevantTransactionCount
+        transactionCount: processedTransactionIds.size
       });
 
       return {
@@ -335,7 +321,7 @@ const PLReports = () => {
         totalExpenses,
         totalDebitVolume,
         netIncome,
-        transactionCount: relevantTransactionCount,
+        transactionCount: processedTransactionIds.size,
         profitMargin: totalRevenue > 0 ? ((netIncome / totalRevenue) * 100).toFixed(1) : '0.0'
       };
     }
