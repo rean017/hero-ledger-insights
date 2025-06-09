@@ -91,7 +91,6 @@ const FileUpload = () => {
 
       switch (processor) {
         case 'TRNXN':
-          // Updated mapping based on user requirements
           processed.volume = parseFloat(row['Bank Card Volume'] || row['Bankcard Volume'] || 0);
           processed.debitVolume = parseFloat(row['Debit'] || 0);
           processed.agentPayout = parseFloat(row['Net Commission'] || row['Commission'] || 0);
@@ -144,10 +143,61 @@ const FileUpload = () => {
           break;
       }
 
+      // Normalize agent name - treat "MHERO" or "Merchant Hero" as the prime agent
+      if (processed.agentName) {
+        const normalizedName = processed.agentName.toLowerCase();
+        if (normalizedName === 'mhero' || normalizedName === 'merchant hero') {
+          processed.agentName = 'Merchant Hero';
+        }
+      }
+
       console.log('Processed data:', processed);
       return processed;
     } catch (error) {
       console.error('Error processing row:', error);
+      return null;
+    }
+  };
+
+  const ensureAgentExists = async (agentName: string): Promise<string | null> => {
+    if (!agentName) return null;
+
+    try {
+      // Check if agent already exists
+      const { data: existingAgent, error: selectError } = await supabase
+        .from('agents')
+        .select('id')
+        .eq('name', agentName)
+        .maybeSingle();
+
+      if (selectError && selectError.code !== 'PGRST116') {
+        console.error('Error checking existing agent:', selectError);
+        return null;
+      }
+
+      if (existingAgent) {
+        return existingAgent.id;
+      }
+
+      // Create new agent
+      const { data: newAgent, error: insertError } = await supabase
+        .from('agents')
+        .insert({
+          name: agentName,
+          is_active: true
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        console.error('Error creating agent:', insertError);
+        return null;
+      }
+
+      console.log('Created new agent:', newAgent);
+      return newAgent.id;
+    } catch (error) {
+      console.error('Error in ensureAgentExists:', error);
       return null;
     }
   };
@@ -262,6 +312,18 @@ const FileUpload = () => {
       console.log('Detected processor:', detectedProcessor);
       console.log('File headers:', headers);
 
+      // Delete existing transactions for this month and processor before inserting new ones
+      const { error: deleteError } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('processor', detectedProcessor)
+        .gte('transaction_date', `${selectedMonth}-01`)
+        .lt('transaction_date', `${selectedMonth}-32`);
+
+      if (deleteError) {
+        console.error('Error deleting existing transactions:', deleteError);
+      }
+
       // Create file upload record
       const { data: uploadRecord, error: uploadError } = await supabase
         .from('file_uploads')
@@ -278,6 +340,7 @@ const FileUpload = () => {
       let successCount = 0;
       let errorCount = 0;
       let locationsCreated = 0;
+      let agentsCreated = 0;
       const errors: any[] = [];
 
       // Process each row
@@ -287,6 +350,25 @@ const FileUpload = () => {
 
         if (processedData && (processedData.volume || processedData.agentPayout)) {
           try {
+            // Ensure agent exists if we have agent data
+            let agentId = null;
+            if (processedData.agentName) {
+              const existingAgentId = await ensureAgentExists(processedData.agentName);
+              if (existingAgentId) {
+                agentId = existingAgentId;
+                // Check if this was a newly created agent
+                const { data: agentCheck } = await supabase
+                  .from('agents')
+                  .select('created_at')
+                  .eq('id', existingAgentId)
+                  .single();
+                
+                if (agentCheck && new Date(agentCheck.created_at).getTime() > Date.now() - 5000) {
+                  agentsCreated++;
+                }
+              }
+            }
+
             // Ensure location exists if we have location data
             let locationId = null;
             if (processedData.locationName) {
@@ -356,8 +438,11 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['top-agents'] });
       queryClient.invalidateQueries({ queryKey: ['agents-data'] });
       queryClient.invalidateQueries({ queryKey: ['file-uploads'] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-pl-data'] });
+      queryClient.invalidateQueries({ queryKey: ['current-month-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['agent-payouts'] });
 
-      const successMessage = `Processed ${successCount} rows successfully from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}`;
+      const successMessage = `Processed ${successCount} rows successfully from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}${agentsCreated > 0 ? ` Created ${agentsCreated} new agents.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -483,6 +568,7 @@ const FileUpload = () => {
             <li><strong>SignaPay:</strong> Gross Sales, Returns, Residual, Agent Name, DBA, Business Name, Process Date</li>
             <li><strong>Gren Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Business Name, Date</li>
           </ul>
+          <p className="mt-2 text-xs"><strong>Note:</strong> Agents are automatically created if they don't exist. Merchant Hero/MHERO is treated as the prime agent. Uploading data replaces existing data for that month and processor.</p>
         </div>
       </CardContent>
     </Card>
