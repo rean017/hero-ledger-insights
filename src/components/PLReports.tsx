@@ -104,8 +104,9 @@ const PLReports = () => {
   const { data: agentLocationData, isLoading } = useQuery({
     queryKey: ['agent-location-pl-data', selectedAgents, selectedPeriod],
     queryFn: async () => {
-      console.log('P&L Query - Selected agents:', selectedAgents);
-      console.log('P&L Query - Date range:', dateRange);
+      console.log('=== P&L CALCULATION START ===');
+      console.log('Selected agents:', selectedAgents);
+      console.log('Date range:', dateRange);
 
       // Get all active location assignments first
       let assignmentsQuery = supabase
@@ -129,27 +130,22 @@ const PLReports = () => {
         throw assignmentError;
       }
 
-      console.log('P&L Query - Active assignments:', assignments);
+      console.log('Active assignments found:', assignments?.length || 0);
+      assignments?.forEach(a => {
+        console.log(`Assignment: ${a.agent_name} -> ${a.locations?.name} (Account: ${a.locations?.account_id}) at ${a.commission_rate} BPS`);
+      });
 
       if (!assignments || assignments.length === 0) {
         console.log('No assignments found for selected agents');
         return [];
       }
 
-      // Get all account IDs from assignments
-      const accountIds = assignments
-        .map(assignment => assignment.locations?.account_id)
-        .filter(Boolean);
-
-      console.log('P&L Query - Account IDs to search for:', accountIds);
-
-      // Get all transactions for the date range and specific account IDs
+      // Get ALL transactions for the date range first
       const { data: allTransactions, error: transactionError } = await supabase
         .from('transactions')
         .select('transaction_date, volume, debit_volume, processor, agent_name, account_id, raw_data')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end)
-        .in('account_id', accountIds)
         .order('transaction_date', { ascending: false });
 
       if (transactionError) {
@@ -157,8 +153,7 @@ const PLReports = () => {
         throw transactionError;
       }
 
-      console.log('P&L Query - Filtered transactions for accounts:', allTransactions?.length || 0);
-      console.log('P&L Query - Sample transactions:', allTransactions?.slice(0, 5));
+      console.log('Total transactions in date range:', allTransactions?.length || 0);
 
       // Create a map of account_id to aggregated transaction data
       const accountVolumeMap = new Map();
@@ -166,8 +161,6 @@ const PLReports = () => {
       allTransactions?.forEach(transaction => {
         const accountId = transaction.account_id;
         if (!accountId) return;
-
-        console.log('Processing transaction for account:', accountId, 'Volume:', transaction.volume, 'Debit Volume:', transaction.debit_volume);
 
         if (!accountVolumeMap.has(accountId)) {
           accountVolumeMap.set(accountId, {
@@ -178,12 +171,18 @@ const PLReports = () => {
         }
         
         const accountData = accountVolumeMap.get(accountId);
-        accountData.volume += transaction.volume || 0;
-        accountData.debitVolume += transaction.debit_volume || 0;
+        const volume = parseFloat(transaction.volume) || 0;
+        const debitVolume = parseFloat(transaction.debit_volume) || 0;
+        
+        accountData.volume += volume;
+        accountData.debitVolume += debitVolume;
         accountData.transactionCount += 1;
       });
 
-      console.log('Account volume map:', Array.from(accountVolumeMap.entries()));
+      console.log('Account volume aggregation:');
+      accountVolumeMap.forEach((data, accountId) => {
+        console.log(`Account ${accountId}: Volume=${data.volume}, Debit=${data.debitVolume}, Count=${data.transactionCount}`);
+      });
 
       // Calculate earnings for each agent-location combination
       const agentLocationResults = [];
@@ -195,6 +194,7 @@ const PLReports = () => {
         }
         
         const locationAccountId = assignment.locations.account_id;
+        console.log(`\nProcessing ${assignment.agent_name} at ${assignment.locations.name} (Account: ${locationAccountId})`);
         
         // Get volume data for this location's account ID
         const volumeData = accountVolumeMap.get(locationAccountId) || {
@@ -203,17 +203,17 @@ const PLReports = () => {
           transactionCount: 0
         };
 
+        console.log('Volume data for account:', volumeData);
+
         // Calculate commission: volume * (commission_rate / 10000)
-        // commission_rate is stored as basis points (e.g., 75 = 0.75%)
-        // To convert basis points to decimal: 75 BPS = 75/10000 = 0.0075
-        const commissionDecimal = (assignment.commission_rate || 0) / 10000;
+        // commission_rate is stored as basis points (e.g., 70 = 70 BPS = 0.7%)
+        const bpsRate = parseFloat(assignment.commission_rate) || 0;
+        const commissionDecimal = bpsRate / 10000;
         const commission = volumeData.volume * commissionDecimal;
 
-        console.log(`Calculating for ${assignment.agent_name} at ${assignment.locations.name}:`, {
-          accountId: locationAccountId,
+        console.log('Commission calculation:', {
           volume: volumeData.volume,
-          debitVolume: volumeData.debitVolume,
-          bpsRate: assignment.commission_rate,
+          bpsRate: bpsRate,
           commissionDecimal: commissionDecimal,
           calculatedCommission: commission
         });
@@ -222,7 +222,7 @@ const PLReports = () => {
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: assignment.commission_rate || 0, // Keep as stored (75 = 75 BPS)
+          bpsRate: bpsRate,
           volume: volumeData.volume,
           debitVolume: volumeData.debitVolume,
           calculatedPayout: commission,
@@ -234,7 +234,12 @@ const PLReports = () => {
         a.agentName.localeCompare(b.agentName) || a.locationName.localeCompare(b.locationName)
       );
 
-      console.log('P&L Query - Final result:', result);
+      console.log('=== FINAL RESULTS ===');
+      result.forEach(r => {
+        console.log(`${r.agentName} - ${r.locationName}: Volume=$${r.volume}, Payout=$${r.calculatedPayout}`);
+      });
+      console.log('=== P&L CALCULATION END ===');
+
       return result;
     }
   });
