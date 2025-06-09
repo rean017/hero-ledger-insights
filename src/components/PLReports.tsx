@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -259,14 +260,14 @@ const PLReports = () => {
 
         console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
 
-        // Calculate commission using the stored rate - FIXED BPS CALCULATION
+        // Calculate commission using the stored rate - PROPER BPS CONVERSION
         const dbRate = Number(assignment.commission_rate) || 0;
         console.log(`Database rate for ${assignment.agent_name} at ${assignment.locations.name}: ${dbRate}`);
         
-        // Simple rule as specified: stored rate / 100 = BPS display (e.g., 5000 -> 50 BPS)
+        // Convert stored rate to BPS display: if stored as 5000 -> display 50 BPS, 7500 -> 75 BPS
         const displayBPS = Math.round(dbRate / 100);
         
-        // Calculate commission: volume × (stored rate / 10000) to convert to decimal
+        // Calculate commission: volume × (stored rate / 10000) to convert to proper decimal
         const decimalRate = dbRate / 10000;
         const commission = volumeData.volume * decimalRate;
 
