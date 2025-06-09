@@ -110,11 +110,9 @@ const PLReports = () => {
             );
             
             if (assignment) {
-              // Fix: Convert stored rate to proper decimal for calculation
-              // If rate > 1, it's stored incorrectly and needs to be divided by 10000
-              const properRate = assignment.commission_rate > 1 ? 
-                assignment.commission_rate / 10000 : 
-                assignment.commission_rate;
+              const properRate = assignment.commission_rate <= 1 ? 
+                assignment.commission_rate : 
+                assignment.commission_rate / 10000;
               
               const commission = (t.volume || 0) * properRate;
               totalExpenses += commission;
@@ -191,11 +189,20 @@ const PLReports = () => {
 
         console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
 
-        // Fix: Convert stored rate to proper BPS and decimal for calculation
-        // If rate > 1, it's stored incorrectly as raw value instead of decimal
+        // Fix BPS calculation: Always convert to proper BPS display (1-100 range)
         const storedRate = assignment.commission_rate;
-        const properBPS = storedRate > 1 ? Math.round(storedRate / 100) : Math.round(storedRate * 10000);
-        const properDecimalRate = storedRate > 1 ? storedRate / 10000 : storedRate;
+        let properBPS;
+        let properDecimalRate;
+
+        if (storedRate <= 1) {
+          // Rate is stored as decimal (0.75 = 75 BPS)
+          properBPS = Math.round(storedRate * 100);
+          properDecimalRate = storedRate;
+        } else {
+          // Rate is stored as raw BPS value (7500 = 75 BPS)
+          properBPS = Math.round(storedRate / 100);
+          properDecimalRate = storedRate / 10000;
+        }
         
         const commission = volumeData.volume * properDecimalRate;
 
@@ -211,7 +218,7 @@ const PLReports = () => {
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: properBPS, // Display proper BPS
+          bpsRate: properBPS,
           volume: volumeData.volume,
           debitVolume: volumeData.debitVolume,
           calculatedPayout: commission,
