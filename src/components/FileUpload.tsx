@@ -58,12 +58,16 @@ const FileUpload = () => {
     { value: "TRNXN", label: "TRNXN" },
     { value: "Maverick", label: "Maverick" },
     { value: "SignaPay", label: "SignaPay" },
-    { value: "Gren Payments", label: "Gren Payments" }
+    { value: "Gren Payments", label: "Gren Payments" },
+    { value: "Merchant Hero", label: "Merchant Hero" }
   ];
 
   const processRow = (row: any, processor: string): ProcessedData | null => {
     try {
       let processed: ProcessedData = { rawData: row };
+
+      console.log('Processing row for processor:', processor);
+      console.log('Row data:', row);
 
       switch (processor) {
         case 'TRNXN':
@@ -106,10 +110,30 @@ const FileUpload = () => {
           processed.transactionDate = row['Date'] || row['Processing Date'] || row['Trans Date'];
           break;
 
+        case 'Merchant Hero':
+          // Based on your console logs, map the specific columns from your file
+          processed.volume = parseFloat(row['Bankcard Volume'] || row['Income'] || 0);
+          processed.debitVolume = 0; // No debit volume in your data
+          processed.agentPayout = parseFloat(row['Commission'] || row['Net Commission'] || row['Gross Commission'] || 0);
+          processed.agentName = row['Sales Code'] || row['Partner'] || 'Merchant Hero';
+          processed.accountId = row['MID'] || row['Account ID'];
+          processed.locationName = row['DBA'] || row['Business Name'] || row['Merchant Name'];
+          processed.transactionDate = row['Date'] || row['Period'];
+          break;
+
         default:
-          return null;
+          // Generic mapping - try common column names
+          processed.volume = parseFloat(row['Volume'] || row['Bankcard Volume'] || row['Income'] || row['Sales'] || row['Amount'] || 0);
+          processed.debitVolume = parseFloat(row['Debit Volume'] || row['Returns'] || 0);
+          processed.agentPayout = parseFloat(row['Commission'] || row['Agent Payout'] || row['Payout'] || row['Net Commission'] || row['Gross Commission'] || 0);
+          processed.agentName = row['Agent'] || row['Sales Code'] || row['Partner'] || row['Rep'];
+          processed.accountId = row['MID'] || row['Account ID'] || row['Merchant ID'];
+          processed.locationName = row['DBA'] || row['Business Name'] || row['Location'] || row['Merchant Name'];
+          processed.transactionDate = row['Date'] || row['Period'] || row['Transaction Date'];
+          break;
       }
 
+      console.log('Processed data:', processed);
       return processed;
     } catch (error) {
       console.error('Error processing row:', error);
@@ -239,7 +263,7 @@ const FileUpload = () => {
         const row = rawData[i];
         const processedData = processRow(row, selectedProcessor);
 
-        if (processedData) {
+        if (processedData && (processedData.volume || processedData.agentPayout)) {
           try {
             // Ensure location exists if we have location data
             let locationId = null;
@@ -267,9 +291,9 @@ const FileUpload = () => {
               .from('transactions')
               .insert({
                 processor: selectedProcessor,
-                volume: processedData.volume,
-                debit_volume: processedData.debitVolume,
-                agent_payout: processedData.agentPayout,
+                volume: processedData.volume || 0,
+                debit_volume: processedData.debitVolume || 0,
+                agent_payout: processedData.agentPayout || 0,
                 agent_name: processedData.agentName,
                 account_id: processedData.accountId,
                 transaction_date: transactionDate,
@@ -277,18 +301,21 @@ const FileUpload = () => {
               });
 
             if (error) {
+              console.error('Database insertion error:', error);
               errorCount++;
               errors.push({ row: i + 1, error: error.message });
             } else {
               successCount++;
+              console.log(`Successfully inserted row ${i + 1}`);
             }
           } catch (error) {
             errorCount++;
             errors.push({ row: i + 1, error: String(error) });
           }
         } else {
+          console.log(`Skipping row ${i + 1} - no valid volume or payout data`);
           errorCount++;
-          errors.push({ row: i + 1, error: 'Failed to process row data' });
+          errors.push({ row: i + 1, error: 'No valid volume or payout data found' });
         }
       }
 
@@ -448,6 +475,7 @@ const FileUpload = () => {
             <li><strong>Maverick:</strong> Total Amount, Debit Amount, Commission, Sales Rep, Merchant ID, Business Name/DBA, Settlement Date</li>
             <li><strong>SignaPay:</strong> Gross Sales, Returns, Residual, Agent Name, DBA, Business Name, Process Date</li>
             <li><strong>Gren Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Business Name, Date</li>
+            <li><strong>Merchant Hero:</strong> Bankcard Volume, Commission, Sales Code, MID, DBA, Period</li>
           </ul>
         </div>
       </CardContent>
