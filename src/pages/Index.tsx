@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import Dashboard from "@/components/Dashboard";
 import AgentManagement from "@/components/AgentManagement";
 import AccountAssignment from "@/components/AccountAssignment";
+import Locations from "@/components/Locations";
 import PLReports from "@/components/PLReports";
 
 const Index = () => {
@@ -23,6 +24,8 @@ const Index = () => {
         return <AgentManagement />;
       case 'accounts':
         return <AccountAssignment />;
+      case 'locations':
+        return <Locations />;
       case 'reports':
         return <PLReports />;
       case 'analytics':

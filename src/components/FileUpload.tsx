@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +14,7 @@ interface ProcessedData {
   agentPayout?: number;
   agentName?: string;
   accountId?: string;
+  locationName?: string;
   transactionDate?: string;
   rawData: any;
 }
@@ -43,42 +43,42 @@ const FileUpload = () => {
 
       switch (processor) {
         case 'TRNXN':
-          // Common TRNXN column mappings
           processed.volume = parseFloat(row['Volume'] || row['volume'] || row['Total Volume'] || 0);
           processed.debitVolume = parseFloat(row['Debit Volume'] || row['debit_volume'] || row['Debit'] || 0);
           processed.agentPayout = parseFloat(row['Agent Payout'] || row['agent_payout'] || row['Payout'] || 0);
           processed.agentName = row['Agent'] || row['agent'] || row['Agent Name'] || row['agent_name'];
           processed.accountId = row['Account ID'] || row['account_id'] || row['Account'] || row['MID'];
+          processed.locationName = row['Location'] || row['location'] || row['Business Name'] || row['DBA'] || row['Merchant Name'];
           processed.transactionDate = row['Date'] || row['date'] || row['Transaction Date'];
           break;
 
         case 'Maverick':
-          // Maverick specific mappings
           processed.volume = parseFloat(row['Total Amount'] || row['Volume'] || row['Sales'] || 0);
           processed.debitVolume = parseFloat(row['Debit Amount'] || row['Returns'] || 0);
           processed.agentPayout = parseFloat(row['Commission'] || row['Agent Commission'] || 0);
           processed.agentName = row['Sales Rep'] || row['Agent'] || row['Representative'];
           processed.accountId = row['Merchant ID'] || row['MID'] || row['Account'];
+          processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
           processed.transactionDate = row['Settlement Date'] || row['Date'] || row['Trans Date'];
           break;
 
         case 'SignaPay':
-          // SignaPay specific mappings
           processed.volume = parseFloat(row['Gross Sales'] || row['Volume'] || row['Amount'] || 0);
           processed.debitVolume = parseFloat(row['Returns'] || row['Chargebacks'] || 0);
           processed.agentPayout = parseFloat(row['Residual'] || row['Agent Pay'] || 0);
           processed.agentName = row['Agent Name'] || row['Rep'] || row['Sales Agent'];
           processed.accountId = row['DBA'] || row['Merchant'] || row['Account Number'];
+          processed.locationName = row['DBA'] || row['Business Name'] || row['Merchant Name'] || row['Location'];
           processed.transactionDate = row['Process Date'] || row['Date'] || row['Settlement Date'];
           break;
 
         case 'Gren Payments':
-          // Gren Payments specific mappings
           processed.volume = parseFloat(row['Processing Volume'] || row['Volume'] || row['Sales Volume'] || 0);
           processed.debitVolume = parseFloat(row['Debit Volume'] || row['Refunds'] || 0);
           processed.agentPayout = parseFloat(row['Agent Revenue'] || row['Commission'] || 0);
           processed.agentName = row['Agent'] || row['Partner'] || row['Sales Partner'];
           processed.accountId = row['Merchant ID'] || row['Account'] || row['Customer ID'];
+          processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
           processed.transactionDate = row['Date'] || row['Processing Date'] || row['Trans Date'];
           break;
 
@@ -89,6 +89,49 @@ const FileUpload = () => {
       return processed;
     } catch (error) {
       console.error('Error processing row:', error);
+      return null;
+    }
+  };
+
+  const ensureLocationExists = async (locationName: string, accountId?: string): Promise<string | null> => {
+    if (!locationName) return null;
+
+    try {
+      // Check if location already exists
+      const { data: existingLocation, error: selectError } = await supabase
+        .from('locations')
+        .select('id')
+        .eq('name', locationName)
+        .maybeSingle();
+
+      if (selectError && selectError.code !== 'PGRST116') {
+        console.error('Error checking existing location:', selectError);
+        return null;
+      }
+
+      if (existingLocation) {
+        return existingLocation.id;
+      }
+
+      // Create new location
+      const { data: newLocation, error: insertError } = await supabase
+        .from('locations')
+        .insert({
+          name: locationName,
+          account_id: accountId || null,
+          account_type: 'Business'
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        console.error('Error creating location:', insertError);
+        return null;
+      }
+
+      return newLocation.id;
+    } catch (error) {
+      console.error('Error in ensureLocationExists:', error);
       return null;
     }
   };
@@ -172,6 +215,12 @@ const FileUpload = () => {
 
         if (processedData) {
           try {
+            // Ensure location exists if we have location data
+            let locationId = null;
+            if (processedData.locationName) {
+              locationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
+            }
+
             const { error } = await supabase
               .from('transactions')
               .insert({
@@ -319,10 +368,10 @@ const FileUpload = () => {
         <div className="text-xs text-muted-foreground">
           <p className="font-medium mb-1">Supported columns for each processor:</p>
           <ul className="space-y-1">
-            <li><strong>TRNXN:</strong> Volume, Debit Volume, Agent Payout, Agent, Account ID, Date</li>
-            <li><strong>Maverick:</strong> Total Amount, Debit Amount, Commission, Sales Rep, Merchant ID, Settlement Date</li>
-            <li><strong>SignaPay:</strong> Gross Sales, Returns, Residual, Agent Name, DBA, Process Date</li>
-            <li><strong>Gren Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Date</li>
+            <li><strong>TRNXN:</strong> Volume, Debit Volume, Agent Payout, Agent, Account ID, Location/Business Name, Date</li>
+            <li><strong>Maverick:</strong> Total Amount, Debit Amount, Commission, Sales Rep, Merchant ID, Business Name/DBA, Settlement Date</li>
+            <li><strong>SignaPay:</strong> Gross Sales, Returns, Residual, Agent Name, DBA, Business Name, Process Date</li>
+            <li><strong>Gren Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Business Name, Date</li>
           </ul>
         </div>
       </CardContent>

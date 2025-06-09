@@ -39,6 +39,71 @@ export type Database = {
         }
         Relationships: []
       }
+      location_agent_assignments: {
+        Row: {
+          agent_name: string
+          commission_rate: number
+          created_at: string
+          id: string
+          is_active: boolean | null
+          location_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_name: string
+          commission_rate?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          location_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_name?: string
+          commission_rate?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          location_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "location_agent_assignments_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      locations: {
+        Row: {
+          account_id: string | null
+          account_type: string | null
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          account_type?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          account_type?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pl_data: {
         Row: {
           created_at: string
