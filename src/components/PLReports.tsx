@@ -126,73 +126,47 @@ const PLReports = () => {
     queryFn: async () => {
       console.log(`Fetching agent location P&L data for ${selectedPeriod}`);
       
-      const { data: assignments, error } = await supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          locations(id, name, account_id)
-        `)
-        .eq('is_active', true);
-
-      if (error) throw error;
-
-      const { data: transactions, error: transactionError } = await supabase
+      const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 
-      if (transactionError) throw transactionError;
+      if (error) throw error;
+
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          is_active
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
 
       console.log('Total transactions in date range:', transactions?.length);
 
-      const agentLocationResults = assignments?.map(assignment => {
-        if (!assignment.locations?.account_id) {
-          return null;
-        }
+      // Use the same commission calculation logic as the commission reports
+      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
 
-        const locationAccountId = assignment.locations.account_id;
-        
-        // Find all transactions for this location and sum volume + debit_volume
-        const locationTransactions = transactions?.filter(t => t.account_id === locationAccountId) || [];
-        const totalVolume = locationTransactions.reduce((sum, t) => sum + (t.volume || 0), 0);
-        const totalDebitVolume = locationTransactions.reduce((sum, t) => sum + (t.debit_volume || 0), 0);
-        const combinedVolume = totalVolume + totalDebitVolume;
-
-        console.log(`Volume calculation for ${assignment.locations.name} (${locationAccountId}):`, {
-          transactions: locationTransactions.length,
-          totalVolume,
-          totalDebitVolume,
-          combinedVolume
-        });
-
-        // Use utility functions for consistent conversion
-        const bpsDisplay = convertToBPSDisplay(assignment.commission_rate);
-        const decimalRate = convertToDecimalRate(assignment.commission_rate);
-        const commission = combinedVolume * decimalRate;
-
-        console.log('Commission calculation:', {
-          location: assignment.locations.name,
-          combinedVolume,
-          storedRate: assignment.commission_rate,
-          bpsDisplay: bpsDisplay,
-          decimalRate: decimalRate,
-          calculatedCommission: commission
-        });
-
-        return {
-          agentName: assignment.agent_name,
-          locationName: assignment.locations.name,
-          accountId: locationAccountId,
-          bpsRate: bpsDisplay, // This should now be the corrected BPS display (75, not 7500)
-          volume: combinedVolume,
-          debitVolume: totalDebitVolume,
-          calculatedPayout: commission,
-          profitContribution: combinedVolume - commission
-        };
-      }).filter(Boolean) || [];
+      const agentLocationResults = commissions.map(commission => ({
+        agentName: commission.agentName,
+        locationName: commission.locationName,
+        accountId: commission.locationId,
+        bpsRate: commission.bpsRate,
+        volume: commission.locationVolume,
+        debitVolume: 0, // We can calculate this separately if needed
+        calculatedPayout: commission.commission,
+        profitContribution: commission.locationVolume - commission.commission
+      }));
 
       return agentLocationResults;
     },
