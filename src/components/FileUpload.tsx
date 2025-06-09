@@ -58,8 +58,7 @@ const FileUpload = () => {
     { value: "TRNXN", label: "TRNXN" },
     { value: "Maverick", label: "Maverick" },
     { value: "SignaPay", label: "SignaPay" },
-    { value: "Gren Payments", label: "Gren Payments" },
-    { value: "Merchant Hero", label: "Merchant Hero" }
+    { value: "Gren Payments", label: "Gren Payments" }
   ];
 
   const processRow = (row: any, processor: string): ProcessedData | null => {
@@ -71,13 +70,15 @@ const FileUpload = () => {
 
       switch (processor) {
         case 'TRNXN':
-          processed.volume = parseFloat(row['Volume'] || row['volume'] || row['Total Volume'] || 0);
-          processed.debitVolume = parseFloat(row['Debit Volume'] || row['debit_volume'] || row['Debit'] || 0);
-          processed.agentPayout = parseFloat(row['Agent Payout'] || row['agent_payout'] || row['Payout'] || 0);
-          processed.agentName = row['Agent'] || row['agent'] || row['Agent Name'] || row['agent_name'];
-          processed.accountId = row['Account ID'] || row['account_id'] || row['Account'] || row['MID'];
-          processed.locationName = row['Location'] || row['location'] || row['Business Name'] || row['DBA'] || row['Merchant Name'];
-          processed.transactionDate = row['Date'] || row['date'] || row['Transaction Date'];
+          // Updated mapping based on user requirements
+          processed.volume = parseFloat(row['Bank Card Volume'] || row['Bankcard Volume'] || 0);
+          processed.debitVolume = parseFloat(row['Debit'] || 0);
+          processed.agentPayout = parseFloat(row['Net Commission'] || row['Commission'] || 0);
+          processed.agentName = row['SalesCode'] || row['Partner'] || row['Sales Code'];
+          // Disregard other information as requested
+          processed.accountId = null;
+          processed.locationName = null;
+          processed.transactionDate = null;
           break;
 
         case 'Maverick':
@@ -108,17 +109,6 @@ const FileUpload = () => {
           processed.accountId = row['Merchant ID'] || row['Account'] || row['Customer ID'];
           processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
           processed.transactionDate = row['Date'] || row['Processing Date'] || row['Trans Date'];
-          break;
-
-        case 'Merchant Hero':
-          // Based on your console logs, map the specific columns from your file
-          processed.volume = parseFloat(row['Bankcard Volume'] || row['Income'] || 0);
-          processed.debitVolume = 0; // No debit volume in your data
-          processed.agentPayout = parseFloat(row['Commission'] || row['Net Commission'] || row['Gross Commission'] || 0);
-          processed.agentName = row['Sales Code'] || row['Partner'] || 'Merchant Hero';
-          processed.accountId = row['MID'] || row['Account ID'];
-          processed.locationName = row['DBA'] || row['Business Name'] || row['Merchant Name'];
-          processed.transactionDate = row['Date'] || row['Period'];
           break;
 
         default:
@@ -471,11 +461,10 @@ const FileUpload = () => {
         <div className="text-xs text-muted-foreground">
           <p className="font-medium mb-1">Supported columns for each processor:</p>
           <ul className="space-y-1">
-            <li><strong>TRNXN:</strong> Volume, Debit Volume, Agent Payout, Agent, Account ID, Location/Business Name, Date</li>
+            <li><strong>TRNXN:</strong> Bank Card Volume (for Volume), Debit (for Debit Volume), Net Commission/Commission (for Agent Payout), SalesCode/Partner (for Agent Name)</li>
             <li><strong>Maverick:</strong> Total Amount, Debit Amount, Commission, Sales Rep, Merchant ID, Business Name/DBA, Settlement Date</li>
             <li><strong>SignaPay:</strong> Gross Sales, Returns, Residual, Agent Name, DBA, Business Name, Process Date</li>
             <li><strong>Gren Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Business Name, Date</li>
-            <li><strong>Merchant Hero:</strong> Bankcard Volume, Commission, Sales Code, MID, DBA, Period</li>
           </ul>
         </div>
       </CardContent>
