@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Edit, Trash2, Search, MapPin, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import LocationEditDialog from "./LocationEditDialog";
 
 interface Location {
   id: string;
@@ -34,6 +34,8 @@ const Locations = () => {
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [commissionRate, setCommissionRate] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [locationToEdit, setLocationToEdit] = useState<Location | null>(null);
   const { toast } = useToast();
 
   const availableAgents = [
@@ -152,6 +154,16 @@ const Locations = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleEditLocation = (location: Location) => {
+    setLocationToEdit(location);
+    setEditDialogOpen(true);
+  };
+
+  const handleLocationUpdated = () => {
+    fetchLocations();
+    fetchAssignments();
   };
 
   const filteredLocations = locations.filter(location =>
@@ -340,7 +352,12 @@ const Locations = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button variant="outline" size="sm" className="gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="gap-2"
+                        onClick={() => handleEditLocation(location)}
+                      >
                         <Edit className="h-4 w-4" />
                         Edit
                       </Button>
@@ -352,6 +369,13 @@ const Locations = () => {
           </Table>
         </CardContent>
       </Card>
+
+      <LocationEditDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        location={locationToEdit}
+        onLocationUpdated={handleLocationUpdated}
+      />
     </div>
   );
 };
