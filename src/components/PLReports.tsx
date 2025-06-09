@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -260,36 +259,20 @@ const PLReports = () => {
 
         console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
 
-        // Calculate commission using the stored rate - SMART BPS INTERPRETATION
+        // Calculate commission using the stored rate - FIXED BPS CALCULATION
         const dbRate = Number(assignment.commission_rate) || 0;
         console.log(`Database rate for ${assignment.agent_name} at ${assignment.locations.name}: ${dbRate}`);
         
-        // Smart detection: if the rate is > 1000, it's stored as raw BPS (e.g., 7500 = 75 BPS)
-        // If it's <= 1000, it's likely already in the correct BPS format (e.g., 75 = 75 BPS)
-        let displayBPS;
-        let decimalRate;
+        // Simple rule as specified: stored rate / 100 = BPS display (e.g., 5000 -> 50 BPS)
+        const displayBPS = Math.round(dbRate / 100);
         
-        if (dbRate > 1000) {
-          // Rate is stored as raw value, divide by 100 to get BPS
-          displayBPS = Math.round(dbRate / 100);
-          decimalRate = dbRate / 10000; // Convert to decimal for calculation
-        } else {
-          // Rate is already in BPS format
-          displayBPS = Math.round(dbRate);
-          decimalRate = dbRate / 100; // Convert BPS to decimal for calculation
-        }
-        
-        // Ensure BPS never exceeds 100 (which would be 100%)
-        if (displayBPS > 100) {
-          displayBPS = Math.round(dbRate / 100);
-          decimalRate = dbRate / 10000;
-        }
-        
+        // Calculate commission: volume × (stored rate / 10000) to convert to decimal
+        const decimalRate = dbRate / 10000;
         const commission = volumeData.volume * decimalRate;
 
         console.log('Commission calculation:', {
           volume: volumeData.volume,
-          dbRateRaw: dbRate,
+          dbRateStored: dbRate,
           displayBPS: displayBPS,
           decimalRate: decimalRate,
           calculatedCommission: commission
