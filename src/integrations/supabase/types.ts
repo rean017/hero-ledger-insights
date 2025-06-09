@@ -9,7 +9,114 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      file_uploads: {
+        Row: {
+          created_at: string
+          errors: Json | null
+          filename: string
+          id: string
+          processor: string
+          rows_processed: number | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          errors?: Json | null
+          filename: string
+          id?: string
+          processor: string
+          rows_processed?: number | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          errors?: Json | null
+          filename?: string
+          id?: string
+          processor?: string
+          rows_processed?: number | null
+          status?: string
+        }
+        Relationships: []
+      }
+      pl_data: {
+        Row: {
+          created_at: string
+          id: string
+          month: string
+          net_income: number
+          processor: string
+          total_agent_payouts: number
+          total_debit_volume: number
+          total_volume: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: string
+          net_income?: number
+          processor: string
+          total_agent_payouts?: number
+          total_debit_volume?: number
+          total_volume?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: string
+          net_income?: number
+          processor?: string
+          total_agent_payouts?: number
+          total_debit_volume?: number
+          total_volume?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          account_id: string | null
+          agent_name: string | null
+          agent_payout: number | null
+          created_at: string
+          debit_volume: number | null
+          id: string
+          processor: string
+          raw_data: Json | null
+          transaction_date: string | null
+          updated_at: string
+          volume: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          agent_name?: string | null
+          agent_payout?: number | null
+          created_at?: string
+          debit_volume?: number | null
+          id?: string
+          processor: string
+          raw_data?: Json | null
+          transaction_date?: string | null
+          updated_at?: string
+          volume?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          agent_name?: string | null
+          agent_payout?: number | null
+          created_at?: string
+          debit_volume?: number | null
+          id?: string
+          processor?: string
+          raw_data?: Json | null
+          transaction_date?: string | null
+          updated_at?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -1,8 +1,8 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download, FileText, TrendingUp, TrendingDown } from "lucide-react";
+import FileUpload from "./FileUpload";
 
 const PLReports = () => {
   const monthlyData = [
@@ -19,7 +19,7 @@ const PLReports = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
-          <p className="text-muted-foreground">Comprehensive profit and loss analysis with 12-month trailing history</p>
+          <p className="text-muted-foreground">Upload transaction data and view comprehensive profit and loss analysis</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2">
@@ -32,6 +32,9 @@ const PLReports = () => {
           </Button>
         </div>
       </div>
+
+      {/* File Upload Section */}
+      <FileUpload />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card>
