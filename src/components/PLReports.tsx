@@ -6,6 +6,7 @@ import { CalendarDays, TrendingUp, Building2, Users, DollarSign } from "lucide-r
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
+import { convertToBPSDisplay, convertToDecimalRate } from "@/utils/bpsCalculations";
 
 const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("current-month");
@@ -34,7 +35,7 @@ const PLReports = () => {
         const quarterStart = Math.floor(currentMonth / 3) * 3;
         return {
           start: `${currentYear}-${String(quarterStart + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(quarterStart + 4).padStart(2, '0')}-01`,
+          end: `${currentYear}-${String(quarterStart + 4).padStart(2, '0')}-1`,
           label: "Current quarter"
         };
       case "current-year":
@@ -110,11 +111,8 @@ const PLReports = () => {
             );
             
             if (assignment) {
-              const properRate = assignment.commission_rate <= 1 ? 
-                assignment.commission_rate : 
-                assignment.commission_rate / 10000;
-              
-              const commission = (t.volume || 0) * properRate;
+              const properDecimalRate = convertToDecimalRate(assignment.commission_rate);
+              const commission = (t.volume || 0) * properDecimalRate;
               totalExpenses += commission;
             }
           }
@@ -189,28 +187,16 @@ const PLReports = () => {
 
         console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
 
-        // Fix BPS calculation: Always convert to proper BPS display (1-100 range)
-        const storedRate = assignment.commission_rate;
-        let properBPS;
-        let properDecimalRate;
-
-        if (storedRate <= 1) {
-          // Rate is stored as decimal (0.75 = 75 BPS)
-          properBPS = Math.round(storedRate * 100);
-          properDecimalRate = storedRate;
-        } else {
-          // Rate is stored as raw BPS value (7500 = 75 BPS)
-          properBPS = Math.round(storedRate / 100);
-          properDecimalRate = storedRate / 10000;
-        }
-        
-        const commission = volumeData.volume * properDecimalRate;
+        // Use utility functions for consistent conversion
+        const bpsDisplay = convertToBPSDisplay(assignment.commission_rate);
+        const decimalRate = convertToDecimalRate(assignment.commission_rate);
+        const commission = volumeData.volume * decimalRate;
 
         console.log('Commission calculation:', {
           volume: volumeData.volume,
-          storedRate: storedRate,
-          properBPS: properBPS,
-          properDecimalRate: properDecimalRate,
+          storedRate: assignment.commission_rate,
+          bpsDisplay: bpsDisplay,
+          decimalRate: decimalRate,
           calculatedCommission: commission
         });
 
@@ -218,7 +204,7 @@ const PLReports = () => {
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: properBPS,
+          bpsRate: bpsDisplay,
           volume: volumeData.volume,
           debitVolume: volumeData.debitVolume,
           calculatedPayout: commission,
