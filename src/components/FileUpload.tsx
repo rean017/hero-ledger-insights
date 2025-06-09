@@ -57,27 +57,34 @@ const FileUpload = () => {
   const detectProcessor = (headers: string[]): string => {
     const headerStr = headers.join('|').toLowerCase();
     
+    console.log('Detecting processor from headers:', headers);
+    
     // Check for TRNXN specific columns
     if (headerStr.includes('bank card volume') || headerStr.includes('bankcard volume') || headerStr.includes('salescode')) {
+      console.log('Detected TRNXN processor');
       return 'TRNXN';
     }
     
     // Check for Maverick specific columns
     if (headerStr.includes('total amount') && headerStr.includes('sales rep')) {
+      console.log('Detected Maverick processor');
       return 'Maverick';
     }
     
     // Check for SignaPay specific columns
     if (headerStr.includes('gross sales') && headerStr.includes('residual')) {
+      console.log('Detected SignaPay processor');
       return 'SignaPay';
     }
     
     // Check for Gren Payments specific columns
     if (headerStr.includes('processing volume') && headerStr.includes('agent revenue')) {
+      console.log('Detected Gren Payments processor');
       return 'Gren Payments';
     }
     
     // Default fallback
+    console.log('Could not detect processor, using Unknown');
     return 'Unknown';
   };
 
@@ -86,7 +93,8 @@ const FileUpload = () => {
       let processed: ProcessedData = { rawData: row, processor };
 
       console.log('Processing row for processor:', processor);
-      console.log('Row data:', row);
+      console.log('Row data keys:', Object.keys(row));
+      console.log('Row data sample:', row);
 
       switch (processor) {
         case 'TRNXN':
@@ -94,10 +102,10 @@ const FileUpload = () => {
           processed.debitVolume = parseFloat(row['Debit'] || 0);
           processed.agentPayout = parseFloat(row['Net Commission'] || row['Commission'] || 0);
           processed.agentName = row['SalesCode'] || row['Partner'] || row['Sales Code'];
-          // Disregard other information as requested
-          processed.accountId = null;
-          processed.locationName = null;
-          processed.transactionDate = null;
+          // For TRNXN, we'll try to find account ID in various possible columns
+          processed.accountId = row['Account ID'] || row['MID'] || row['Merchant ID'] || row['Account'] || null;
+          processed.locationName = row['DBA'] || row['Business Name'] || row['Location'] || null;
+          processed.transactionDate = row['Date'] || row['Period'] || row['Transaction Date'] || null;
           break;
 
         case 'Maverick':
@@ -150,7 +158,14 @@ const FileUpload = () => {
         }
       }
 
-      console.log('Processed data:', processed);
+      console.log('Processed data result:', {
+        volume: processed.volume,
+        debitVolume: processed.debitVolume,
+        agentPayout: processed.agentPayout,
+        agentName: processed.agentName,
+        accountId: processed.accountId
+      });
+
       return processed;
     } catch (error) {
       console.error('Error processing row:', error);
@@ -296,9 +311,14 @@ const FileUpload = () => {
     setUploadStatus({ status: 'processing', message: 'Processing file...', filename: file.name });
 
     try {
+      console.log('=== Starting File Upload Process ===');
+      console.log('Selected month:', selectedMonth);
+      console.log('File name:', file.name);
+      
       // Parse the file
       const rawData = await parseFile(file);
-      console.log('Parsed data sample:', rawData.slice(0, 3));
+      console.log('Parsed data length:', rawData.length);
+      console.log('Parsed data sample (first 3 rows):', rawData.slice(0, 3));
 
       if (rawData.length === 0) {
         throw new Error('No data found in file');
@@ -312,6 +332,7 @@ const FileUpload = () => {
       console.log('File headers:', headers);
 
       // Delete existing transactions for this month and processor before inserting new ones
+      console.log('Deleting existing transactions for processor:', detectedProcessor, 'and month:', selectedMonth);
       const { error: deleteError } = await supabase
         .from('transactions')
         .delete()
@@ -321,6 +342,8 @@ const FileUpload = () => {
 
       if (deleteError) {
         console.error('Error deleting existing transactions:', deleteError);
+      } else {
+        console.log('Successfully deleted existing transactions');
       }
 
       // Create file upload record
@@ -335,6 +358,7 @@ const FileUpload = () => {
         .single();
 
       if (uploadError) throw uploadError;
+      console.log('Created upload record:', uploadRecord);
 
       let successCount = 0;
       let errorCount = 0;
@@ -343,56 +367,66 @@ const FileUpload = () => {
       const errors: any[] = [];
 
       // Process each row
+      console.log('=== Processing Rows ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
+        console.log(`\n--- Processing row ${i + 1} ---`);
         const processedData = processRow(row, detectedProcessor);
 
-        if (processedData && (processedData.volume || processedData.agentPayout)) {
-          try {
-            // Ensure agent exists if we have agent data
-            let agentId = null;
-            if (processedData.agentName) {
-              const existingAgentId = await ensureAgentExists(processedData.agentName);
-              if (existingAgentId) {
-                agentId = existingAgentId;
-                // Check if this was a newly created agent
-                const { data: agentCheck } = await supabase
-                  .from('agents')
-                  .select('created_at')
-                  .eq('id', existingAgentId)
-                  .single();
-                
-                if (agentCheck && new Date(agentCheck.created_at).getTime() > Date.now() - 5000) {
-                  agentsCreated++;
+        if (processedData) {
+          console.log('Processed data for row', i + 1, ':', {
+            volume: processedData.volume,
+            debitVolume: processedData.debitVolume,
+            agentPayout: processedData.agentPayout,
+            agentName: processedData.agentName,
+            accountId: processedData.accountId
+          });
+
+          // Check if we have meaningful data (volume OR agent payout)
+          if ((processedData.volume && processedData.volume > 0) || (processedData.agentPayout && processedData.agentPayout > 0)) {
+            try {
+              // Ensure agent exists if we have agent data
+              let agentId = null;
+              if (processedData.agentName) {
+                const existingAgentId = await ensureAgentExists(processedData.agentName);
+                if (existingAgentId) {
+                  agentId = existingAgentId;
+                  // Check if this was a newly created agent
+                  const { data: agentCheck } = await supabase
+                    .from('agents')
+                    .select('created_at')
+                    .eq('id', existingAgentId)
+                    .single();
+                  
+                  if (agentCheck && new Date(agentCheck.created_at).getTime() > Date.now() - 5000) {
+                    agentsCreated++;
+                  }
                 }
               }
-            }
 
-            // Ensure location exists if we have location data
-            let locationId = null;
-            if (processedData.locationName) {
-              const existingLocationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
-              if (existingLocationId) {
-                locationId = existingLocationId;
-                // Check if this was a newly created location
-                const { data: locationCheck } = await supabase
-                  .from('locations')
-                  .select('created_at')
-                  .eq('id', existingLocationId)
-                  .single();
-                
-                if (locationCheck && new Date(locationCheck.created_at).getTime() > Date.now() - 5000) {
-                  locationsCreated++;
+              // Ensure location exists if we have location data
+              let locationId = null;
+              if (processedData.locationName) {
+                const existingLocationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
+                if (existingLocationId) {
+                  locationId = existingLocationId;
+                  // Check if this was a newly created location
+                  const { data: locationCheck } = await supabase
+                    .from('locations')
+                    .select('created_at')
+                    .eq('id', existingLocationId)
+                    .single();
+                  
+                  if (locationCheck && new Date(locationCheck.created_at).getTime() > Date.now() - 5000) {
+                    locationsCreated++;
+                  }
                 }
               }
-            }
 
-            // Use the selected month instead of the transaction date from file
-            const transactionDate = `${selectedMonth}-01`;
+              // Use the selected month instead of the transaction date from file
+              const transactionDate = `${selectedMonth}-01`;
 
-            const { error } = await supabase
-              .from('transactions')
-              .insert({
+              const transactionData = {
                 processor: detectedProcessor,
                 volume: processedData.volume || 0,
                 debit_volume: processedData.debitVolume || 0,
@@ -401,26 +435,43 @@ const FileUpload = () => {
                 account_id: processedData.accountId,
                 transaction_date: transactionDate,
                 raw_data: processedData.rawData
-              });
+              };
 
-            if (error) {
-              console.error('Database insertion error:', error);
+              console.log('Inserting transaction data:', transactionData);
+
+              const { error } = await supabase
+                .from('transactions')
+                .insert(transactionData);
+
+              if (error) {
+                console.error('Database insertion error for row', i + 1, ':', error);
+                errorCount++;
+                errors.push({ row: i + 1, error: error.message });
+              } else {
+                successCount++;
+                console.log(`Successfully inserted row ${i + 1}`);
+              }
+            } catch (error) {
+              console.error('Error processing row', i + 1, ':', error);
               errorCount++;
-              errors.push({ row: i + 1, error: error.message });
-            } else {
-              successCount++;
-              console.log(`Successfully inserted row ${i + 1}`);
+              errors.push({ row: i + 1, error: String(error) });
             }
-          } catch (error) {
+          } else {
+            console.log(`Skipping row ${i + 1} - no valid volume or payout data (volume: ${processedData.volume}, payout: ${processedData.agentPayout})`);
             errorCount++;
-            errors.push({ row: i + 1, error: String(error) });
+            errors.push({ row: i + 1, error: 'No valid volume or payout data found' });
           }
         } else {
-          console.log(`Skipping row ${i + 1} - no valid volume or payout data`);
+          console.log(`Skipping row ${i + 1} - failed to process`);
           errorCount++;
-          errors.push({ row: i + 1, error: 'No valid volume or payout data found' });
+          errors.push({ row: i + 1, error: 'Failed to process row' });
         }
       }
+
+      console.log('=== Upload Summary ===');
+      console.log('Success count:', successCount);
+      console.log('Error count:', errorCount);
+      console.log('Total rows processed:', rawData.length);
 
       // Update file upload record
       await supabase
@@ -440,6 +491,9 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['monthly-pl-data'] });
       queryClient.invalidateQueries({ queryKey: ['current-month-summary'] });
       queryClient.invalidateQueries({ queryKey: ['agent-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
 
       const successMessage = `Processed ${successCount} rows successfully from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}${agentsCreated > 0 ? ` Created ${agentsCreated} new agents.` : ''}`;
 
