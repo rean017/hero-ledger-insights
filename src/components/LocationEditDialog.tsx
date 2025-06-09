@@ -176,7 +176,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
 
     // Convert BPS to proper decimal format for storage
     const bpsValue = parseFloat(newRate);
-    const decimalRate = bpsValue / 10000; // Convert BPS to decimal (e.g., 75 BPS = 0.0075)
+    const decimalRate = bpsValue / 100; // Convert BPS to decimal (e.g., 100 BPS = 1.0, 75 BPS = 0.75)
 
     try {
       const { data: existingAssignments, error: fetchError } = await supabase

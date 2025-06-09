@@ -99,7 +99,7 @@ const Locations = () => {
       return;
     }
 
-    const rate = parseFloat(commissionRate) / 10000; // Convert BPS to decimal (divide by 10,000)
+    const rate = parseFloat(commissionRate) / 100; // Convert BPS to decimal (divide by 100, not 10,000)
 
     try {
       // First check if there's an existing inactive assignment for this agent and location
