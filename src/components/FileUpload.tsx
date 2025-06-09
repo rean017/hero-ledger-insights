@@ -77,10 +77,10 @@ const FileUpload = () => {
       return 'SignaPay';
     }
     
-    // Check for Gren Payments specific columns
+    // Check for Green Payments specific columns
     if (headerStr.includes('processing volume') && headerStr.includes('agent revenue')) {
-      console.log('Detected Gren Payments processor');
-      return 'Gren Payments';
+      console.log('Detected Green Payments processor');
+      return 'Green Payments';
     }
     
     // Default fallback
@@ -128,7 +128,7 @@ const FileUpload = () => {
           processed.transactionDate = row['Process Date'] || row['Date'] || row['Settlement Date'];
           break;
 
-        case 'Gren Payments':
+        case 'Green Payments':
           processed.volume = parseFloat(row['Processing Volume'] || row['Volume'] || row['Sales Volume'] || 0);
           processed.debitVolume = parseFloat(row['Debit Volume'] || row['Refunds'] || 0);
           processed.agentPayout = parseFloat(row['Agent Revenue'] || row['Commission'] || 0);
@@ -619,7 +619,7 @@ const FileUpload = () => {
             <li><strong>TRNXN:</strong> Bank Card Volume (for Volume), Debit (for Debit Volume), Net Commission/Commission (for Agent Payout), SalesCode/Partner (for Agent Name)</li>
             <li><strong>Maverick:</strong> Total Amount, Debit Amount, Commission, Sales Rep, Merchant ID, Business Name/DBA, Settlement Date</li>
             <li><strong>SignaPay:</strong> Gross Sales, Returns, Residual, Agent Name, DBA, Business Name, Process Date</li>
-            <li><strong>Gren Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Business Name, Date</li>
+            <li><strong>Green Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Business Name, Date</li>
           </ul>
           <p className="mt-2 text-xs"><strong>Note:</strong> Agents are automatically created if they don't exist. Merchant Hero/MHERO is treated as the prime agent. Uploading data replaces existing data for that month and processor.</p>
         </div>

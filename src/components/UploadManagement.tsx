@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -251,7 +250,7 @@ const UploadManagement = () => {
                                     <SelectItem value="TRNXN">TRNXN</SelectItem>
                                     <SelectItem value="Maverick">Maverick</SelectItem>
                                     <SelectItem value="SignaPay">SignaPay</SelectItem>
-                                    <SelectItem value="Gren Payments">Gren Payments</SelectItem>
+                                    <SelectItem value="Green Payments">Green Payments</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
