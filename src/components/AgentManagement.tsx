@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,28 +70,18 @@ const AgentManagement = () => {
 
       console.log('Commission summaries:', agentCommissionSummaries);
 
-      // Get all unique agent names from all sources
-      const allAgentNames = new Set<string>();
-      
-      // Add agents from transactions
-      transactions?.forEach(t => {
-        if (t.agent_name) allAgentNames.add(t.agent_name);
-      });
-      
-      // Add agents from assignments
+      // Get agents who have active location assignments
+      const agentsWithAssignments = new Set<string>();
       assignments?.forEach(a => {
-        if (a.agent_name) allAgentNames.add(a.agent_name);
-      });
-      
-      // Add manual agents
-      manualAgents?.forEach(a => {
-        if (a.name) allAgentNames.add(a.name);
+        if (a.agent_name && a.is_active) {
+          agentsWithAssignments.add(a.agent_name);
+        }
       });
 
-      console.log('All unique agent names:', Array.from(allAgentNames));
+      console.log('Agents with assignments:', Array.from(agentsWithAssignments));
 
-      // Build final agent data
-      const result = Array.from(allAgentNames).map(agentName => {
+      // Build final agent data - ONLY for agents with assignments
+      const result = Array.from(agentsWithAssignments).map(agentName => {
         const commissionSummary = agentCommissionSummaries.find(summary => summary.agentName === agentName);
         const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
         const manualAgent = manualAgents?.find(a => a.name === agentName);
@@ -103,13 +92,15 @@ const AgentManagement = () => {
         
         // Get account IDs for locations assigned to this agent
         const assignedLocationIds = new Set(assignedLocations.map(a => a.location_id));
-        const assignedAccountIds = new Set();
+        const assignedAccountIds = new Set<string>();
         
         locations?.forEach(location => {
-          if (assignedLocationIds.has(location.id)) {
+          if (assignedLocationIds.has(location.id) && location.account_id) {
             assignedAccountIds.add(location.account_id);
           }
         });
+
+        console.log(`Agent ${agentName} assigned account IDs:`, Array.from(assignedAccountIds));
 
         // Calculate volume and account stats ONLY for assigned locations
         const agentVolumeStats = transactions?.reduce((acc, t) => {
@@ -117,9 +108,10 @@ const AgentManagement = () => {
           if (t.account_id && assignedAccountIds.has(t.account_id)) {
             acc.totalVolume += (t.volume || 0) + (t.debit_volume || 0);
             acc.accountIds.add(t.account_id);
+            console.log(`Adding transaction for ${agentName}: account ${t.account_id}, volume: ${t.volume}, debit: ${t.debit_volume}`);
           }
           return acc;
-        }, { totalVolume: 0, accountIds: new Set() }) || { totalVolume: 0, accountIds: new Set() };
+        }, { totalVolume: 0, accountIds: new Set<string>() }) || { totalVolume: 0, accountIds: new Set<string>() };
 
         const accountsCount = agentVolumeStats.accountIds.size;
         
@@ -138,7 +130,7 @@ const AgentManagement = () => {
           status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active'
         };
 
-        console.log(`Agent ${agentName} data:`, {
+        console.log(`Final agent ${agentName} data:`, {
           ...agentData,
           assignedLocationIds: Array.from(assignedLocationIds),
           assignedAccountIds: Array.from(assignedAccountIds)
