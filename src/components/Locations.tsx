@@ -40,6 +40,7 @@ const Locations = () => {
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [commissionRate, setCommissionRate] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [locationToEdit, setLocationToEdit] = useState<Location | null>(null);
   const { toast } = useToast();
@@ -51,14 +52,21 @@ const Locations = () => {
   }, []);
 
   const fetchAgents = async () => {
+    setAgentsLoading(true);
     try {
+      console.log('Fetching agents in Locations component...');
       const { data, error } = await supabase
         .from('agents')
         .select('id, name')
         .eq('is_active', true)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error fetching agents:', error);
+        throw error;
+      }
+      
+      console.log('Fetched agents in Locations:', data);
       setAgents(data || []);
     } catch (error) {
       console.error('Error fetching agents:', error);
@@ -67,6 +75,8 @@ const Locations = () => {
         description: "Failed to load agents",
         variant: "destructive"
       });
+    } finally {
+      setAgentsLoading(false);
     }
   };
 
@@ -115,7 +125,21 @@ const Locations = () => {
       return;
     }
 
-    const rate = parseFloat(commissionRate) / 100; // Convert percentage to decimal
+    // Check if agent is already assigned to this location
+    const existingAssignment = assignments.find(
+      a => a.location_id === selectedLocation && a.agent_name === selectedAgent
+    );
+
+    if (existingAssignment) {
+      toast({
+        title: "Error",
+        description: "Agent is already assigned to this location",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const rate = parseFloat(commissionRate) / 100; // Convert BPS to decimal
 
     try {
       const { error } = await supabase
@@ -192,6 +216,16 @@ const Locations = () => {
     return assignments.filter(assignment => assignment.location_id === locationId);
   };
 
+  // Get available agents for the assignment dropdown (not already assigned to selected location)
+  const getAvailableAgentsForLocation = () => {
+    if (!selectedLocation) return agents;
+    
+    const locationAssignments = getLocationAssignments(selectedLocation);
+    return agents.filter(agent => 
+      !locationAssignments.some(assignment => assignment.agent_name === agent.name)
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -230,26 +264,41 @@ const Locations = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+            <Select value={selectedAgent} onValueChange={setSelectedAgent} disabled={agentsLoading}>
               <SelectTrigger>
-                <SelectValue placeholder="Select Agent" />
+                <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select Agent"} />
               </SelectTrigger>
               <SelectContent>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.name}>
-                    {agent.name}
+                {getAvailableAgentsForLocation().length > 0 ? (
+                  getAvailableAgentsForLocation().map((agent) => (
+                    <SelectItem key={agent.id} value={agent.name}>
+                      {agent.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="no-agents-available" disabled>
+                    {agentsLoading ? "Loading..." : selectedLocation ? "No available agents for this location" : "Select a location first"}
                   </SelectItem>
-                ))}
+                )}
               </SelectContent>
             </Select>
+            {agents.length === 0 && !agentsLoading && (
+              <p className="text-sm text-muted-foreground">
+                No agents found. Add agents in Agent Management first.
+              </p>
+            )}
             <Input 
-              placeholder="Commission Rate (e.g., 1.5)" 
+              placeholder="BPS Rate (e.g., 150)" 
               value={commissionRate}
               onChange={(e) => setCommissionRate(e.target.value)}
               type="number"
               step="0.01"
             />
-            <Button onClick={handleAssignAgent} className="w-full">
+            <Button 
+              onClick={handleAssignAgent} 
+              className="w-full"
+              disabled={!selectedLocation || !selectedAgent || !commissionRate || agentsLoading || selectedAgent === "no-agents-available"}
+            >
               Assign Agent
             </Button>
           </CardContent>

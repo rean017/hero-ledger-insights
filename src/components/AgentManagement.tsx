@@ -20,6 +20,8 @@ const AgentManagement = () => {
   const { data: agents, isLoading, refetch } = useQuery({
     queryKey: ['agents-data'],
     queryFn: async () => {
+      console.log('Fetching agents data for AgentManagement...');
+      
       // Get unique agents from transactions
       const { data: transactions, error } = await supabase
         .from('transactions')
@@ -64,7 +66,12 @@ const AgentManagement = () => {
         .from('agents')
         .select('name, is_active');
 
-      if (manualError) throw manualError;
+      if (manualError) {
+        console.error('Error fetching manual agents:', manualError);
+        throw manualError;
+      }
+
+      console.log('Manual agents from database:', manualAgents);
 
       // Add manually created agents that might not have transactions yet
       manualAgents?.forEach(agent => {
@@ -76,14 +83,20 @@ const AgentManagement = () => {
             accountsCount: 0,
             status: agent.is_active ? 'active' : 'inactive'
           };
+        } else {
+          // Update status based on database record
+          agentStats[agent.name].status = agent.is_active ? 'active' : 'inactive';
         }
       });
 
-      return Object.values(agentStats).map(agent => ({
+      const result = Object.values(agentStats).map(agent => ({
         ...agent,
         accountsCount: typeof agent.accountsCount === 'object' ? agent.accountsCount.size : agent.accountsCount,
         avgRate: agent.totalRevenue > 0 ? ((agent.totalCommission / agent.totalRevenue) * 100).toFixed(2) + '%' : '0%'
       }));
+
+      console.log('Final agents data:', result);
+      return result;
     }
   });
 
@@ -98,11 +111,15 @@ const AgentManagement = () => {
     }
 
     try {
+      console.log('Adding new agent:', newAgentName.trim());
       const { error } = await supabase
         .from('agents')
-        .insert([{ name: newAgentName.trim() }]);
+        .insert([{ name: newAgentName.trim(), is_active: true }]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting agent:', error);
+        throw error;
+      }
 
       toast({
         title: "Success",
@@ -112,11 +129,11 @@ const AgentManagement = () => {
       setNewAgentName("");
       setIsDialogOpen(false);
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding agent:', error);
       toast({
         title: "Error",
-        description: "Failed to add agent. Please try again.",
+        description: error.message || "Failed to add agent. Please try again.",
         variant: "destructive"
       });
     }
