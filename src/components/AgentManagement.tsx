@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Edit, Trash2, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -13,6 +13,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 const AgentManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newAgentName, setNewAgentName] = useState("");
   const { toast } = useToast();
 
   const { data: agents, isLoading, refetch } = useQuery({
@@ -57,13 +59,68 @@ const AgentManagement = () => {
         }
       });
 
+      // Get manually added agents from the agents table
+      const { data: manualAgents, error: manualError } = await supabase
+        .from('agents')
+        .select('name, is_active');
+
+      if (manualError) throw manualError;
+
+      // Add manually created agents that might not have transactions yet
+      manualAgents?.forEach(agent => {
+        if (!agentStats[agent.name]) {
+          agentStats[agent.name] = {
+            name: agent.name,
+            totalRevenue: 0,
+            totalCommission: 0,
+            accountsCount: 0,
+            status: agent.is_active ? 'active' : 'inactive'
+          };
+        }
+      });
+
       return Object.values(agentStats).map(agent => ({
         ...agent,
-        accountsCount: agent.accountsCount.size,
+        accountsCount: typeof agent.accountsCount === 'object' ? agent.accountsCount.size : agent.accountsCount,
         avgRate: agent.totalRevenue > 0 ? ((agent.totalCommission / agent.totalRevenue) * 100).toFixed(2) + '%' : '0%'
       }));
     }
   });
+
+  const handleAddAgent = async () => {
+    if (!newAgentName.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter an agent name",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('agents')
+        .insert([{ name: newAgentName.trim() }]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Agent "${newAgentName}" has been added successfully`
+      });
+
+      setNewAgentName("");
+      setIsDialogOpen(false);
+      refetch();
+    } catch (error) {
+      console.error('Error adding agent:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add agent. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const filteredAgents = agents?.filter(agent =>
     agent.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -88,14 +145,46 @@ const AgentManagement = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Agent Management</h2>
-          <p className="text-muted-foreground">Manage agent information and commission rates from uploaded data</p>
+          <p className="text-muted-foreground">Manage agent information and commission rates</p>
         </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Agent
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Agent</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="agentName">Agent Name</Label>
+                <Input
+                  id="agentName"
+                  value={newAgentName}
+                  onChange={(e) => setNewAgentName(e.target.value)}
+                  placeholder="Enter agent name"
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddAgent}>
+                  Add Agent
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle>All Agents (From Uploaded Data)</CardTitle>
+            <CardTitle>All Agents</CardTitle>
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -145,7 +234,7 @@ const AgentManagement = () => {
             </div>
           ) : (
             <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No agents found. Upload transaction data to see agents.</p>
+              <p className="text-muted-foreground">No agents found. Add an agent or upload transaction data to see agents.</p>
             </div>
           )}
         </CardContent>
