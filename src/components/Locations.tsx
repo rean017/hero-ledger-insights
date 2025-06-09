@@ -167,7 +167,7 @@ const Locations = () => {
       return;
     }
 
-    const rate = parseFloat(commissionRate) / 100; // Convert BPS to decimal
+    const rate = parseFloat(commissionRate) / 10000; // Convert BPS to decimal (divide by 10,000)
 
     try {
       // First check if there's an existing inactive assignment for this agent and location
@@ -345,11 +345,11 @@ const Locations = () => {
               </p>
             )}
             <Input 
-              placeholder="BPS Rate (e.g., 150)" 
+              placeholder="BPS Rate (e.g., 7500)" 
               value={commissionRate}
               onChange={(e) => setCommissionRate(e.target.value)}
               type="number"
-              step="0.01"
+              step="1"
             />
             <Button 
               onClick={handleAssignAgent} 
@@ -401,8 +401,8 @@ const Locations = () => {
               <span className="text-muted-foreground">Avg. Rate</span>
               <span className="font-semibold">
                 {assignments.length > 0 
-                  ? `${(assignments.reduce((sum, a) => sum + a.commission_rate, 0) / assignments.length * 100).toFixed(2)}%`
-                  : '0%'
+                  ? `${Math.round(assignments.reduce((sum, a) => sum + a.commission_rate, 0) / assignments.length * 10000)} BPS`
+                  : '0 BPS'
                 }
               </span>
             </div>
@@ -458,7 +458,7 @@ const Locations = () => {
                           locationAssignments.map((assignment) => (
                             <div key={assignment.id} className="flex items-center gap-1">
                               <Badge variant="secondary" className="text-xs">
-                                {assignment.agent_name} ({(assignment.commission_rate * 100).toFixed(2)}%)
+                                {assignment.agent_name} ({Math.round(assignment.commission_rate * 10000)} BPS)
                               </Badge>
                               <Button
                                 variant="ghost"

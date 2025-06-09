@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -164,7 +163,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
       return;
     }
 
-    const rate = parseFloat(newRate) / 100; // Convert BPS to decimal
+    const rate = parseFloat(newRate) / 10000; // Convert BPS to decimal (divide by 10,000)
 
     try {
       // First check if there's an existing inactive assignment for this agent and location
@@ -378,11 +377,11 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
               <div className="space-y-2">
                 <Label>BPS Rate</Label>
                 <Input
-                  placeholder="BPS Rate (e.g., 150)"
+                  placeholder="BPS Rate (e.g., 7500)"
                   value={newRate}
                   onChange={(e) => setNewRate(e.target.value)}
                   type="number"
-                  step="0.01"
+                  step="1"
                 />
               </div>
               
@@ -409,7 +408,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
                         {assignment.agent_name}
                       </Badge>
                       <span className="text-sm text-muted-foreground">
-                        {(assignment.commission_rate * 100).toFixed(2)} BPS
+                        {Math.round(assignment.commission_rate * 10000)} BPS
                       </span>
                     </div>
                     <Button
