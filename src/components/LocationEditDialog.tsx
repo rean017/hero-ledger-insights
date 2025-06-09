@@ -146,12 +146,19 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
   };
 
   const invalidateRelatedQueries = () => {
-    // Invalidate all queries that depend on location assignments and P&L data
+    // Invalidate ALL queries that depend on location assignments and P&L data
     queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
     queryClient.invalidateQueries({ queryKey: ['agent-location-pl-data'] });
     queryClient.invalidateQueries({ queryKey: ['period-summary'] });
     queryClient.invalidateQueries({ queryKey: ['agents-for-pl'] });
     queryClient.invalidateQueries({ queryKey: ['locations'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['top-agents'] });
+    queryClient.invalidateQueries({ queryKey: ['agents-data'] });
+    queryClient.invalidateQueries({ queryKey: ['agents'] });
+    
+    // Also trigger callbacks to refresh parent components
+    onLocationUpdated();
   };
 
   const handleAddAgent = async () => {
@@ -422,7 +429,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
                         {assignment.agent_name}
                       </Badge>
                       <span className="text-sm text-muted-foreground">
-                        {Math.min(Math.round(assignment.commission_rate * 10000), 100)} BPS
+                        {Math.round(assignment.commission_rate * 10000)} BPS
                       </span>
                     </div>
                     <Button
