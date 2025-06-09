@@ -25,10 +25,30 @@ const AgentManagement = () => {
       // Get unique agents from transactions
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('agent_name, volume, agent_payout')
+        .select('agent_name, volume, account_id')
         .not('agent_name', 'is', null);
 
       if (error) throw error;
+
+      // Get location assignments for BPS rates
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          locations(name, account_id)
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      // Get all locations for account mapping
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
 
       const agentStats = transactions?.reduce((acc, t) => {
         const name = t.agent_name!;
@@ -42,7 +62,27 @@ const AgentManagement = () => {
           };
         }
         acc[name].totalRevenue += t.volume || 0;
-        acc[name].totalCommission += t.agent_payout || 0;
+        
+        // Calculate commission based on location-specific BPS rate
+        if (t.account_id) {
+          // Find location by account_id
+          const location = locations?.find(loc => loc.account_id === t.account_id);
+          
+          if (location) {
+            // Find assignment for this agent and location
+            const assignment = assignments?.find(a => 
+              a.agent_name === name && 
+              a.location_id === location.id
+            );
+            
+            if (assignment) {
+              // Calculate commission: volume × (BPS rate / 10000)
+              const commission = (t.volume || 0) * (assignment.commission_rate / 10000);
+              acc[name].totalCommission += commission;
+            }
+          }
+        }
+        
         return acc;
       }, {} as Record<string, any>) || {};
 
@@ -223,7 +263,7 @@ const AgentManagement = () => {
                     <th className="text-left p-4 font-medium text-muted-foreground">Avg Rate</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Accounts</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Total Revenue</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Total Commission</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Calculated Commission</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Status</th>
                   </tr>
                 </thead>

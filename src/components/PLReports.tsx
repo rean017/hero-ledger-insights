@@ -107,7 +107,7 @@ const PLReports = () => {
     queryFn: async () => {
       let query = supabase
         .from('transactions')
-        .select('transaction_date, volume, debit_volume, agent_payout, processor, agent_name, account_id')
+        .select('transaction_date, volume, debit_volume, processor, agent_name, account_id')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end)
         .order('transaction_date', { ascending: false });
@@ -166,7 +166,7 @@ const PLReports = () => {
             bpsRate: assignment ? (assignment.commission_rate * 100) : 0,
             volume: 0,
             debitVolume: 0,
-            agentPayout: 0,
+            calculatedPayout: 0,
             transactionCount: 0
           });
         }
@@ -174,8 +174,12 @@ const PLReports = () => {
         const data = agentLocationMap.get(key);
         data.volume += t.volume || 0;
         data.debitVolume += t.debit_volume || 0;
-        data.agentPayout += t.agent_payout || 0;
         data.transactionCount += 1;
+        
+        // Calculate payout: volume × (BPS rate / 10000)
+        if (assignment) {
+          data.calculatedPayout += (t.volume || 0) * (assignment.commission_rate / 10000);
+        }
       });
 
       return Array.from(agentLocationMap.values()).sort((a, b) => 
@@ -189,7 +193,7 @@ const PLReports = () => {
     queryFn: async () => {
       let query = supabase
         .from('transactions')
-        .select('volume, agent_payout, debit_volume')
+        .select('volume, debit_volume, agent_name, account_id')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 
@@ -200,9 +204,50 @@ const PLReports = () => {
       const { data: transactions, error } = await query;
       if (error) throw error;
 
+      // Get location assignments for BPS rates
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          locations(name, account_id)
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      // Get all locations for account mapping
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
+
       const totalRevenue = transactions?.reduce((sum, t) => sum + (t.volume || 0), 0) || 0;
-      const totalExpenses = transactions?.reduce((sum, t) => sum + (t.agent_payout || 0), 0) || 0;
       const totalDebitVolume = transactions?.reduce((sum, t) => sum + (t.debit_volume || 0), 0) || 0;
+      
+      let totalExpenses = 0;
+      transactions?.forEach(t => {
+        if (t.agent_name && t.account_id) {
+          // Find location by account_id
+          const location = locations?.find(loc => loc.account_id === t.account_id);
+          
+          if (location) {
+            // Find assignment for this agent and location
+            const assignment = assignments?.find(a => 
+              a.agent_name === t.agent_name && 
+              a.location_id === location.id
+            );
+            
+            if (assignment) {
+              // Calculate commission: volume × (BPS rate / 10000)
+              totalExpenses += (t.volume || 0) * (assignment.commission_rate / 10000);
+            }
+          }
+        }
+      });
+
       const netIncome = totalRevenue - totalExpenses;
       const transactionCount = transactions?.length || 0;
       
@@ -379,7 +424,7 @@ const PLReports = () => {
                 <th>BPS Rate</th>
                 <th>Sales Volume</th>
                 <th>Debit Volume</th>
-                <th>Agent Payout</th>
+                <th>Calculated Payout</th>
                 <th>Transactions</th>
               </tr>
             </thead>
@@ -392,7 +437,7 @@ const PLReports = () => {
                   <td>${data.bpsRate.toFixed(2)} BPS</td>
                   <td>$${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td>$${data.debitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  <td class="positive">$${data.agentPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td class="positive">$${data.calculatedPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td>${data.transactionCount}</td>
                 </tr>
               `).join('') || '<tr><td colspan="8">No data available</td></tr>'}
@@ -574,7 +619,7 @@ const PLReports = () => {
                     </th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Sales Volume</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Debit Volume</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Agent Payout</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Calculated Payout</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Transactions</th>
                   </tr>
                 </thead>
@@ -588,7 +633,7 @@ const PLReports = () => {
                       <td className="p-4 font-semibold">${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                       <td className="p-4 font-semibold">${data.debitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                       <td className="p-4 font-semibold text-emerald-600">
-                        ${data.agentPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${data.calculatedPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-4 font-medium">{data.transactionCount}</td>
                     </tr>

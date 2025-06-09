@@ -64,16 +64,59 @@ const Dashboard = () => {
     queryFn: async () => {
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_payout, agent_name')
+        .select('volume, debit_volume, agent_name, account_id')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 
       if (error) throw error;
 
-      const totalRevenue = transactions?.reduce((sum, t) => sum + (t.volume || 0), 0) || 0;
-      const totalAgentPayouts = transactions?.reduce((sum, t) => sum + (t.agent_payout || 0), 0) || 0;
+      // Get location assignments for BPS rates
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          locations(name, account_id)
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      // Get all locations for account mapping
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
+
+      let totalRevenue = 0;
+      let totalAgentPayouts = 0;
+
+      transactions?.forEach(t => {
+        totalRevenue += t.volume || 0;
+        
+        if (t.agent_name && t.account_id) {
+          // Find location by account_id
+          const location = locations?.find(loc => loc.account_id === t.account_id);
+          
+          if (location) {
+            // Find assignment for this agent and location
+            const assignment = assignments?.find(a => 
+              a.agent_name === t.agent_name && 
+              a.location_id === location.id
+            );
+            
+            if (assignment) {
+              // Calculate commission: volume × (BPS rate / 10000)
+              const commission = (t.volume || 0) * (assignment.commission_rate / 10000);
+              totalAgentPayouts += commission;
+            }
+          }
+        }
+      });
+
       const netIncome = totalRevenue - totalAgentPayouts;
-      const uniqueAgents = new Set(transactions?.map(t => t.agent_name).filter(Boolean)).size;
 
       // Get locations count
       const { count: locationsCount } = await supabase
@@ -94,22 +137,62 @@ const Dashboard = () => {
     queryFn: async () => {
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('agent_name, volume, agent_payout')
+        .select('agent_name, volume, account_id')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end)
         .not('agent_name', 'is', null);
 
       if (error) throw error;
 
-      const agentStats = transactions?.reduce((acc, t) => {
+      // Get location assignments for BPS rates
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          locations(name, account_id)
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      // Get all locations for account mapping
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
+
+      const agentStats: Record<string, { revenue: number; commission: number }> = {};
+
+      transactions?.forEach(t => {
         const name = t.agent_name!;
-        if (!acc[name]) {
-          acc[name] = { revenue: 0, commission: 0 };
+        if (!agentStats[name]) {
+          agentStats[name] = { revenue: 0, commission: 0 };
         }
-        acc[name].revenue += t.volume || 0;
-        acc[name].commission += t.agent_payout || 0;
-        return acc;
-      }, {} as Record<string, { revenue: number; commission: number }>) || {};
+        
+        agentStats[name].revenue += t.volume || 0;
+        
+        if (t.account_id) {
+          // Find location by account_id
+          const location = locations?.find(loc => loc.account_id === t.account_id);
+          
+          if (location) {
+            // Find assignment for this agent and location
+            const assignment = assignments?.find(a => 
+              a.agent_name === name && 
+              a.location_id === location.id
+            );
+            
+            if (assignment) {
+              // Calculate commission: volume × (BPS rate / 10000)
+              const commission = (t.volume || 0) * (assignment.commission_rate / 10000);
+              agentStats[name].commission += commission;
+            }
+          }
+        }
+      });
 
       return Object.entries(agentStats)
         .map(([name, data]) => ({ name, ...data }))
