@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -73,20 +72,48 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
   const fetchAgents = async () => {
     setAgentsLoading(true);
     try {
-      console.log('Fetching agents...');
-      const { data, error } = await supabase
+      console.log('Fetching agents in LocationEditDialog...');
+      
+      // First try to get agents from the agents table
+      const { data: agentsData, error: agentsError } = await supabase
         .from('agents')
         .select('id, name')
         .eq('is_active', true)
         .order('name');
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      if (agentsError) {
+        console.error('Error fetching from agents table:', agentsError);
       }
+
+      // Also get unique agent names from transactions as fallback
+      const { data: transactionAgents, error: transactionError } = await supabase
+        .from('transactions')
+        .select('agent_name')
+        .not('agent_name', 'is', null);
+
+      if (transactionError) {
+        console.error('Error fetching from transactions:', transactionError);
+      }
+
+      // Combine both sources
+      const allAgents = new Set<string>();
       
-      console.log('Fetched agents:', data);
-      setAgents(data || []);
+      // Add agents from agents table
+      agentsData?.forEach(agent => allAgents.add(agent.name));
+      
+      // Add agents from transactions
+      transactionAgents?.forEach(t => {
+        if (t.agent_name) allAgents.add(t.agent_name);
+      });
+
+      // Convert to agent objects
+      const combinedAgents = Array.from(allAgents).map((name, index) => ({
+        id: agentsData?.find(a => a.name === name)?.id || `transaction-${index}`,
+        name
+      }));
+
+      console.log('Combined agents found in LocationEditDialog:', combinedAgents);
+      setAgents(combinedAgents);
     } catch (error) {
       console.error('Error fetching agents:', error);
       toast({
