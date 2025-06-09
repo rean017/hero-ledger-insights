@@ -27,80 +27,77 @@ export const calculateLocationCommissions = (
   console.log('Total assignments:', assignments.length);
   console.log('Total locations:', locations.length);
   
-  // Debug: Log some sample data
-  if (transactions.length > 0) {
-    console.log('Sample transaction account_ids:', transactions.slice(0, 5).map(t => t.account_id));
-  }
-  if (locations.length > 0) {
-    console.log('Sample location account_ids:', locations.slice(0, 5).map(l => ({ name: l.name, account_id: l.account_id })));
-  }
-  
   const commissions: LocationCommission[] = [];
 
-  // Group transactions by location (account_id)
-  const transactionsByLocation = transactions.reduce((acc, transaction) => {
+  // Group transactions by location (account_id) and calculate total volume per location
+  const locationVolumes = transactions.reduce((acc, transaction) => {
     const accountId = transaction.account_id;
+    if (!accountId) return acc;
+    
     if (!acc[accountId]) {
-      acc[accountId] = [];
+      acc[accountId] = 0;
     }
-    acc[accountId].push(transaction);
+    
+    // Add both regular volume and debit volume
+    const volume = parseFloat(transaction.volume) || 0;
+    const debitVolume = parseFloat(transaction.debit_volume) || 0;
+    acc[accountId] += volume + debitVolume;
+    
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, number>);
 
-  console.log('Transactions grouped by account_id:', Object.keys(transactionsByLocation).map(key => ({
-    account_id: key,
-    count: transactionsByLocation[key].length
-  })));
+  console.log('Location volumes calculated:', locationVolumes);
 
   // Calculate commissions for each active assignment
   assignments.forEach(assignment => {
-    if (!assignment.is_active) return;
+    if (!assignment.is_active) {
+      console.log('Skipping inactive assignment:', assignment);
+      return;
+    }
 
-    // Find the location
+    // Find the location for this assignment
     const location = locations.find(loc => loc.id === assignment.location_id);
     if (!location) {
       console.log('Location not found for assignment:', assignment.location_id);
       return;
     }
 
-    console.log(`Processing location: ${location.name} (account_id: ${location.account_id})`);
+    console.log(`Processing assignment: ${assignment.agent_name} at ${location.name}`);
 
-    // Get transactions for this location (using account_id)
-    const locationTransactions = transactionsByLocation[location.account_id] || [];
-    console.log(`Found ${locationTransactions.length} transactions for ${location.name}`);
+    // Get the total volume for this location using account_id
+    const locationVolume = locationVolumes[location.account_id] || 0;
     
-    // Calculate total volume for this location
-    const locationVolume = locationTransactions.reduce((sum, tx) => {
-      const volume = parseFloat(tx.volume) || 0;
-      const debitVolume = parseFloat(tx.debit_volume) || 0;
-      return sum + volume + debitVolume;
-    }, 0);
+    console.log(`Location ${location.name} (${location.account_id}) volume: ${locationVolume}`);
 
-    console.log(`Total volume for ${location.name}: ${locationVolume}`);
+    if (locationVolume > 0) {
+      // Calculate commission for this agent at this location
+      const decimalRate = convertToDecimalRate(assignment.commission_rate);
+      const commission = locationVolume * decimalRate;
 
-    // Calculate commission for this agent at this location
-    const decimalRate = convertToDecimalRate(assignment.commission_rate);
-    const commission = locationVolume * decimalRate;
+      console.log(`Commission calculation:`, {
+        agentName: assignment.agent_name,
+        locationName: location.name,
+        locationVolume,
+        storedRate: assignment.commission_rate,
+        decimalRate,
+        commission
+      });
 
-    console.log(`Commission calculation for ${assignment.agent_name} at ${location.name}:`, {
-      locationVolume,
-      storedRate: assignment.commission_rate,
-      decimalRate,
-      commission
-    });
-
-    commissions.push({
-      locationId: assignment.location_id,
-      locationName: location.name,
-      agentName: assignment.agent_name,
-      bpsRate: Math.round(decimalRate * 100), // Convert back to BPS for display
-      decimalRate,
-      locationVolume,
-      commission
-    });
+      commissions.push({
+        locationId: assignment.location_id,
+        locationName: location.name,
+        agentName: assignment.agent_name,
+        bpsRate: Math.round(assignment.commission_rate * 100), // Convert to BPS for display
+        decimalRate,
+        locationVolume,
+        commission
+      });
+    } else {
+      console.log(`No volume found for location ${location.name} (${location.account_id})`);
+    }
   });
 
-  console.log('Final commissions calculated:', commissions.length);
+  console.log('Final commissions calculated:', commissions);
   return commissions;
 };
 
