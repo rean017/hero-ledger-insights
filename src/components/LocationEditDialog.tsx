@@ -377,7 +377,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
               <div className="space-y-2">
                 <Label>BPS Rate</Label>
                 <Input
-                  placeholder="BPS Rate (e.g., 7500)"
+                  placeholder="BPS Rate (e.g., 75)"
                   value={newRate}
                   onChange={(e) => setNewRate(e.target.value)}
                   type="number"
