@@ -136,7 +136,7 @@ const PLReports = () => {
         return [];
       }
 
-      // Get all transactions for the date range - INCLUDE raw_data field
+      // Get all transactions for the date range
       const { data: allTransactions, error: transactionError } = await supabase
         .from('transactions')
         .select('transaction_date, volume, debit_volume, processor, agent_name, account_id, raw_data')
@@ -150,58 +150,32 @@ const PLReports = () => {
       }
 
       console.log('P&L Query - All transactions in date range:', allTransactions?.length || 0);
+      console.log('P&L Query - Sample transactions:', allTransactions?.slice(0, 5));
 
-      // Create a comprehensive volume map - try multiple matching strategies
-      const locationVolumeMap = new Map();
+      // Create a map of account_id to aggregated transaction data
+      const accountVolumeMap = new Map();
       
-      // Strategy 1: Match by account_id
       allTransactions?.forEach(transaction => {
-        if (transaction.account_id) {
-          const key = transaction.account_id;
-          if (!locationVolumeMap.has(key)) {
-            locationVolumeMap.set(key, {
-              volume: 0,
-              debitVolume: 0,
-              transactionCount: 0,
-              matchedBy: 'account_id'
-            });
-          }
-          
-          const locationData = locationVolumeMap.get(key);
-          locationData.volume += transaction.volume || 0;
-          locationData.debitVolume += transaction.debit_volume || 0;
-          locationData.transactionCount += 1;
+        const accountId = transaction.account_id;
+        if (!accountId) return;
+
+        console.log('Processing transaction for account:', accountId, 'Volume:', transaction.volume);
+
+        if (!accountVolumeMap.has(accountId)) {
+          accountVolumeMap.set(accountId, {
+            volume: 0,
+            debitVolume: 0,
+            transactionCount: 0
+          });
         }
+        
+        const accountData = accountVolumeMap.get(accountId);
+        accountData.volume += transaction.volume || 0;
+        accountData.debitVolume += transaction.debit_volume || 0;
+        accountData.transactionCount += 1;
       });
 
-      // Strategy 2: Also try to match by location name patterns (fuzzy matching)
-      const { data: allLocations } = await supabase
-        .from('locations')
-        .select('*');
-
-      if (allLocations) {
-        allTransactions?.forEach(transaction => {
-          // Try to find location by partial name match or other identifiers
-          const matchingLocation = allLocations.find(loc => {
-            // Check if transaction has any reference to this location
-            const transactionData = JSON.stringify(transaction.raw_data || {}).toLowerCase();
-            const locationName = loc.name.toLowerCase();
-            return transactionData.includes(locationName) || 
-                   (transaction.account_id && transaction.account_id === loc.account_id);
-          });
-
-          if (matchingLocation && !locationVolumeMap.has(matchingLocation.account_id)) {
-            locationVolumeMap.set(matchingLocation.account_id, {
-              volume: transaction.volume || 0,
-              debitVolume: transaction.debit_volume || 0,
-              transactionCount: 1,
-              matchedBy: 'location_name'
-            });
-          }
-        });
-      }
-
-      console.log('Location volume map entries:', Array.from(locationVolumeMap.entries()));
+      console.log('Account volume map:', Array.from(accountVolumeMap.entries()));
 
       // Calculate earnings for each agent-location combination
       const agentLocationResults = [];
@@ -214,55 +188,22 @@ const PLReports = () => {
         
         const locationAccountId = assignment.locations.account_id;
         
-        // Try to find volume data for this location
-        let locationVolume = locationVolumeMap.get(locationAccountId);
-        
-        // If no direct match by account_id, try to find by location name
-        if (!locationVolume) {
-          // Look for transactions that might match this location by name
-          const locationName = assignment.locations.name.toLowerCase();
-          
-          allTransactions?.forEach(transaction => {
-            const rawDataStr = JSON.stringify(transaction.raw_data || {}).toLowerCase();
-            if (rawDataStr.includes(locationName) || 
-                (transaction.account_id && transaction.account_id.toLowerCase().includes(locationName))) {
-              
-              if (!locationVolume) {
-                locationVolume = {
-                  volume: 0,
-                  debitVolume: 0,
-                  transactionCount: 0,
-                  matchedBy: 'name_fuzzy'
-                };
-              }
-              
-              locationVolume.volume += transaction.volume || 0;
-              locationVolume.debitVolume += transaction.debit_volume || 0;
-              locationVolume.transactionCount += 1;
-            }
-          });
-        }
-        
-        // Default to zero if still no match
-        if (!locationVolume) {
-          locationVolume = {
-            volume: 0,
-            debitVolume: 0,
-            transactionCount: 0,
-            matchedBy: 'no_match'
-          };
-        }
+        // Get volume data for this location's account ID
+        const volumeData = accountVolumeMap.get(locationAccountId) || {
+          volume: 0,
+          debitVolume: 0,
+          transactionCount: 0
+        };
 
         // Calculate commission: volume * (commission_rate / 10000)
         // commission_rate is stored as basis points (e.g., 70 = 0.70%)
-        const commission = locationVolume.volume * (assignment.commission_rate / 10000);
+        const commission = volumeData.volume * (assignment.commission_rate / 10000);
 
         console.log(`Calculating for ${assignment.agent_name} at ${assignment.locations.name}:`, {
           accountId: locationAccountId,
-          volume: locationVolume.volume,
+          volume: volumeData.volume,
           bpsRate: assignment.commission_rate,
-          calculatedCommission: commission,
-          matchedBy: locationVolume.matchedBy
+          calculatedCommission: commission
         });
 
         agentLocationResults.push({
@@ -270,11 +211,10 @@ const PLReports = () => {
           locationName: assignment.locations.name,
           accountId: locationAccountId,
           bpsRate: assignment.commission_rate, // Keep as stored (70 = 70 BPS)
-          volume: locationVolume.volume,
-          debitVolume: locationVolume.debitVolume,
+          volume: volumeData.volume,
+          debitVolume: volumeData.debitVolume,
           calculatedPayout: commission,
-          transactionCount: locationVolume.transactionCount,
-          matchedBy: locationVolume.matchedBy
+          transactionCount: volumeData.transactionCount
         });
       });
 
