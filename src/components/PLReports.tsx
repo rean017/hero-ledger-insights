@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -135,7 +134,7 @@ const PLReports = () => {
       
       // Log each assignment for debugging
       assignments?.forEach(a => {
-        console.log(`Assignment: ${a.agent_name} -> ${a.locations?.name} (Account: ${a.locations?.account_id}) at ${a.commission_rate} stored rate`);
+        console.log(`Assignment: ${a.agent_name} -> ${a.locations?.name} (Account: ${a.locations?.account_id}) at rate ${a.commission_rate}`);
       });
 
       if (!assignments || assignments.length === 0) {
@@ -219,30 +218,35 @@ const PLReports = () => {
           transactionCount: 0
         };
 
-        // If no data found with account_id, check if any transactions have this as MID
-        if (volumeData.volume === 0 && volumeData.transactionCount === 0) {
-          // Try to find data using the account_id as a potential MID
-          const altVolumeData = accountVolumeMap.get(locationAccountId);
-          if (altVolumeData) {
-            volumeData = altVolumeData;
-            console.log(`Found volume data using account_id as MID lookup: ${locationAccountId}`);
-          }
-        }
-
         console.log(`Volume data for account ${locationAccountId}:`, volumeData);
 
-        // Calculate commission: volume * commission_rate
-        // commission_rate is stored as decimal (e.g., 0.0075 for 75 BPS)
-        const storedRate = Number(assignment.commission_rate) || 0;
-        const commission = volumeData.volume * storedRate;
+        // Commission rate should be stored as decimal (e.g., 0.0075 for 75 BPS)
+        // But let's check what we actually have in the database
+        const dbRate = Number(assignment.commission_rate) || 0;
+        console.log(`Database rate for ${assignment.agent_name} at ${assignment.locations.name}: ${dbRate}`);
         
-        // For display, convert the stored rate to BPS (multiply by 10000)
-        const bpsRate = storedRate * 10000;
+        // If the rate is greater than 1, it's likely stored as BPS (e.g., 75), so convert to decimal
+        // If the rate is less than 1, it's already a decimal (e.g., 0.0075)
+        let decimalRate;
+        let displayBPS;
+        
+        if (dbRate > 1) {
+          // Rate stored as BPS (e.g., 75)
+          decimalRate = dbRate / 10000;
+          displayBPS = Math.min(dbRate, 100);
+        } else {
+          // Rate stored as decimal (e.g., 0.0075)
+          decimalRate = dbRate;
+          displayBPS = Math.min(dbRate * 10000, 100);
+        }
+
+        const commission = volumeData.volume * decimalRate;
 
         console.log('Commission calculation:', {
           volume: volumeData.volume,
-          storedRate: storedRate,
-          bpsRate: bpsRate,
+          dbRate: dbRate,
+          decimalRate: decimalRate,
+          displayBPS: displayBPS,
           calculatedCommission: commission
         });
 
@@ -250,7 +254,7 @@ const PLReports = () => {
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: bpsRate,
+          bpsRate: displayBPS,
           volume: volumeData.volume,
           debitVolume: volumeData.debitVolume,
           calculatedPayout: commission,
