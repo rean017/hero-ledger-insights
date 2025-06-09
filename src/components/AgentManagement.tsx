@@ -132,7 +132,7 @@ const AgentManagement = () => {
       const result = Object.values(agentStats).map(agent => ({
         ...agent,
         accountsCount: typeof agent.accountsCount === 'object' ? agent.accountsCount.size : agent.accountsCount,
-        avgRate: agent.totalRevenue > 0 ? ((agent.totalCommission / agent.totalRevenue) * 100).toFixed(2) + '%' : '0%'
+        avgRate: agent.totalRevenue > 0 ? Math.min(((agent.totalCommission / agent.totalRevenue) * 100), 1).toFixed(2) + '%' : '0%'
       }));
 
       console.log('Final agents data:', result);

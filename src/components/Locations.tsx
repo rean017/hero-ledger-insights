@@ -304,7 +304,7 @@ const Locations = () => {
               <span className="text-muted-foreground">Avg. Rate</span>
               <span className="font-semibold">
                 {assignments && assignments.length > 0 
-                  ? `${Math.round(assignments.reduce((sum, a) => sum + a.commission_rate, 0) / assignments.length * 10000)} BPS`
+                  ? `${Math.min(Math.round(assignments.reduce((sum, a) => sum + a.commission_rate, 0) / assignments.length * 10000), 100)} BPS`
                   : '0 BPS'
                 }
               </span>
@@ -364,7 +364,7 @@ const Locations = () => {
                       {locationAssignments.map((assignment) => (
                         <div key={assignment.id} className="flex items-center gap-1">
                           <Badge variant="secondary" className="text-xs">
-                            {assignment.agent_name} ({Math.round(assignment.commission_rate * 10000)} BPS)
+                            {assignment.agent_name} ({Math.min(Math.round(assignment.commission_rate * 10000), 100)} BPS)
                           </Badge>
                           <Button
                             variant="ghost"

@@ -497,7 +497,7 @@ const PLReports = () => {
                   <td>${data.agentName}</td>
                   <td>${data.locationName}</td>
                   <td>${data.accountId || 'N/A'}</td>
-                  <td>${data.bpsRate.toFixed(2)} BPS</td>
+                  <td>${Math.min(data.bpsRate.toFixed(2), 100)} BPS</td>
                   <td>$${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td>$${data.debitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td class="positive">$${data.calculatedPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
@@ -696,7 +696,7 @@ const PLReports = () => {
                       <td className="p-4 font-medium">{data.agentName}</td>
                       <td className="p-4 font-medium">{data.locationName}</td>
                       <td className="p-4 text-muted-foreground">{data.accountId || 'N/A'}</td>
-                      <td className="p-4 font-semibold text-blue-600">{data.bpsRate.toFixed(2)} BPS</td>
+                      <td className="p-4 font-semibold text-blue-600">{Math.min(data.bpsRate.toFixed(2), 100)} BPS</td>
                       <td className="p-4">
                         <div className="flex flex-col">
                           <span className="font-semibold">${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
