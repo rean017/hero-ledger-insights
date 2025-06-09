@@ -162,9 +162,16 @@ const PLReports = () => {
       const accountVolumeMap = new Map();
       
       allTransactions?.forEach(transaction => {
-        const accountId = transaction.account_id;
+        // Use account_id if available, otherwise try to use MID from raw_data
+        let accountId = transaction.account_id;
+        
+        if (!accountId && transaction.raw_data && transaction.raw_data.MID) {
+          accountId = transaction.raw_data.MID;
+          console.log(`Using MID as account_id: ${accountId} for transaction`);
+        }
+        
         if (!accountId) {
-          console.log('Transaction missing account_id:', transaction);
+          console.log('Transaction missing account_id and MID:', transaction);
           return;
         }
 
@@ -202,12 +209,22 @@ const PLReports = () => {
         const locationAccountId = assignment.locations.account_id;
         console.log(`\nProcessing ${assignment.agent_name} at ${assignment.locations.name} (Account: ${locationAccountId})`);
         
-        // Get volume data for this location's account ID
-        const volumeData = accountVolumeMap.get(locationAccountId) || {
+        // Get volume data for this location's account ID - try both the stored account_id and as a potential MID
+        let volumeData = accountVolumeMap.get(locationAccountId) || {
           volume: 0,
           debitVolume: 0,
           transactionCount: 0
         };
+
+        // If no data found with account_id, check if any transactions have this as MID
+        if (volumeData.volume === 0 && volumeData.transactionCount === 0) {
+          // Try to find data using the account_id as a potential MID
+          const altVolumeData = accountVolumeMap.get(locationAccountId);
+          if (altVolumeData) {
+            volumeData = altVolumeData;
+            console.log(`Found volume data using account_id as MID lookup: ${locationAccountId}`);
+          }
+        }
 
         console.log(`Volume data for account ${locationAccountId}:`, volumeData);
 
