@@ -54,10 +54,11 @@ const FileUpload = () => {
 
   const monthOptions = generateMonthOptions();
 
-  const detectProcessor = (headers: string[]): string => {
+  const detectProcessor = (headers: string[], firstDataRow?: any): string => {
     const headerStr = headers.join('|').toLowerCase();
     
     console.log('Detecting processor from headers:', headers);
+    console.log('First data row sample:', firstDataRow);
     
     // Check for TRNXN specific columns
     if (headerStr.includes('bank card volume') || headerStr.includes('bankcard volume') || headerStr.includes('salescode')) {
@@ -82,6 +83,12 @@ const FileUpload = () => {
       console.log('Detected Green Payments processor');
       return 'Green Payments';
     }
+
+    // Additional check for Green Payments based on file name patterns or content
+    if (headerStr.includes('fiserv') || headerStr.includes('residuals')) {
+      console.log('Detected Green Payments processor (Fiserv format)');
+      return 'Green Payments';
+    }
     
     // Default fallback
     console.log('Could not detect processor, using Unknown');
@@ -96,65 +103,81 @@ const FileUpload = () => {
       console.log('Row data keys:', Object.keys(row));
       console.log('Row data sample:', row);
 
-      switch (processor) {
-        case 'TRNXN':
-          processed.volume = parseFloat(row['Bank Card Volume'] || row['Bankcard Volume'] || 0);
-          processed.debitVolume = parseFloat(row['Debit'] || 0);
-          processed.agentPayout = parseFloat(row['Net Commission'] || row['Commission'] || 0);
-          processed.agentName = row['SalesCode'] || row['Partner'] || row['Sales Code'];
-          // For TRNXN, we'll try to find account ID in various possible columns
-          processed.accountId = row['Account ID'] || row['MID'] || row['Merchant ID'] || row['Account'] || null;
-          processed.locationName = row['DBA'] || row['Business Name'] || row['Location'] || null;
-          processed.transactionDate = row['Date'] || row['Period'] || row['Transaction Date'] || null;
-          break;
+      // Handle the specific Green Payments CSV format with __parsed_extra
+      if (row.__parsed_extra && Array.isArray(row.__parsed_extra)) {
+        // This appears to be a Green Payments Fiserv format where:
+        // Column 0: Merchant ID
+        // Column 1: Merchant Name  
+        // Column 2: Transactions
+        // Column 3: Sales Amount (Volume)
+        // Column 4: Net
+        // Column 5: BPS
+        // Column 6: Agent Net (Payout)
+        
+        const merchantId = Object.values(row)[0] as string;
+        const extraData = row.__parsed_extra;
+        
+        if (extraData.length >= 6) {
+          processed.accountId = merchantId;
+          processed.locationName = extraData[0] as string;
+          processed.volume = parseFloat(extraData[2] as string) || 0;
+          processed.agentPayout = parseFloat(extraData[5] as string) || 0;
+          processed.debitVolume = 0; // Not provided in this format
+          processed.agentName = null; // Will be assigned manually
+        }
+      } else {
+        // Handle other processor formats
+        switch (processor) {
+          case 'TRNXN':
+            processed.volume = parseFloat(row['Bank Card Volume'] || row['Bankcard Volume'] || 0);
+            processed.debitVolume = parseFloat(row['Debit'] || 0);
+            processed.agentPayout = parseFloat(row['Net Commission'] || row['Commission'] || 0);
+            processed.agentName = row['SalesCode'] || row['Partner'] || row['Sales Code'];
+            processed.accountId = row['Account ID'] || row['MID'] || row['Merchant ID'] || row['Account'] || null;
+            processed.locationName = row['DBA'] || row['Business Name'] || row['Location'] || null;
+            processed.transactionDate = row['Date'] || row['Period'] || row['Transaction Date'] || null;
+            break;
 
-        case 'Maverick':
-          processed.volume = parseFloat(row['Total Amount'] || row['Volume'] || row['Sales'] || 0);
-          processed.debitVolume = parseFloat(row['Debit Amount'] || row['Returns'] || 0);
-          processed.agentPayout = parseFloat(row['Commission'] || row['Agent Commission'] || 0);
-          processed.agentName = row['Sales Rep'] || row['Agent'] || row['Representative'];
-          processed.accountId = row['Merchant ID'] || row['MID'] || row['Account'];
-          processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
-          processed.transactionDate = row['Settlement Date'] || row['Date'] || row['Trans Date'];
-          break;
+          case 'Maverick':
+            processed.volume = parseFloat(row['Total Amount'] || row['Volume'] || row['Sales'] || 0);
+            processed.debitVolume = parseFloat(row['Debit Amount'] || row['Returns'] || 0);
+            processed.agentPayout = parseFloat(row['Commission'] || row['Agent Commission'] || 0);
+            processed.agentName = row['Sales Rep'] || row['Agent'] || row['Representative'];
+            processed.accountId = row['Merchant ID'] || row['MID'] || row['Account'];
+            processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
+            processed.transactionDate = row['Settlement Date'] || row['Date'] || row['Trans Date'];
+            break;
 
-        case 'SignaPay':
-          processed.volume = parseFloat(row['Gross Sales'] || row['Volume'] || row['Amount'] || 0);
-          processed.debitVolume = parseFloat(row['Returns'] || row['Chargebacks'] || 0);
-          processed.agentPayout = parseFloat(row['Residual'] || row['Agent Pay'] || 0);
-          processed.agentName = row['Agent Name'] || row['Rep'] || row['Sales Agent'];
-          processed.accountId = row['DBA'] || row['Merchant'] || row['Account Number'];
-          processed.locationName = row['DBA'] || row['Business Name'] || row['Merchant Name'] || row['Location'];
-          processed.transactionDate = row['Process Date'] || row['Date'] || row['Settlement Date'];
-          break;
+          case 'SignaPay':
+            processed.volume = parseFloat(row['Gross Sales'] || row['Volume'] || row['Amount'] || 0);
+            processed.debitVolume = parseFloat(row['Returns'] || row['Chargebacks'] || 0);
+            processed.agentPayout = parseFloat(row['Residual'] || row['Agent Pay'] || 0);
+            processed.agentName = row['Agent Name'] || row['Rep'] || row['Sales Agent'];
+            processed.accountId = row['DBA'] || row['Merchant'] || row['Account Number'];
+            processed.locationName = row['DBA'] || row['Business Name'] || row['Merchant Name'] || row['Location'];
+            processed.transactionDate = row['Process Date'] || row['Date'] || row['Settlement Date'];
+            break;
 
-        case 'Green Payments':
-          processed.volume = parseFloat(row['Processing Volume'] || row['Volume'] || row['Sales Volume'] || 0);
-          processed.debitVolume = parseFloat(row['Debit Volume'] || row['Refunds'] || 0);
-          processed.agentPayout = parseFloat(row['Agent Revenue'] || row['Commission'] || 0);
-          processed.agentName = row['Agent'] || row['Partner'] || row['Sales Partner'];
-          processed.accountId = row['Merchant ID'] || row['Account'] || row['Customer ID'];
-          processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
-          processed.transactionDate = row['Date'] || row['Processing Date'] || row['Trans Date'];
-          break;
+          case 'Green Payments':
+            processed.volume = parseFloat(row['Processing Volume'] || row['Volume'] || row['Sales Volume'] || 0);
+            processed.debitVolume = parseFloat(row['Debit Volume'] || row['Refunds'] || 0);
+            processed.agentPayout = parseFloat(row['Agent Revenue'] || row['Commission'] || 0);
+            processed.agentName = row['Agent'] || row['Partner'] || row['Sales Partner'];
+            processed.accountId = row['Merchant ID'] || row['Account'] || row['Customer ID'];
+            processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
+            processed.transactionDate = row['Date'] || row['Processing Date'] || row['Trans Date'];
+            break;
 
-        default:
-          // Generic mapping - try common column names
-          processed.volume = parseFloat(row['Volume'] || row['Bankcard Volume'] || row['Income'] || row['Sales'] || row['Amount'] || 0);
-          processed.debitVolume = parseFloat(row['Debit Volume'] || row['Returns'] || 0);
-          processed.agentPayout = parseFloat(row['Commission'] || row['Agent Payout'] || row['Payout'] || row['Net Commission'] || row['Gross Commission'] || 0);
-          processed.agentName = row['Agent'] || row['Sales Code'] || row['Partner'] || row['Rep'];
-          processed.accountId = row['MID'] || row['Account ID'] || row['Merchant ID'];
-          processed.locationName = row['DBA'] || row['Business Name'] || row['Location'] || row['Merchant Name'];
-          processed.transactionDate = row['Date'] || row['Period'] || row['Transaction Date'];
-          break;
-      }
-
-      // Normalize agent name - treat "MHERO" or "Merchant Hero" as the prime agent
-      if (processed.agentName) {
-        const normalizedName = processed.agentName.toLowerCase();
-        if (normalizedName === 'mhero' || normalizedName === 'merchant hero') {
-          processed.agentName = 'Merchant Hero';
+          default:
+            // Generic mapping - try common column names
+            processed.volume = parseFloat(row['Volume'] || row['Bankcard Volume'] || row['Income'] || row['Sales'] || row['Amount'] || 0);
+            processed.debitVolume = parseFloat(row['Debit Volume'] || row['Returns'] || 0);
+            processed.agentPayout = parseFloat(row['Commission'] || row['Agent Payout'] || row['Payout'] || row['Net Commission'] || row['Gross Commission'] || 0);
+            processed.agentName = row['Agent'] || row['Sales Code'] || row['Partner'] || row['Rep'];
+            processed.accountId = row['MID'] || row['Account ID'] || row['Merchant ID'];
+            processed.locationName = row['DBA'] || row['Business Name'] || row['Location'] || row['Merchant Name'];
+            processed.transactionDate = row['Date'] || row['Period'] || row['Transaction Date'];
+            break;
         }
       }
 
@@ -163,7 +186,8 @@ const FileUpload = () => {
         debitVolume: processed.debitVolume,
         agentPayout: processed.agentPayout,
         agentName: processed.agentName,
-        accountId: processed.accountId
+        accountId: processed.accountId,
+        locationName: processed.locationName
       });
 
       return processed;
@@ -324,21 +348,25 @@ const FileUpload = () => {
         throw new Error('No data found in file');
       }
 
-      // Detect processor based on column headers
+      // Detect processor based on column headers and first data row
       const headers = Object.keys(rawData[0]);
-      const detectedProcessor = detectProcessor(headers);
+      const detectedProcessor = detectProcessor(headers, rawData[1]);
       
       console.log('Detected processor:', detectedProcessor);
       console.log('File headers:', headers);
 
-      // Delete existing transactions for this month and processor before inserting new ones
+      // Fix the date range issue - use proper last day of month
+      const [year, month] = selectedMonth.split('-');
+      const lastDayOfMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+      const endDate = `${selectedMonth}-${lastDayOfMonth}`;
+
       console.log('Deleting existing transactions for processor:', detectedProcessor, 'and month:', selectedMonth);
       const { error: deleteError } = await supabase
         .from('transactions')
         .delete()
         .eq('processor', detectedProcessor)
         .gte('transaction_date', `${selectedMonth}-01`)
-        .lt('transaction_date', `${selectedMonth}-32`);
+        .lte('transaction_date', endDate);
 
       if (deleteError) {
         console.error('Error deleting existing transactions:', deleteError);
@@ -363,7 +391,6 @@ const FileUpload = () => {
       let successCount = 0;
       let errorCount = 0;
       let locationsCreated = 0;
-      let agentsCreated = 0;
       const errors: any[] = [];
 
       // Process each row
@@ -385,25 +412,6 @@ const FileUpload = () => {
           // Check if we have meaningful data (volume OR agent payout)
           if ((processedData.volume && processedData.volume > 0) || (processedData.agentPayout && processedData.agentPayout > 0)) {
             try {
-              // Ensure agent exists if we have agent data
-              let agentId = null;
-              if (processedData.agentName) {
-                const existingAgentId = await ensureAgentExists(processedData.agentName);
-                if (existingAgentId) {
-                  agentId = existingAgentId;
-                  // Check if this was a newly created agent
-                  const { data: agentCheck } = await supabase
-                    .from('agents')
-                    .select('created_at')
-                    .eq('id', existingAgentId)
-                    .single();
-                  
-                  if (agentCheck && new Date(agentCheck.created_at).getTime() > Date.now() - 5000) {
-                    agentsCreated++;
-                  }
-                }
-              }
-
               // Ensure location exists if we have location data
               let locationId = null;
               if (processedData.locationName) {
@@ -431,7 +439,7 @@ const FileUpload = () => {
                 volume: processedData.volume || 0,
                 debit_volume: processedData.debitVolume || 0,
                 agent_payout: processedData.agentPayout || 0,
-                agent_name: processedData.agentName,
+                agent_name: null, // Don't store agent names from uploads
                 account_id: processedData.accountId,
                 transaction_date: transactionDate,
                 raw_data: processedData.rawData
@@ -495,7 +503,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
 
-      const successMessage = `Processed ${successCount} rows successfully from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}${agentsCreated > 0 ? ` Created ${agentsCreated} new agents.` : ''}`;
+      const successMessage = `Processed ${successCount} rows successfully from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -621,7 +629,7 @@ const FileUpload = () => {
             <li><strong>SignaPay:</strong> Gross Sales, Returns, Residual, Agent Name, DBA, Business Name, Process Date</li>
             <li><strong>Green Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Business Name, Date</li>
           </ul>
-          <p className="mt-2 text-xs"><strong>Note:</strong> Agents are automatically created if they don't exist. Merchant Hero/MHERO is treated as the prime agent. Uploading data replaces existing data for that month and processor.</p>
+          <p className="mt-2 text-xs"><strong>Note:</strong> Agent data is NOT imported from files. Create agents manually and assign them to locations. Uploading data replaces existing data for that month and processor.</p>
         </div>
       </CardContent>
     </Card>
