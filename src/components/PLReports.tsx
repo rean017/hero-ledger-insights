@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -134,7 +135,7 @@ const PLReports = () => {
       
       // Log each assignment for debugging
       assignments?.forEach(a => {
-        console.log(`Assignment: ${a.agent_name} -> ${a.locations?.name} (Account: ${a.locations?.account_id}) at ${a.commission_rate} BPS`);
+        console.log(`Assignment: ${a.agent_name} -> ${a.locations?.name} (Account: ${a.locations?.account_id}) at ${a.commission_rate} stored rate`);
       });
 
       if (!assignments || assignments.length === 0) {
@@ -230,16 +231,18 @@ const PLReports = () => {
 
         console.log(`Volume data for account ${locationAccountId}:`, volumeData);
 
-        // Calculate commission: volume * (commission_rate / 10000)
-        // commission_rate is stored as basis points (e.g., 70 = 70 BPS = 0.7%)
-        const bpsRate = Number(assignment.commission_rate) || 0;
-        const commissionDecimal = bpsRate / 10000;
-        const commission = volumeData.volume * commissionDecimal;
+        // Calculate commission: volume * commission_rate
+        // commission_rate is stored as decimal (e.g., 0.0075 for 75 BPS)
+        const storedRate = Number(assignment.commission_rate) || 0;
+        const commission = volumeData.volume * storedRate;
+        
+        // For display, convert the stored rate to BPS (multiply by 10000)
+        const bpsRate = storedRate * 10000;
 
         console.log('Commission calculation:', {
           volume: volumeData.volume,
+          storedRate: storedRate,
           bpsRate: bpsRate,
-          commissionDecimal: commissionDecimal,
           calculatedCommission: commission
         });
 
@@ -696,7 +699,7 @@ const PLReports = () => {
                       <td className="p-4 font-medium">{data.agentName}</td>
                       <td className="p-4 font-medium">{data.locationName}</td>
                       <td className="p-4 text-muted-foreground">{data.accountId || 'N/A'}</td>
-                      <td className="p-4 font-semibold text-blue-600">{Math.min(data.bpsRate.toFixed(2), 100)} BPS</td>
+                      <td className="p-4 font-semibold text-blue-600">{Math.min(data.bpsRate, 100).toFixed(0)} BPS</td>
                       <td className="p-4">
                         <div className="flex flex-col">
                           <span className="font-semibold">${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
