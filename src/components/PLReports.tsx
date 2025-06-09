@@ -1,7 +1,7 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Download, FileText, TrendingUp, TrendingDown, User } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,20 +9,43 @@ import { useState } from "react";
 
 const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("current-month");
-  const [selectedAgent, setSelectedAgent] = useState("all");
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
 
   // Fetch all agents for the dropdown
   const { data: agents } = useQuery({
-    queryKey: ['agents'],
+    queryKey: ['agents-for-pl'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Get unique agents from transactions
+      const { data: transactionAgents, error: transactionError } = await supabase
+        .from('transactions')
+        .select('agent_name')
+        .not('agent_name', 'is', null);
+
+      if (transactionError) throw transactionError;
+
+      // Get manually added agents
+      const { data: manualAgents, error: manualError } = await supabase
         .from('agents')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
+        .select('name')
+        .eq('is_active', true);
+
+      if (manualError) throw manualError;
+
+      // Combine and deduplicate agents
+      const allAgentNames = new Set<string>();
       
-      if (error) throw error;
-      return data;
+      transactionAgents?.forEach(t => {
+        if (t.agent_name) allAgentNames.add(t.agent_name);
+      });
+      
+      manualAgents?.forEach(a => {
+        allAgentNames.add(a.name);
+      });
+
+      return Array.from(allAgentNames).sort().map(name => ({
+        label: name,
+        value: name
+      }));
     }
   });
 
@@ -78,7 +101,7 @@ const PLReports = () => {
   const dateRange = getDateRange(selectedPeriod);
 
   const { data: monthlyData, isLoading } = useQuery({
-    queryKey: ['monthly-pl-data', selectedAgent, selectedPeriod],
+    queryKey: ['monthly-pl-data', selectedAgents, selectedPeriod],
     queryFn: async () => {
       let query = supabase
         .from('transactions')
@@ -87,9 +110,9 @@ const PLReports = () => {
         .lt('transaction_date', dateRange.end)
         .order('transaction_date', { ascending: false });
 
-      // Filter by agent if selected
-      if (selectedAgent !== 'all') {
-        query = query.eq('agent_name', selectedAgent);
+      // Filter by selected agents if any are selected
+      if (selectedAgents.length > 0) {
+        query = query.in('agent_name', selectedAgents);
       }
 
       const { data: transactions, error } = await query;
@@ -144,7 +167,7 @@ const PLReports = () => {
   });
 
   const { data: periodSummary } = useQuery({
-    queryKey: ['period-summary', selectedAgent, selectedPeriod],
+    queryKey: ['period-summary', selectedAgents, selectedPeriod],
     queryFn: async () => {
       let query = supabase
         .from('transactions')
@@ -152,8 +175,8 @@ const PLReports = () => {
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 
-      if (selectedAgent !== 'all') {
-        query = query.eq('agent_name', selectedAgent);
+      if (selectedAgents.length > 0) {
+        query = query.in('agent_name', selectedAgents);
       }
 
       const { data: transactions, error } = await query;
@@ -181,7 +204,11 @@ const PLReports = () => {
     const reportWindow = window.open('', '_blank');
     if (!reportWindow) return;
 
-    const agentName = selectedAgent === 'all' ? 'All Agents' : selectedAgent;
+    const agentName = selectedAgents.length === 0 
+      ? 'All Agents' 
+      : selectedAgents.length === 1 
+        ? selectedAgents[0] 
+        : `${selectedAgents.length} Selected Agents`;
     const reportDate = new Date().toLocaleDateString();
     
     const reportHTML = `
@@ -407,20 +434,13 @@ const PLReports = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Agent</label>
-              <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Agents</SelectItem>
-                  {agents?.map((agent) => (
-                    <SelectItem key={agent.id} value={agent.name}>
-                      {agent.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Agents</label>
+              <MultiSelect
+                options={agents || []}
+                selected={selectedAgents}
+                onChange={setSelectedAgents}
+                placeholder="Select agents..."
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Period</label>
@@ -444,7 +464,11 @@ const PLReports = () => {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <User className="h-5 w-5" />
-              {selectedAgent === 'all' ? 'All Agents' : selectedAgent} Summary
+              {selectedAgents.length === 0 
+                ? 'All Agents' 
+                : selectedAgents.length === 1 
+                  ? selectedAgents[0] 
+                  : `${selectedAgents.length} Selected Agents`} Summary
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
