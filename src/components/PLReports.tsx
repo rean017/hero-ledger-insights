@@ -2,7 +2,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, FileText, TrendingUp, TrendingDown } from "lucide-react";
+import { Download, FileText, TrendingUp, TrendingDown, User } from "lucide-react";
 import FileUpload from "./FileUpload";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,15 +10,37 @@ import { useState } from "react";
 
 const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("current-month");
+  const [selectedAgent, setSelectedAgent] = useState("all");
+
+  // Fetch all agents for the dropdown
+  const { data: agents } = useQuery({
+    queryKey: ['agents'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('agents')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (error) throw error;
+      return data;
+    }
+  });
 
   const { data: monthlyData, isLoading } = useQuery({
-    queryKey: ['monthly-pl-data'],
+    queryKey: ['monthly-pl-data', selectedAgent],
     queryFn: async () => {
-      const { data: transactions, error } = await supabase
+      let query = supabase
         .from('transactions')
-        .select('transaction_date, volume, debit_volume, agent_payout, processor')
+        .select('transaction_date, volume, debit_volume, agent_payout, processor, agent_name')
         .order('transaction_date', { ascending: false });
 
+      // Filter by agent if selected
+      if (selectedAgent !== 'all') {
+        query = query.eq('agent_name', selectedAgent);
+      }
+
+      const { data: transactions, error } = await query;
       if (error) throw error;
 
       // Group by month
@@ -32,12 +54,14 @@ const PLReports = () => {
             revenue: 0,
             expenses: 0,
             netIncome: 0,
-            agentPayouts: 0
+            agentPayouts: 0,
+            transactionCount: 0
           };
         }
         
         acc[monthKey].revenue += t.volume || 0;
         acc[monthKey].agentPayouts += t.agent_payout || 0;
+        acc[monthKey].transactionCount += 1;
         
         return acc;
       }, {} as Record<string, any>) || {};
@@ -68,66 +92,231 @@ const PLReports = () => {
   });
 
   const { data: currentMonthSummary } = useQuery({
-    queryKey: ['current-month-summary'],
+    queryKey: ['current-month-summary', selectedAgent],
     queryFn: async () => {
       const currentDate = new Date();
       const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
       
-      const { data: transactions, error } = await supabase
+      let query = supabase
         .from('transactions')
-        .select('volume, agent_payout')
+        .select('volume, agent_payout, debit_volume')
         .gte('transaction_date', `${currentMonth}-01`)
         .lt('transaction_date', `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 2).padStart(2, '0')}-01`);
 
+      if (selectedAgent !== 'all') {
+        query = query.eq('agent_name', selectedAgent);
+      }
+
+      const { data: transactions, error } = await query;
       if (error) throw error;
 
       const totalRevenue = transactions?.reduce((sum, t) => sum + (t.volume || 0), 0) || 0;
       const totalExpenses = transactions?.reduce((sum, t) => sum + (t.agent_payout || 0), 0) || 0;
+      const totalDebitVolume = transactions?.reduce((sum, t) => sum + (t.debit_volume || 0), 0) || 0;
       const netIncome = totalRevenue - totalExpenses;
+      const transactionCount = transactions?.length || 0;
       
       return {
         totalRevenue,
         totalExpenses,
+        totalDebitVolume,
         netIncome,
+        transactionCount,
         profitMargin: totalRevenue > 0 ? ((netIncome / totalRevenue) * 100).toFixed(1) : '0.0'
       };
     }
   });
 
-  const { data: agentPayouts } = useQuery({
-    queryKey: ['agent-payouts'],
-    queryFn: async () => {
-      const currentDate = new Date();
-      const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-      
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('agent_name, agent_payout, volume')
-        .gte('transaction_date', `${currentMonth}-01`)
-        .lt('transaction_date', `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 2).padStart(2, '0')}-01`)
-        .not('agent_name', 'is', null);
+  const generatePDFReport = async () => {
+    // Create a new window for the report
+    const reportWindow = window.open('', '_blank');
+    if (!reportWindow) return;
 
-      if (error) throw error;
+    const agentName = selectedAgent === 'all' ? 'All Agents' : selectedAgent;
+    const reportDate = new Date().toLocaleDateString();
+    
+    const reportHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>P&L Report - ${agentName}</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 40px; 
+              color: #333;
+              line-height: 1.6;
+            }
+            .header { 
+              text-align: center; 
+              margin-bottom: 40px;
+              border-bottom: 3px solid #22c55e;
+              padding-bottom: 20px;
+            }
+            .logo {
+              width: 200px;
+              height: auto;
+              margin-bottom: 20px;
+            }
+            .company-name {
+              font-size: 24px;
+              font-weight: bold;
+              color: #22c55e;
+              margin: 10px 0;
+            }
+            .report-title {
+              font-size: 20px;
+              color: #1f2937;
+              margin: 5px 0;
+            }
+            .report-period {
+              font-size: 16px;
+              color: #6b7280;
+            }
+            .summary-section {
+              background: #f9fafb;
+              padding: 20px;
+              border-radius: 8px;
+              margin: 30px 0;
+              border-left: 4px solid #22c55e;
+            }
+            .summary-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 20px;
+              margin-top: 15px;
+            }
+            .summary-item {
+              display: flex;
+              justify-content: space-between;
+              padding: 10px 0;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .summary-item:last-child {
+              border-bottom: none;
+              font-weight: bold;
+              font-size: 18px;
+              color: #22c55e;
+            }
+            .label { font-weight: 500; }
+            .value { font-weight: 600; }
+            .positive { color: #22c55e; }
+            .negative { color: #ef4444; }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin: 30px 0;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            th, td { 
+              padding: 12px; 
+              text-align: left; 
+              border-bottom: 1px solid #e5e7eb;
+            }
+            th { 
+              background-color: #22c55e; 
+              color: white;
+              font-weight: 600;
+            }
+            tr:hover { background-color: #f9fafb; }
+            .footer {
+              margin-top: 50px;
+              text-align: center;
+              font-size: 12px;
+              color: #6b7280;
+              border-top: 1px solid #e5e7eb;
+              padding-top: 20px;
+            }
+            @media print {
+              body { margin: 20px; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <img src="/lovable-uploads/e5192b97-a74b-44d2-b5ab-f72d228fbad9.png" alt="Merchant Hero Logo" class="logo">
+            <div class="company-name">MERCHANT HERO</div>
+            <div class="report-title">Profit & Loss Report</div>
+            <div class="report-period">Agent: ${agentName} | Generated: ${reportDate}</div>
+          </div>
 
-      const agentStats = transactions?.reduce((acc, t) => {
-        const name = t.agent_name!;
-        if (!acc[name]) {
-          acc[name] = { name, accounts: new Set(), payout: 0, revenue: 0 };
-        }
-        acc[name].payout += t.agent_payout || 0;
-        acc[name].revenue += t.volume || 0;
-        return acc;
-      }, {} as Record<string, any>) || {};
+          <div class="summary-section">
+            <h3>Current Month Summary</h3>
+            <div class="summary-grid">
+              <div>
+                <div class="summary-item">
+                  <span class="label">Total Revenue:</span>
+                  <span class="value">$${currentMonthSummary?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                </div>
+                <div class="summary-item">
+                  <span class="label">Total Expenses:</span>
+                  <span class="value negative">$${currentMonthSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                </div>
+                <div class="summary-item">
+                  <span class="label">Net Income:</span>
+                  <span class="value positive">$${currentMonthSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                </div>
+              </div>
+              <div>
+                <div class="summary-item">
+                  <span class="label">Debit Volume:</span>
+                  <span class="value">$${currentMonthSummary?.totalDebitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                </div>
+                <div class="summary-item">
+                  <span class="label">Transaction Count:</span>
+                  <span class="value">${currentMonthSummary?.transactionCount.toLocaleString() || '0'}</span>
+                </div>
+                <div class="summary-item">
+                  <span class="label">Profit Margin:</span>
+                  <span class="value positive">${currentMonthSummary?.profitMargin || '0.0'}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-      return Object.values(agentStats)
-        .map((agent: any) => ({
-          ...agent,
-          accounts: agent.accounts.size,
-          rate: agent.revenue > 0 ? ((agent.payout / agent.revenue) * 100).toFixed(2) + '%' : '0%'
-        }))
-        .sort((a: any, b: any) => b.payout - a.payout);
-    }
-  });
+          <h3>Monthly Performance History</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Revenue</th>
+                <th>Agent Payouts</th>
+                <th>Net Income</th>
+                <th>Growth</th>
+                <th>Transactions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${monthlyData?.map(data => `
+                <tr>
+                  <td>${data.month}</td>
+                  <td>$${data.revenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td class="negative">$${data.agentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td class="positive">$${data.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td class="${data.growth >= 0 ? 'positive' : 'negative'}">${data.growth > 0 ? '+' : ''}${data.growth}%</td>
+                  <td>${data.transactionCount}</td>
+                </tr>
+              `).join('') || '<tr><td colspan="6">No data available</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <p>This report was generated on ${reportDate} by Merchant Hero P&L System</p>
+            <p>© ${new Date().getFullYear()} Merchant Hero. All rights reserved.</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    reportWindow.document.write(reportHTML);
+    reportWindow.document.close();
+    
+    // Auto-print after a short delay
+    setTimeout(() => {
+      reportWindow.print();
+    }, 1000);
+  };
 
   if (isLoading) {
     return (
@@ -151,11 +340,11 @@ const PLReports = () => {
           <p className="text-muted-foreground">Upload transaction data and view comprehensive profit and loss analysis</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={generatePDFReport}>
             <Download className="h-4 w-4" />
             Export PDF
           </Button>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={generatePDFReport}>
             <FileText className="h-4 w-4" />
             Generate Report
           </Button>
@@ -168,28 +357,49 @@ const PLReports = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Report Period</CardTitle>
+            <CardTitle className="text-lg">Report Filters</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select Period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="current-month">Current Month</SelectItem>
-                <SelectItem value="last-month">Last Month</SelectItem>
-                <SelectItem value="quarter">Current Quarter</SelectItem>
-                <SelectItem value="year">Current Year</SelectItem>
-                <SelectItem value="trailing-12">Trailing 12 Months</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button className="w-full">Apply Filters</Button>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Agent</label>
+              <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Agents</SelectItem>
+                  {agents?.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.name}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Period</label>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Period" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current-month">Current Month</SelectItem>
+                  <SelectItem value="last-month">Last Month</SelectItem>
+                  <SelectItem value="quarter">Current Quarter</SelectItem>
+                  <SelectItem value="year">Current Year</SelectItem>
+                  <SelectItem value="trailing-12">Trailing 12 Months</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Current Month Summary</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <User className="h-5 w-5" />
+              {selectedAgent === 'all' ? 'All Agents' : selectedAgent} Summary
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">
@@ -201,15 +411,15 @@ const PLReports = () => {
                 <span className="text-muted-foreground">Total Expenses</span>
                 <span className="font-semibold text-red-600">${currentMonthSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Debit Volume</span>
+                <span className="font-semibold">${currentMonthSummary?.totalDebitVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+              </div>
               <div className="border-t pt-2">
                 <div className="flex justify-between">
                   <span className="font-semibold">Net Income</span>
                   <span className="font-bold text-emerald-600">${currentMonthSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
                 </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Profit Margin</span>
-                <span className="font-semibold text-emerald-600">{currentMonthSummary?.profitMargin || '0.0'}%</span>
               </div>
             </div>
           </CardContent>
@@ -226,8 +436,12 @@ const PLReports = () => {
                 <span className="font-semibold">{currentMonthSummary?.profitMargin || '0.0'}%</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-muted-foreground">Transactions</span>
+                <span className="font-semibold">{currentMonthSummary?.transactionCount.toLocaleString() || '0'}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Data Source</span>
-                <span className="font-semibold">Uploaded Files</span>
+                <span className="font-semibold">Live Uploads</span>
               </div>
             </div>
           </CardContent>
@@ -236,7 +450,7 @@ const PLReports = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly History</CardTitle>
+          <CardTitle>Monthly Performance History</CardTitle>
         </CardHeader>
         <CardContent>
           {monthlyData && monthlyData.length > 0 ? (
@@ -249,6 +463,7 @@ const PLReports = () => {
                     <th className="text-left p-4 font-medium text-muted-foreground">Agent Payouts</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Net Income</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Growth</th>
+                    <th className="text-left p-4 font-medium text-muted-foreground">Transactions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -274,6 +489,7 @@ const PLReports = () => {
                           </span>
                         </div>
                       </td>
+                      <td className="p-4 font-medium">{data.transactionCount}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -282,37 +498,6 @@ const PLReports = () => {
           ) : (
             <div className="flex items-center justify-center h-32">
               <p className="text-muted-foreground">No historical data available. Upload transaction data to see reports.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Agent Payout Breakdown</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {agentPayouts && agentPayouts.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {agentPayouts.map((agent: any) => (
-                <div key={agent.name} className="border rounded-lg p-4">
-                  <h4 className="font-semibold mb-2">{agent.name}</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Avg Rate:</span>
-                      <span>{agent.rate}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Payout:</span>
-                      <span className="font-semibold text-emerald-600">${agent.payout.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No agent payout data available. Upload transaction data to see payouts.</p>
             </div>
           )}
         </CardContent>
