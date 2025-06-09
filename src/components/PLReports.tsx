@@ -136,10 +136,10 @@ const PLReports = () => {
         return [];
       }
 
-      // Get all transactions for the date range
+      // Get all transactions for the date range - INCLUDE raw_data field
       const { data: allTransactions, error: transactionError } = await supabase
         .from('transactions')
-        .select('transaction_date, volume, debit_volume, processor, agent_name, account_id')
+        .select('transaction_date, volume, debit_volume, processor, agent_name, account_id, raw_data')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end)
         .order('transaction_date', { ascending: false });
