@@ -71,31 +71,6 @@ const AgentManagement = () => {
 
       console.log('Commission summaries:', agentCommissionSummaries);
 
-      // Calculate volume and account stats for each agent from transactions
-      const agentVolumeStats = transactions?.reduce((acc, t) => {
-        const name = t.agent_name!;
-        if (!acc[name]) {
-          acc[name] = { 
-            totalVolume: 0, 
-            accountIds: new Set(),
-            accountsCount: 0
-          };
-        }
-        acc[name].totalVolume += (t.volume || 0) + (t.debit_volume || 0);
-        
-        if (t.account_id) {
-          acc[name].accountIds.add(t.account_id);
-        }
-        
-        return acc;
-      }, {} as Record<string, any>) || {};
-
-      // Convert Sets to counts
-      Object.keys(agentVolumeStats).forEach(agentName => {
-        agentVolumeStats[agentName].accountsCount = agentVolumeStats[agentName].accountIds.size;
-        delete agentVolumeStats[agentName].accountIds; // Remove the Set to avoid serialization issues
-      });
-
       // Get all unique agent names from all sources
       const allAgentNames = new Set<string>();
       
@@ -118,7 +93,6 @@ const AgentManagement = () => {
 
       // Build final agent data
       const result = Array.from(allAgentNames).map(agentName => {
-        const volumeStats = agentVolumeStats[agentName] || { totalVolume: 0, accountsCount: 0 };
         const commissionSummary = agentCommissionSummaries.find(summary => summary.agentName === agentName);
         const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
         const manualAgent = manualAgents?.find(a => a.name === agentName);
@@ -127,22 +101,48 @@ const AgentManagement = () => {
         const assignedLocations = assignments?.filter(a => a.agent_name === agentName && a.is_active) || [];
         const locationsCount = assignedLocations.length;
         
+        // Get account IDs for locations assigned to this agent
+        const assignedLocationIds = new Set(assignedLocations.map(a => a.location_id));
+        const assignedAccountIds = new Set();
+        
+        locations?.forEach(location => {
+          if (assignedLocationIds.has(location.id)) {
+            assignedAccountIds.add(location.account_id);
+          }
+        });
+
+        // Calculate volume and account stats ONLY for assigned locations
+        const agentVolumeStats = transactions?.reduce((acc, t) => {
+          // Only include transactions from accounts that correspond to assigned locations
+          if (t.account_id && assignedAccountIds.has(t.account_id)) {
+            acc.totalVolume += (t.volume || 0) + (t.debit_volume || 0);
+            acc.accountIds.add(t.account_id);
+          }
+          return acc;
+        }, { totalVolume: 0, accountIds: new Set() }) || { totalVolume: 0, accountIds: new Set() };
+
+        const accountsCount = agentVolumeStats.accountIds.size;
+        
         // Calculate average rate as percentage of commission to volume
-        const avgRate = volumeStats.totalVolume > 0 
-          ? ((totalCommission / volumeStats.totalVolume) * 100).toFixed(2) + '%' 
+        const avgRate = agentVolumeStats.totalVolume > 0 
+          ? ((totalCommission / agentVolumeStats.totalVolume) * 100).toFixed(2) + '%' 
           : '0%';
 
         const agentData = {
           name: agentName,
-          totalRevenue: volumeStats.totalVolume,
-          accountsCount: volumeStats.accountsCount,
-          locationsCount, // Add locations count
+          totalRevenue: agentVolumeStats.totalVolume,
+          accountsCount,
+          locationsCount,
           totalCommission,
           avgRate,
           status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active'
         };
 
-        console.log(`Agent ${agentName} data:`, agentData);
+        console.log(`Agent ${agentName} data:`, {
+          ...agentData,
+          assignedLocationIds: Array.from(assignedLocationIds),
+          assignedAccountIds: Array.from(assignedAccountIds)
+        });
         return agentData;
       });
 
