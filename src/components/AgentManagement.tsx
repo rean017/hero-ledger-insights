@@ -3,13 +3,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Plus, Edit, Trash2, Search } from "lucide-react";
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 const AgentManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [newAgent, setNewAgent] = useState({
+    name: "",
+    email: "",
+    baseRate: "",
+    status: "active"
+  });
+  const { toast } = useToast();
 
-  const agents = [
+  const [agents, setAgents] = useState([
     {
       id: 1,
       name: "Sarah Johnson",
@@ -46,12 +57,42 @@ const AgentManagement = () => {
       totalRevenue: "$9,870",
       status: "inactive",
     },
-  ];
+  ]);
 
   const filteredAgents = agents.filter(agent =>
     agent.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     agent.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleAddAgent = () => {
+    if (!newAgent.name || !newAgent.email || !newAgent.baseRate) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const agent = {
+      id: agents.length + 1,
+      name: newAgent.name,
+      email: newAgent.email,
+      baseRate: newAgent.baseRate.includes('%') ? newAgent.baseRate : `${newAgent.baseRate}%`,
+      accountsCount: 0,
+      totalRevenue: "$0",
+      status: newAgent.status
+    };
+
+    setAgents([...agents, agent]);
+    setNewAgent({ name: "", email: "", baseRate: "", status: "active" });
+    setIsAddDialogOpen(false);
+    
+    toast({
+      title: "Success",
+      description: "Agent added successfully"
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -60,10 +101,70 @@ const AgentManagement = () => {
           <h2 className="text-2xl font-bold text-foreground mb-2">Agent Management</h2>
           <p className="text-muted-foreground">Manage agent information and commission rates</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add New Agent
-        </Button>
+        
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add New Agent
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Add New Agent</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Full Name *</Label>
+                <Input
+                  id="name"
+                  value={newAgent.name}
+                  onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
+                  placeholder="Enter agent's full name"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="email">Email Address *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newAgent.email}
+                  onChange={(e) => setNewAgent({ ...newAgent, email: e.target.value })}
+                  placeholder="agent@merchanthero.com"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="baseRate">Base Rate (%) *</Label>
+                <Input
+                  id="baseRate"
+                  value={newAgent.baseRate}
+                  onChange={(e) => setNewAgent({ ...newAgent, baseRate: e.target.value })}
+                  placeholder="1.5"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="status">Status</Label>
+                <select
+                  id="status"
+                  value={newAgent.status}
+                  onChange={(e) => setNewAgent({ ...newAgent, status: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddAgent}>
+                Add Agent
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card>
