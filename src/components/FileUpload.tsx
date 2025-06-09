@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,10 +19,10 @@ interface ProcessedData {
   locationName?: string;
   transactionDate?: string;
   rawData: any;
+  processor?: string;
 }
 
 const FileUpload = () => {
-  const [selectedProcessor, setSelectedProcessor] = useState<string>("");
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
@@ -54,16 +55,36 @@ const FileUpload = () => {
 
   const monthOptions = generateMonthOptions();
 
-  const processors = [
-    { value: "TRNXN", label: "TRNXN" },
-    { value: "Maverick", label: "Maverick" },
-    { value: "SignaPay", label: "SignaPay" },
-    { value: "Gren Payments", label: "Gren Payments" }
-  ];
+  const detectProcessor = (headers: string[]): string => {
+    const headerStr = headers.join('|').toLowerCase();
+    
+    // Check for TRNXN specific columns
+    if (headerStr.includes('bank card volume') || headerStr.includes('bankcard volume') || headerStr.includes('salescode')) {
+      return 'TRNXN';
+    }
+    
+    // Check for Maverick specific columns
+    if (headerStr.includes('total amount') && headerStr.includes('sales rep')) {
+      return 'Maverick';
+    }
+    
+    // Check for SignaPay specific columns
+    if (headerStr.includes('gross sales') && headerStr.includes('residual')) {
+      return 'SignaPay';
+    }
+    
+    // Check for Gren Payments specific columns
+    if (headerStr.includes('processing volume') && headerStr.includes('agent revenue')) {
+      return 'Gren Payments';
+    }
+    
+    // Default fallback
+    return 'Unknown';
+  };
 
   const processRow = (row: any, processor: string): ProcessedData | null => {
     try {
-      let processed: ProcessedData = { rawData: row };
+      let processed: ProcessedData = { rawData: row, processor };
 
       console.log('Processing row for processor:', processor);
       console.log('Row data:', row);
@@ -213,10 +234,10 @@ const FileUpload = () => {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !selectedProcessor || !selectedMonth) {
+    if (!file || !selectedMonth) {
       toast({
         title: "Error",
-        description: "Please select a processor, month, and a file",
+        description: "Please select a month and a file",
         variant: "destructive"
       });
       return;
@@ -226,22 +247,33 @@ const FileUpload = () => {
     setUploadStatus({ status: 'processing', message: 'Processing file...', filename: file.name });
 
     try {
+      // Parse the file
+      const rawData = await parseFile(file);
+      console.log('Parsed data sample:', rawData.slice(0, 3));
+
+      if (rawData.length === 0) {
+        throw new Error('No data found in file');
+      }
+
+      // Detect processor based on column headers
+      const headers = Object.keys(rawData[0]);
+      const detectedProcessor = detectProcessor(headers);
+      
+      console.log('Detected processor:', detectedProcessor);
+      console.log('File headers:', headers);
+
       // Create file upload record
       const { data: uploadRecord, error: uploadError } = await supabase
         .from('file_uploads')
         .insert({
           filename: file.name,
-          processor: selectedProcessor,
+          processor: detectedProcessor,
           status: 'processing'
         })
         .select()
         .single();
 
       if (uploadError) throw uploadError;
-
-      // Parse the file
-      const rawData = await parseFile(file);
-      console.log('Parsed data sample:', rawData.slice(0, 3));
 
       let successCount = 0;
       let errorCount = 0;
@@ -251,7 +283,7 @@ const FileUpload = () => {
       // Process each row
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
-        const processedData = processRow(row, selectedProcessor);
+        const processedData = processRow(row, detectedProcessor);
 
         if (processedData && (processedData.volume || processedData.agentPayout)) {
           try {
@@ -280,7 +312,7 @@ const FileUpload = () => {
             const { error } = await supabase
               .from('transactions')
               .insert({
-                processor: selectedProcessor,
+                processor: detectedProcessor,
                 volume: processedData.volume || 0,
                 debit_volume: processedData.debitVolume || 0,
                 agent_payout: processedData.agentPayout || 0,
@@ -325,7 +357,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['agents-data'] });
       queryClient.invalidateQueries({ queryKey: ['file-uploads'] });
 
-      const successMessage = `Processed ${successCount} rows successfully for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}`;
+      const successMessage = `Processed ${successCount} rows successfully from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -371,43 +403,25 @@ const FileUpload = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Select Processor</label>
-          <Select value={selectedProcessor} onValueChange={setSelectedProcessor}>
+          <label className="text-sm font-medium">Select Month</label>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger>
-              <SelectValue placeholder="Choose processor..." />
+              <SelectValue placeholder="Choose month..." />
             </SelectTrigger>
             <SelectContent>
-              {processors.map((processor) => (
-                <SelectItem key={processor.value} value={processor.value}>
-                  {processor.label}
+              {monthOptions.map((month) => (
+                <SelectItem key={month.value} value={month.value}>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    {month.label}
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
 
-        {selectedProcessor && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Select Month</label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger>
-                <SelectValue placeholder="Choose month..." />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((month) => (
-                  <SelectItem key={month.value} value={month.value}>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      {month.label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {selectedProcessor && selectedMonth && (
+        {selectedMonth && (
           <div className="space-y-2">
             <label className="text-sm font-medium">Upload File (CSV or XLSX)</label>
             <div className="flex items-center justify-center w-full">
@@ -421,13 +435,16 @@ const FileUpload = () => {
                   <p className="text-xs text-primary mt-1">
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Processor will be automatically detected
+                  </p>
                 </div>
                 <input
                   type="file"
                   className="hidden"
                   accept=".csv,.xlsx,.xls"
                   onChange={handleFileUpload}
-                  disabled={uploading || !selectedProcessor || !selectedMonth}
+                  disabled={uploading || !selectedMonth}
                 />
               </label>
             </div>
@@ -459,7 +476,7 @@ const FileUpload = () => {
         )}
 
         <div className="text-xs text-muted-foreground">
-          <p className="font-medium mb-1">Supported columns for each processor:</p>
+          <p className="font-medium mb-1">System automatically detects processor and applies correct mapping:</p>
           <ul className="space-y-1">
             <li><strong>TRNXN:</strong> Bank Card Volume (for Volume), Debit (for Debit Volume), Net Commission/Commission (for Agent Payout), SalesCode/Partner (for Agent Name)</li>
             <li><strong>Maverick:</strong> Total Amount, Debit Amount, Commission, Sales Rep, Merchant ID, Business Name/DBA, Settlement Date</li>
