@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -260,21 +259,23 @@ const PLReports = () => {
 
         console.log(`Final volume data for ${assignment.locations.name} (${locationAccountId}):`, volumeData);
 
-        // Calculate commission using the stored rate - PROPER BPS CONVERSION
+        // Calculate commission - treat stored value as actual BPS
         const dbRate = Number(assignment.commission_rate) || 0;
         console.log(`Database rate for ${assignment.agent_name} at ${assignment.locations.name}: ${dbRate}`);
         
-        // Convert stored rate to BPS display: if stored as 5000 -> display 50 BPS, 7500 -> 75 BPS
-        const displayBPS = Math.round(dbRate / 100);
+        // If stored values are in thousands (corrupted), convert back to BPS
+        // If stored as 5000+ assume it's corrupted and divide by 100
+        // If stored as reasonable BPS (under 1000), use as-is
+        const actualBPS = dbRate > 1000 ? Math.round(dbRate / 100) : dbRate;
         
-        // Calculate commission: volume × (stored rate / 10000) to convert to proper decimal
-        const decimalRate = dbRate / 10000;
+        // Calculate commission: volume × (BPS / 10000) to convert BPS to decimal
+        const decimalRate = actualBPS / 10000;
         const commission = volumeData.volume * decimalRate;
 
         console.log('Commission calculation:', {
           volume: volumeData.volume,
           dbRateStored: dbRate,
-          displayBPS: displayBPS,
+          actualBPS: actualBPS,
           decimalRate: decimalRate,
           calculatedCommission: commission
         });
@@ -283,7 +284,7 @@ const PLReports = () => {
           agentName: assignment.agent_name,
           locationName: assignment.locations.name,
           accountId: locationAccountId,
-          bpsRate: displayBPS,
+          bpsRate: actualBPS,
           volume: volumeData.volume,
           debitVolume: volumeData.debitVolume,
           calculatedPayout: commission,
