@@ -6,7 +6,7 @@ import { CalendarDays, TrendingUp, Building2, Users, DollarSign } from "lucide-r
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
-import { convertToBPSDisplay, convertToDecimalRate } from "@/utils/bpsCalculations";
+import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
 
 const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("current-month");
@@ -83,42 +83,33 @@ const PLReports = () => {
           agent_name,
           commission_rate,
           location_id,
-          locations(name, account_id)
+          is_active
         `)
         .eq('is_active', true);
 
       if (assignmentError) throw assignmentError;
 
-      let totalRevenue = 0;
-      let totalExpenses = 0;
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
 
-      // Calculate total revenue from all transactions
+      if (locationError) throw locationError;
+
+      let totalVolume = 0;
+
+      // Calculate total volume from all transactions
       transactions?.forEach(t => {
-        totalRevenue += (t.volume || 0) + (t.debit_volume || 0);
+        totalVolume += (t.volume || 0) + (t.debit_volume || 0);
       });
 
-      // Calculate agent commissions
-      assignments?.forEach(assignment => {
-        if (assignment.locations?.account_id) {
-          const locationTransactions = transactions?.filter(t => t.account_id === assignment.locations.account_id) || [];
-          const locationVolume = locationTransactions.reduce((sum, t) => sum + (t.volume || 0) + (t.debit_volume || 0), 0);
-          
-          const decimalRate = convertToDecimalRate(assignment.commission_rate);
-          const commission = locationVolume * decimalRate;
-          totalExpenses += commission;
-          
-          console.log(`Commission for ${assignment.locations.name} (${assignment.agent_name}):`, {
-            volume: locationVolume,
-            rate: decimalRate,
-            commission
-          });
-        }
-      });
+      // Use the same commission calculation logic as the commission reports
+      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
+      const totalExpenses = commissions.reduce((sum, commission) => sum + commission.commission, 0);
 
-      const netIncome = totalRevenue - totalExpenses;
+      const netIncome = totalVolume - totalExpenses;
 
       const result = {
-        totalRevenue,
+        totalVolume,
         totalExpenses,
         netIncome,
         transactionCount: transactions?.length || 0
@@ -270,12 +261,12 @@ const PLReports = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Volume</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-600">
-              ${periodSummary?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+              ${periodSummary?.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
           </CardContent>
@@ -363,9 +354,9 @@ const PLReports = () => {
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Gross Revenue</span>
+                <span className="text-sm text-muted-foreground">Gross Volume</span>
                 <span className="font-semibold text-emerald-600">
-                  ${periodSummary?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                  ${periodSummary?.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -384,7 +375,7 @@ const PLReports = () => {
               </div>
               <div className="text-center pt-2">
                 <span className="text-xs text-muted-foreground">
-                  Profit Margin: {periodSummary?.totalRevenue ? ((periodSummary.netIncome / periodSummary.totalRevenue) * 100).toFixed(2) : 0}%
+                  Profit Margin: {periodSummary?.totalVolume ? ((periodSummary.netIncome / periodSummary.totalVolume) * 100).toFixed(2) : 0}%
                 </span>
               </div>
             </div>
