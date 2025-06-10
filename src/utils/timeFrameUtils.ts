@@ -70,9 +70,21 @@ export const getDateRangeForTimeFrame = (timeFrame: string): { from: Date; to: D
   if (selectedFrame?.dateRange) {
     console.log('📊 Date range result:', {
       from: selectedFrame.dateRange.from.toISOString(),
-      to: selectedFrame.dateRange.to.toISOString()
+      to: selectedFrame.dateRange.to.toISOString(),
+      fromFormatted: format(selectedFrame.dateRange.from, 'yyyy-MM-dd'),
+      toFormatted: format(selectedFrame.dateRange.to, 'yyyy-MM-dd')
     });
   }
   
   return selectedFrame?.dateRange || null;
+};
+
+// ADDED: Helper function to ensure consistent date formatting for database queries
+export const formatDateForDatabase = (date: Date): string => {
+  return format(date, 'yyyy-MM-dd');
+};
+
+// ADDED: Helper function to get month string in YYYY-MM format (same as FileUpload)
+export const getMonthString = (date: Date): string => {
+  return format(date, 'yyyy-MM');
 };

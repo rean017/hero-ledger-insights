@@ -99,29 +99,24 @@ const AgentManagement = () => {
     ? transactions.filter(t => {
         if (!t.transaction_date) return false;
         
-        // Parse the transaction date as a local date (no timezone conversion)
-        const transactionDate = new Date(t.transaction_date + 'T00:00:00');
+        // CONSISTENT: Use same date parsing logic as other components
+        const transactionDate = new Date(t.transaction_date + 'T00:00:00.000Z'); // Force UTC to avoid timezone issues
         
         // Ensure the transaction date is valid
         if (isNaN(transactionDate.getTime())) {
-          console.log('⚠️ Invalid transaction date:', t.transaction_date);
+          console.log('⚠️ AgentManagement: Invalid transaction date:', t.transaction_date);
           return false;
         }
         
-        // Create date boundaries without timezone issues
-        const transactionDateOnly = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
-        const fromDateOnly = new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), dateRange.from.getDate());
-        const toDateOnly = new Date(dateRange.to.getFullYear(), dateRange.to.getMonth(), dateRange.to.getDate());
-        
-        const isInRange = transactionDateOnly >= fromDateOnly && transactionDateOnly <= toDateOnly;
+        const isInRange = transactionDate >= dateRange.from && transactionDate <= dateRange.to;
         
         if (isInRange) {
-          console.log('✅ Transaction date in range:', {
-            originalDate: t.transaction_date,
-            transactionDateOnly: transactionDateOnly.toDateString(),
-            fromDate: fromDateOnly.toDateString(),
-            toDate: toDateOnly.toDateString(),
-            accountId: t.account_id
+          console.log('✅ AgentManagement: Transaction date in range:', {
+            transactionDate: transactionDate.toISOString(),
+            fromDate: dateRange.from.toISOString(),
+            toDate: dateRange.to.toISOString(),
+            accountId: t.account_id,
+            timeFrame: timeFrame
           });
         }
         
@@ -129,20 +124,17 @@ const AgentManagement = () => {
       })
     : transactions;
 
-  console.log('📅 Date filtering for timeframe:', timeFrame);
-  console.log('📅 Date range:', dateRange ? {
-    from: dateRange.from.toDateString(),
-    to: dateRange.to.toDateString()
-  } : 'No date range');
-  console.log('📅 Original transactions:', transactions.length);
-  console.log('📅 Filtered transactions:', filteredTransactions.length);
+  console.log('📅 AgentManagement: Date filtering for timeframe:', timeFrame);
+  console.log('📅 AgentManagement: Date range:', dateRange);
+  console.log('📅 AgentManagement: Original transactions:', transactions.length);
+  console.log('📅 AgentManagement: Filtered transactions:', filteredTransactions.length);
   
   // Sample a few transaction dates for debugging
   if (transactions.length > 0) {
-    console.log('📊 Sample transaction dates:', transactions.slice(0, 5).map(t => ({
+    console.log('📊 AgentManagement: Sample transaction dates:', transactions.slice(0, 5).map(t => ({
       account_id: t.account_id,
       transaction_date: t.transaction_date,
-      parsedDate: t.transaction_date ? new Date(t.transaction_date + 'T00:00:00').toDateString() : 'No date'
+      parsedDate: t.transaction_date ? new Date(t.transaction_date + 'T00:00:00.000Z').toISOString() : 'No date'
     })));
   }
   
@@ -150,7 +142,7 @@ const AgentManagement = () => {
   const filteredCommissions = calculateLocationCommissions(filteredTransactions, assignments, locations);
   const filteredAgentSummaries = groupCommissionsByAgent(filteredCommissions);
 
-  console.log('💰 Filtered commission summaries for timeframe:', timeFrame, filteredAgentSummaries);
+  console.log('💰 AgentManagement: Filtered commission summaries for timeframe:', timeFrame, filteredAgentSummaries);
 
   // Get all unique agent names from both manual agents and assignments
   const allAgentNames = new Set<string>();
@@ -520,3 +512,5 @@ const AgentManagement = () => {
 };
 
 export default AgentManagement;
+
+}

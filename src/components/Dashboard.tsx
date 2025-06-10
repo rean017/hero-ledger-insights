@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, TrendingUp, Users, Building2 } from "lucide-react";
@@ -64,13 +63,30 @@ const Dashboard = () => {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard-stats', timeFrame],
     queryFn: async () => {
+      console.log('=== DASHBOARD DATE FILTERING ===');
+      console.log('Selected timeframe:', timeFrame);
+      console.log('Date range for filtering:', dateRange);
+      
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout, processor')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout, processor, transaction_date')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 
       if (error) throw error;
+
+      console.log('=== DASHBOARD TRANSACTIONS LOADED ===');
+      console.log('Raw transactions found:', transactions?.length || 0);
+      console.log('Date range used:', dateRange);
+      
+      // Sample some transaction dates for debugging
+      if (transactions && transactions.length > 0) {
+        console.log('Sample transaction dates from Dashboard:', transactions.slice(0, 3).map(t => ({
+          account_id: t.account_id,
+          transaction_date: t.transaction_date,
+          processor: t.processor
+        })));
+      }
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -95,9 +111,7 @@ const Dashboard = () => {
       let totalAgentPayoutsFromTransactions = 0;
       
       console.log('=== DASHBOARD CALCULATION DEBUG ===');
-      console.log('Raw transactions data:', transactions?.slice(0, 5)); // Show first 5 for debugging
-      console.log('Date range:', dateRange);
-      console.log('Total transactions loaded:', transactions?.length || 0);
+      console.log('Filtered transactions for timeframe:', transactions?.length || 0);
       
       // Group by processor to see breakdown
       const processorBreakdown: Record<string, { count: number; totalVolume: number; totalBankCard: number; totalDebit: number }> = {};
@@ -122,46 +136,29 @@ const Dashboard = () => {
         processorBreakdown[processor].totalVolume += totalTransactionVolume;
         processorBreakdown[processor].totalBankCard += bankCardVolume;
         processorBreakdown[processor].totalDebit += debitCardVolume;
-        
-        // Debug logging for volume calculation
-        if (debitCardVolume > 0 || bankCardVolume > 0) {
-          console.log(`${processor} Volume calculation for account ${t.account_id}:`, {
-            bankCardVolume: bankCardVolume,
-            debitCardVolume: debitCardVolume,
-            totalVolume: totalTransactionVolume
-          });
-        }
-        
-        if (agentPayout > 0) {
-          console.log('Transaction with agent_payout:', {
-            account_id: t.account_id,
-            processor: processor,
-            volume: totalTransactionVolume,
-            agent_payout: agentPayout
-          });
-        }
       });
 
-      console.log('=== PROCESSOR BREAKDOWN ===');
+      console.log('=== DASHBOARD PROCESSOR BREAKDOWN ===');
       Object.entries(processorBreakdown).forEach(([processor, data]) => {
         console.log(`${processor}:`, {
           transactions: data.count,
           totalVolume: data.totalVolume,
           bankCardVolume: data.totalBankCard,
           debitCardVolume: data.totalDebit,
-          percentage: ((data.totalVolume / totalRevenue) * 100).toFixed(2) + '%'
+          percentage: totalRevenue > 0 ? ((data.totalVolume / totalRevenue) * 100).toFixed(2) + '%' : '0%'
         });
       });
 
-      console.log('Transaction totals:', {
+      console.log('Dashboard totals for timeframe:', {
         totalRevenue,
         totalAgentPayoutsFromTransactions,
-        transactionCount: transactions?.length || 0
+        transactionCount: transactions?.length || 0,
+        timeFrame: timeFrame
       });
 
       // Calculate commissions using our unified logic
       const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-      console.log('All calculated commissions:', commissions);
+      console.log('Dashboard calculated commissions:', commissions.length);
       
       // Get only external agent commissions (not Merchant Hero)
       const externalAgentCommissions = commissions.filter(c => c.agentName !== 'Merchant Hero');
@@ -171,7 +168,7 @@ const Dashboard = () => {
       const merchantHeroCommissions = commissions.filter(c => c.agentName === 'Merchant Hero');
       const merchantHeroNetFromCommissionCalc = merchantHeroCommissions.reduce((sum, commission) => sum + (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout), 0);
       
-      console.log('Commission breakdown:', {
+      console.log('Dashboard commission breakdown:', {
         totalExternalCommissions,
         merchantHeroNetFromCommissionCalc,
         externalAgentCount: externalAgentCommissions.length,
@@ -187,12 +184,12 @@ const Dashboard = () => {
         .from('locations')
         .select('*', { count: 'exact', head: true });
 
-      console.log('Final dashboard calculations:', {
+      console.log('Final dashboard calculations for timeframe:', {
+        timeFrame,
         totalRevenue,
         totalAgentPayoutsFromTransactions,
         totalExternalCommissions,
-        merchantHeroNetIncome,
-        formula: `Using commission calculation result: ${merchantHeroNetIncome}`
+        merchantHeroNetIncome
       });
 
       return {
@@ -209,7 +206,7 @@ const Dashboard = () => {
     queryFn: async () => {
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout, transaction_date')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 

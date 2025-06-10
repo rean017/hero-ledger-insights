@@ -21,11 +21,14 @@ const LocationCommissionReport = () => {
   const { data: transactions = [] } = useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
+      console.log('🔄 LocationCommissionReport: Fetching ALL transactions...');
       const { data, error } = await supabase
         .from('transactions')
         .select('*');
 
       if (error) throw error;
+      
+      console.log('📊 LocationCommissionReport: Total transactions fetched:', data?.length || 0);
       return data;
     }
   });
@@ -60,14 +63,40 @@ const LocationCommissionReport = () => {
   // Calculate base commissions
   const commissions = calculateLocationCommissions(transactions, assignments, locations);
   
-  // Apply date filtering if needed
+  // Apply date filtering - CONSISTENT with other components
   const filteredTransactions = dateRange 
     ? transactions.filter(t => {
         if (!t.transaction_date) return false;
-        const transactionDate = new Date(t.transaction_date);
-        return transactionDate >= dateRange.from && transactionDate <= dateRange.to;
+        
+        // Parse transaction date using same logic as other components
+        const transactionDate = new Date(t.transaction_date + 'T00:00:00.000Z'); // Force UTC to avoid timezone issues
+        
+        // Ensure the transaction date is valid
+        if (isNaN(transactionDate.getTime())) {
+          console.log('⚠️ LocationCommissionReport: Invalid transaction date:', t.transaction_date);
+          return false;
+        }
+        
+        const isInRange = transactionDate >= dateRange.from && transactionDate <= dateRange.to;
+        
+        if (isInRange) {
+          console.log('✅ LocationCommissionReport: Transaction date in range:', {
+            transactionDate: transactionDate.toISOString(),
+            fromDate: dateRange.from.toISOString(),
+            toDate: dateRange.to.toISOString(),
+            accountId: t.account_id,
+            timeFrame: timeFrame
+          });
+        }
+        
+        return isInRange;
       })
     : transactions;
+
+  console.log('📅 LocationCommissionReport: Date filtering for timeframe:', timeFrame);
+  console.log('📅 LocationCommissionReport: Date range:', dateRange);
+  console.log('📅 LocationCommissionReport: Original transactions:', transactions.length);
+  console.log('📅 LocationCommissionReport: Filtered transactions:', filteredTransactions.length);
 
   const filteredCommissions = dateRange 
     ? calculateLocationCommissions(filteredTransactions, assignments, locations)
