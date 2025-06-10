@@ -53,32 +53,46 @@ const FileUpload = () => {
 
   const monthOptions = generateMonthOptions();
 
-  // Enhanced smart column detection for location names - MUST prioritize DBA
+  // Enhanced DBA detection - MUST find actual business names, not account numbers
   const detectLocationColumn = (headers: string[]): string | null => {
-    console.log('Detecting location column from headers:', headers);
+    console.log('=== DBA Detection Process ===');
+    console.log('Available headers:', headers);
     
     // HIGHEST PRIORITY: Look for exact "DBA" match (case insensitive)
-    const dbaColumn = headers.find(header => 
+    const exactDbaColumn = headers.find(header => 
       header.toLowerCase().trim() === 'dba'
     );
-    if (dbaColumn) {
-      console.log('Found exact DBA column:', dbaColumn);
-      return dbaColumn;
+    if (exactDbaColumn) {
+      console.log('✅ Found exact DBA column:', exactDbaColumn);
+      return exactDbaColumn;
     }
     
-    // SECOND PRIORITY: Look for DBA-related variations
-    const dbaVariations = ['dba', 'doing business as', 'business name', 'dba name'];
+    // SECOND PRIORITY: Look for "DBA Name" variations
+    const dbaNameVariations = ['dba name', 'dba_name', 'dbaname'];
     for (const header of headers) {
-      const headerLower = header.toLowerCase().trim();
-      for (const variation of dbaVariations) {
-        if (headerLower.includes(variation)) {
-          console.log('Found DBA variation:', header);
+      const headerLower = header.toLowerCase().trim().replace(/[\s_-]/g, '');
+      for (const variation of dbaNameVariations) {
+        const variationClean = variation.replace(/[\s_-]/g, '');
+        if (headerLower === variationClean) {
+          console.log('✅ Found DBA Name variation:', header);
           return header;
         }
       }
     }
     
-    // THIRD PRIORITY: Look for business/merchant name columns (but avoid account/ID columns)
+    // THIRD PRIORITY: Look for DBA-related patterns
+    const dbaPatterns = ['dba', 'doing business as', 'business name', 'merchant name'];
+    for (const header of headers) {
+      const headerLower = header.toLowerCase().trim();
+      for (const pattern of dbaPatterns) {
+        if (headerLower.includes(pattern)) {
+          console.log('✅ Found DBA pattern match:', header, 'contains', pattern);
+          return header;
+        }
+      }
+    }
+    
+    // FOURTH PRIORITY: Look for business-related terms (but avoid account/ID columns)
     const businessKeywords = ['merchant', 'business', 'store', 'shop', 'company', 'name', 'location'];
     const avoidKeywords = ['account', 'id', 'number', 'code', 'mid'];
     
@@ -88,50 +102,52 @@ const FileUpload = () => {
       // Skip if it contains avoid keywords (likely numeric IDs)
       const hasAvoidKeyword = avoidKeywords.some(avoid => headerLower.includes(avoid));
       if (hasAvoidKeyword) {
-        console.log('Skipping potential ID column:', header);
+        console.log('❌ Skipping potential ID column:', header);
         continue;
       }
       
       // Check for business-related keywords
       for (const keyword of businessKeywords) {
         if (headerLower.includes(keyword)) {
-          console.log('Found business name column:', header);
+          console.log('✅ Found business name column:', header);
           return header;
         }
       }
     }
     
-    console.log('No DBA/location column detected');
+    console.log('❌ No DBA/location column detected');
     return null;
   };
 
-  // Enhanced smart column detection for volume/sales amounts - prioritizes Sales Amount
+  // Enhanced volume detection - prioritizes Sales Amount
   const detectVolumeColumn = (headers: string[]): string | null => {
-    console.log('Detecting volume column from headers:', headers);
+    console.log('=== Volume Detection Process ===');
+    console.log('Available headers:', headers);
     
-    // First priority: Look for exact "Sales Amount" match
-    const salesAmountColumn = headers.find(header => 
+    // HIGHEST PRIORITY: Look for exact "Sales Amount" match
+    const exactSalesAmountColumn = headers.find(header => 
       header.toLowerCase().trim() === 'sales amount'
     );
-    if (salesAmountColumn) {
-      console.log('Found exact Sales Amount column:', salesAmountColumn);
-      return salesAmountColumn;
+    if (exactSalesAmountColumn) {
+      console.log('✅ Found exact Sales Amount column:', exactSalesAmountColumn);
+      return exactSalesAmountColumn;
     }
     
-    // Second priority: Look for Sales Amount variations
-    const salesAmountVariations = ['sales amount', 'total sales', 'sales total', 'amount'];
+    // SECOND PRIORITY: Look for Sales Amount variations
+    const salesAmountVariations = ['sales_amount', 'salesamount', 'total sales', 'sales total'];
     for (const header of headers) {
-      const headerLower = header.toLowerCase().trim();
+      const headerLower = header.toLowerCase().trim().replace(/[\s_-]/g, '');
       for (const variation of salesAmountVariations) {
-        if (headerLower === variation) {
-          console.log('Found Sales Amount variation:', header);
+        const variationClean = variation.replace(/[\s_-]/g, '');
+        if (headerLower === variationClean) {
+          console.log('✅ Found Sales Amount variation:', header);
           return header;
         }
       }
     }
     
-    // Third priority: Look for other volume keywords (excluding count columns)
-    const volumeKeywords = ['volume', 'sales', 'revenue', 'income', 'gross', 'processing', 'transaction', 'card', 'payment'];
+    // THIRD PRIORITY: Look for other volume keywords (excluding count columns)
+    const volumeKeywords = ['volume', 'sales', 'revenue', 'income', 'gross', 'processing', 'amount'];
     const countKeywords = ['count', 'number', 'qty', 'quantity', 'transactions', 'items'];
     
     for (const header of headers) {
@@ -140,7 +156,7 @@ const FileUpload = () => {
       // Skip if this looks like a count column
       const isCountColumn = countKeywords.some(keyword => headerLower.includes(keyword));
       if (isCountColumn) {
-        console.log('Skipping count column:', header);
+        console.log('❌ Skipping count column:', header);
         continue;
       }
       
@@ -151,13 +167,13 @@ const FileUpload = () => {
             !headerLower.includes('chargeback') &&
             !headerLower.includes('commission') &&
             !headerLower.includes('payout')) {
-          console.log('Found volume column:', header);
+          console.log('✅ Found volume column:', header);
           return header;
         }
       }
     }
     
-    console.log('No volume column detected');
+    console.log('❌ No volume column detected');
     return null;
   };
 
@@ -167,78 +183,115 @@ const FileUpload = () => {
       'commission', 'payout', 'agent', 'residual', 'fee', 'earnings', 'profit'
     ];
     
-    console.log('Detecting commission column from headers:', headers);
+    console.log('=== Commission Detection Process ===');
     
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
       for (const keyword of commissionKeywords) {
         if (headerLower.includes(keyword)) {
-          console.log('Found commission column:', header);
+          console.log('✅ Found commission column:', header);
           return header;
         }
       }
     }
     
-    console.log('No commission column detected');
+    console.log('❌ No commission column detected');
     return null;
   };
 
   const detectProcessor = (headers: string[], firstDataRow?: any): string => {
     const headerStr = headers.join('|').toLowerCase();
     
-    console.log('Detecting processor from headers:', headers);
+    console.log('=== Processor Detection ===');
+    console.log('Headers for detection:', headers);
     
     // Check for DBA + Sales Amount pattern (likely a specific format)
     if (headerStr.includes('dba') && headerStr.includes('sales amount')) {
-      console.log('Detected DBA + Sales Amount format, using Maverick processor');
+      console.log('✅ Detected DBA + Sales Amount format, using Maverick processor');
       return 'Maverick';
     }
     
     // Check for known processor patterns
     if (headerStr.includes('bank card volume') || headerStr.includes('bankcard volume') || headerStr.includes('salescode')) {
-      console.log('Detected TRNXN processor');
+      console.log('✅ Detected TRNXN processor');
       return 'TRNXN';
     }
     
     if (headerStr.includes('total amount') && headerStr.includes('sales rep')) {
-      console.log('Detected Maverick processor');
+      console.log('✅ Detected Maverick processor');
       return 'Maverick';
     }
     
     if (headerStr.includes('gross sales') && headerStr.includes('residual')) {
-      console.log('Detected SignaPay processor');
+      console.log('✅ Detected SignaPay processor');
       return 'SignaPay';
     }
     
     if (headerStr.includes('processing volume') && headerStr.includes('agent revenue')) {
-      console.log('Detected Green Payments processor');
+      console.log('✅ Detected Green Payments processor');
       return 'Green Payments';
     }
 
     if (headerStr.includes('fiserv') || headerStr.includes('residuals')) {
-      console.log('Detected Green Payments processor (Fiserv format)');
+      console.log('✅ Detected Green Payments processor (Fiserv format)');
       return 'Green Payments';
     }
     
     // Check for common agent-related patterns that might indicate Maverick
     if (headerStr.includes('agent') && (headerStr.includes('payout') || headerStr.includes('commission'))) {
-      console.log('Detected Maverick processor (agent pattern)');
+      console.log('✅ Detected Maverick processor (agent pattern)');
       return 'Maverick';
     }
     
     // Default to Maverick (as it seems to be a common format)
-    console.log('Could not detect specific processor, defaulting to Maverick');
+    console.log('⚠️ Could not detect specific processor, defaulting to Maverick');
     return 'Maverick';
+  };
+
+  // Improved location name validation - must be a real business name
+  const isValidLocationName = (value: string): boolean => {
+    if (!value || typeof value !== 'string') {
+      return false;
+    }
+    
+    const trimmed = value.trim();
+    
+    // Must not be empty
+    if (trimmed.length === 0) {
+      return false;
+    }
+    
+    // Must not be purely numeric (account numbers)
+    if (/^\d+$/.test(trimmed)) {
+      console.log('❌ Rejecting purely numeric value as location name:', trimmed);
+      return false;
+    }
+    
+    // Must not be very short (likely codes)
+    if (trimmed.length < 3) {
+      console.log('❌ Rejecting too short value as location name:', trimmed);
+      return false;
+    }
+    
+    // Must contain at least one letter (business names have letters)
+    if (!/[a-zA-Z]/.test(trimmed)) {
+      console.log('❌ Rejecting value with no letters as location name:', trimmed);
+      return false;
+    }
+    
+    console.log('✅ Valid location name:', trimmed);
+    return true;
   };
 
   const processRow = (row: any, processor: string, locationColumn: string | null, volumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
     try {
       let processed: ProcessedData = { rawData: row, processor };
 
-      console.log('Processing row for processor:', processor);
+      console.log('\n=== Processing Row ===');
+      console.log('Processor:', processor);
       console.log('Row data keys:', Object.keys(row));
-      console.log('Location column to use:', locationColumn);
-      console.log('Volume column to use:', volumeColumn);
+      console.log('Target location column:', locationColumn);
+      console.log('Target volume column:', volumeColumn);
 
       // Handle the specific Green Payments CSV format with __parsed_extra
       if (row.__parsed_extra && Array.isArray(row.__parsed_extra)) {
@@ -254,36 +307,47 @@ const FileUpload = () => {
           processed.agentName = null;
         }
       } else {
-        // Smart column mapping with improved DBA detection
+        // Enhanced DBA location name detection and validation
         if (locationColumn && row[locationColumn]) {
           const locationValue = String(row[locationColumn]).trim();
           console.log('Raw location value from column', locationColumn, ':', locationValue);
           
-          // Validate that this looks like a business name (not just numbers)
-          if (locationValue && !/^\d+$/.test(locationValue)) {
+          if (isValidLocationName(locationValue)) {
             processed.locationName = locationValue;
-            console.log('Set location name to:', processed.locationName);
+            console.log('✅ Set location name to:', processed.locationName);
           } else {
-            console.log('Location value appears to be numeric ID, skipping:', locationValue);
-            // Try to find the actual DBA value in other columns
+            console.log('❌ Location value failed validation, searching for alternative...');
+            
+            // Search all columns for a valid DBA/business name
             for (const [key, value] of Object.entries(row)) {
               const keyLower = key.toLowerCase();
               const valueStr = String(value).trim();
-              if (keyLower.includes('dba') && valueStr && !/^\d+$/.test(valueStr)) {
+              
+              // Look for any column that might contain DBA or business name
+              if ((keyLower.includes('dba') || keyLower.includes('business') || keyLower.includes('merchant') || keyLower.includes('name')) 
+                  && isValidLocationName(valueStr)) {
                 processed.locationName = valueStr;
-                console.log('Found DBA in alternate column:', key, '=', valueStr);
+                console.log('✅ Found valid DBA in alternate column:', key, '=', valueStr);
                 break;
               }
+            }
+            
+            // If still no valid location name found, this row is invalid
+            if (!processed.locationName) {
+              console.log('❌ No valid location name found in any column');
+              return null;
             }
           }
         }
         
+        // Volume detection
         if (volumeColumn && row[volumeColumn]) {
           const volumeValue = String(row[volumeColumn]).replace(/[,$]/g, '');
           processed.volume = parseFloat(volumeValue) || 0;
-          console.log('Set volume to:', processed.volume);
+          console.log('✅ Set volume to:', processed.volume);
         }
         
+        // Commission detection
         if (commissionColumn && row[commissionColumn]) {
           const commissionValue = String(row[commissionColumn]).replace(/[,$]/g, '');
           processed.agentPayout = parseFloat(commissionValue) || 0;
@@ -304,18 +368,14 @@ const FileUpload = () => {
         }
       }
 
-      console.log('Final processed data result:', {
-        volume: processed.volume,
-        debitVolume: processed.debitVolume,
-        agentPayout: processed.agentPayout,
-        agentName: processed.agentName,
-        accountId: processed.accountId,
-        locationName: processed.locationName
-      });
+      console.log('=== Final processed data ===');
+      console.log('Location Name:', processed.locationName);
+      console.log('Volume:', processed.volume);
+      console.log('Account ID:', processed.accountId);
 
       return processed;
     } catch (error) {
-      console.error('Error processing row:', error);
+      console.error('❌ Error processing row:', error);
       return null;
     }
   };
@@ -451,10 +511,10 @@ const FileUpload = () => {
     }
 
     setUploading(true);
-    setUploadStatus({ status: 'processing', message: 'Processing file...', filename: file.name });
+    setUploadStatus({ status: 'processing', message: 'Processing file with enhanced DBA detection...', filename: file.name });
 
     try {
-      console.log('=== Starting Smart File Upload Process ===');
+      console.log('=== Starting Enhanced DBA File Upload Process ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
@@ -471,19 +531,23 @@ const FileUpload = () => {
       
       const detectedProcessor = detectProcessor(headers, rawData[1]);
       
-      // Smart column detection with enhanced DBA prioritization
+      // Enhanced column detection with strict DBA validation
       const locationColumn = detectLocationColumn(headers);
       const volumeColumn = detectVolumeColumn(headers);
       const commissionColumn = detectCommissionColumn(headers);
       
-      console.log('=== Smart Column Detection Results ===');
-      console.log('- Location column (DBA):', locationColumn);
-      console.log('- Volume column (Sales Amount):', volumeColumn);
+      console.log('=== Enhanced Column Detection Results ===');
+      console.log('- DBA Location column:', locationColumn);
+      console.log('- Sales Amount volume column:', volumeColumn);
       console.log('- Commission column:', commissionColumn);
       console.log('- Detected processor:', detectedProcessor);
 
-      if (!locationColumn && !volumeColumn) {
-        throw new Error('Could not detect DBA (location) or Sales Amount (volume) columns in the file. Please ensure your file contains these columns.');
+      if (!locationColumn) {
+        throw new Error('Could not detect DBA column in the file. Please ensure your file contains a "DBA" or "DBA Name" column with business names.');
+      }
+
+      if (!volumeColumn) {
+        throw new Error('Could not detect Sales Amount column in the file. Please ensure your file contains a "Sales Amount" column with volume data.');
       }
 
       const [year, month] = selectedMonth.split('-');
@@ -522,89 +586,80 @@ const FileUpload = () => {
       let locationsCreated = 0;
       const errors: any[] = [];
 
-      console.log('=== Processing Rows with Enhanced DBA Detection ===');
+      console.log('=== Processing Rows with Enhanced DBA Validation ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         console.log(`\n--- Processing row ${i + 1} ---`);
         const processedData = processRow(row, detectedProcessor, locationColumn, volumeColumn, commissionColumn);
 
-        if (processedData) {
-          console.log('Processed data for row', i + 1, ':', {
+        if (processedData && processedData.locationName) {
+          console.log('✅ Valid processed data for row', i + 1, ':', {
+            locationName: processedData.locationName,
             volume: processedData.volume,
-            debitVolume: processedData.debitVolume,
-            agentPayout: processedData.agentPayout,
-            agentName: processedData.agentName,
-            accountId: processedData.accountId,
-            locationName: processedData.locationName
+            accountId: processedData.accountId
           });
 
-          // Check if we have meaningful data (DBA location name OR volume)
-          if (processedData.locationName || (processedData.volume && processedData.volume > 0)) {
-            try {
-              let locationId = null;
-              if (processedData.locationName) {
-                const existingLocationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
-                if (existingLocationId) {
-                  locationId = existingLocationId;
-                  const { data: locationCheck } = await supabase
-                    .from('locations')
-                    .select('created_at')
-                    .eq('id', existingLocationId)
-                    .single();
-                  
-                  if (locationCheck && new Date(locationCheck.created_at).getTime() > Date.now() - 5000) {
-                    locationsCreated++;
-                  }
+          try {
+            let locationId = null;
+            if (processedData.locationName) {
+              const existingLocationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
+              if (existingLocationId) {
+                locationId = existingLocationId;
+                const { data: locationCheck } = await supabase
+                  .from('locations')
+                  .select('created_at')
+                  .eq('id', existingLocationId)
+                  .single();
+                
+                if (locationCheck && new Date(locationCheck.created_at).getTime() > Date.now() - 5000) {
+                  locationsCreated++;
                 }
               }
-
-              const transactionDate = `${selectedMonth}-01`;
-
-              const transactionData = {
-                processor: detectedProcessor,
-                volume: processedData.volume || 0,
-                debit_volume: processedData.debitVolume || 0,
-                agent_payout: processedData.agentPayout || 0,
-                agent_name: null,
-                account_id: processedData.accountId,
-                transaction_date: transactionDate,
-                raw_data: processedData.rawData
-              };
-
-              console.log('Inserting transaction data:', transactionData);
-
-              const { error } = await supabase
-                .from('transactions')
-                .insert(transactionData);
-
-              if (error) {
-                console.error('Database insertion error for row', i + 1, ':', error);
-                errorCount++;
-                errors.push({ row: i + 1, error: error.message });
-              } else {
-                successCount++;
-                console.log(`Successfully inserted row ${i + 1}`);
-              }
-            } catch (error) {
-              console.error('Error processing row', i + 1, ':', error);
-              errorCount++;
-              errors.push({ row: i + 1, error: String(error) });
             }
-          } else {
-            console.log(`Skipping row ${i + 1} - no valid DBA location or volume data`);
+
+            const transactionDate = `${selectedMonth}-01`;
+
+            const transactionData = {
+              processor: detectedProcessor,
+              volume: processedData.volume || 0,
+              debit_volume: processedData.debitVolume || 0,
+              agent_payout: processedData.agentPayout || 0,
+              agent_name: null,
+              account_id: processedData.accountId,
+              transaction_date: transactionDate,
+              raw_data: processedData.rawData
+            };
+
+            console.log('Inserting transaction data:', transactionData);
+
+            const { error } = await supabase
+              .from('transactions')
+              .insert(transactionData);
+
+            if (error) {
+              console.error('❌ Database insertion error for row', i + 1, ':', error);
+              errorCount++;
+              errors.push({ row: i + 1, error: error.message });
+            } else {
+              successCount++;
+              console.log(`✅ Successfully inserted row ${i + 1}`);
+            }
+          } catch (error) {
+            console.error('❌ Error processing row', i + 1, ':', error);
             errorCount++;
-            errors.push({ row: i + 1, error: 'No valid DBA location or volume data found' });
+            errors.push({ row: i + 1, error: String(error) });
           }
         } else {
-          console.log(`Skipping row ${i + 1} - failed to process`);
+          console.log(`❌ Skipping row ${i + 1} - no valid DBA location name found`);
           errorCount++;
-          errors.push({ row: i + 1, error: 'Failed to process row' });
+          errors.push({ row: i + 1, error: 'No valid DBA location name found' });
         }
       }
 
       console.log('=== Upload Summary ===');
       console.log('Success count:', successCount);
       console.log('Error count:', errorCount);
+      console.log('Locations created:', locationsCreated);
       console.log('Total rows processed:', rawData.length);
 
       await supabase
@@ -628,7 +683,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
 
-      const successMessage = `Smart upload completed! Processed ${successCount} rows from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using DBA names.` : ''}`;
+      const successMessage = `Enhanced DBA upload completed! Processed ${successCount} rows from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using proper DBA business names.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -638,7 +693,7 @@ const FileUpload = () => {
       });
 
       toast({
-        title: "Smart Upload Complete",
+        title: "Enhanced DBA Upload Complete",
         description: successMessage,
       });
 
@@ -668,7 +723,7 @@ const FileUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5" />
-          Smart Upload Transaction Data
+          Enhanced DBA Business Name Upload
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -706,7 +761,7 @@ const FileUpload = () => {
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Looking for: <strong>DBA</strong> (business names) and <strong>Sales Amount</strong> (volume)
+                    <strong>Required:</strong> DBA column (business names) and Sales Amount column (volume)
                   </p>
                 </div>
                 <input
@@ -746,15 +801,19 @@ const FileUpload = () => {
         )}
 
         <div className="text-xs text-muted-foreground">
-          <p className="font-medium mb-1">Enhanced DBA Detection:</p>
+          <p className="font-medium mb-1">Enhanced DBA Business Name Detection:</p>
           <ul className="space-y-1">
-            <li><strong>Priority 1:</strong> Exact "DBA" column match</li>
-            <li><strong>Priority 2:</strong> DBA variations (doing business as, business name)</li>
-            <li><strong>Priority 3:</strong> Business/merchant name columns (excluding IDs)</li>
-            <li><strong>Sales Amount:</strong> Automatically detected for volume data</li>
-            <li><strong>Validation:</strong> Numeric-only values are rejected as business names</li>
+            <li><strong>✅ Priority 1:</strong> Exact "DBA" column match</li>
+            <li><strong>✅ Priority 2:</strong> "DBA Name" variations</li>
+            <li><strong>✅ Priority 3:</strong> DBA-related patterns</li>
+            <li><strong>✅ Priority 4:</strong> Business/merchant name columns</li>
+            <li><strong>❌ Rejection:</strong> Purely numeric values (account numbers)</li>
+            <li><strong>❌ Rejection:</strong> Values with no letters</li>
+            <li><strong>❌ Rejection:</strong> Very short codes</li>
           </ul>
-          <p className="mt-2 text-xs"><strong>Note:</strong> Location names will now use proper DBA business names instead of account numbers.</p>
+          <p className="mt-2 text-xs font-medium text-green-700">
+            <strong>Result:</strong> Locations will now display proper business names like "Joe's Crab Shack" instead of numeric account IDs.
+          </p>
         </div>
       </CardContent>
     </Card>
