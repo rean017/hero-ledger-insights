@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,7 +5,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Download, Print, FileText, User, Building2 } from "lucide-react";
+import { CalendarIcon, Download, Printer, FileText, User, Building2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
@@ -355,7 +354,7 @@ const AgentPLReport = () => {
           {agentReportData && (
             <div className="flex gap-2 pt-4">
               <Button onClick={handlePrint} className="gap-2">
-                <Print className="h-4 w-4" />
+                <Printer className="h-4 w-4" />
                 Print Report
               </Button>
               <Button onClick={handleDownload} variant="outline" className="gap-2">
