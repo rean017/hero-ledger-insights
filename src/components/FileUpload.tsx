@@ -587,9 +587,16 @@ const FileUpload = () => {
         }
       }
 
+      // FIXED: Use the first day of the selected month as the transaction date
       const [year, month] = selectedMonth.split('-');
+      const transactionDate = `${selectedMonth}-01`; // Always use the 1st of the selected month
       const lastDayOfMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
       const endDate = `${selectedMonth}-${lastDayOfMonth}`;
+
+      console.log('=== MONTH ASSIGNMENT FOR UPLOADED DATA ===');
+      console.log('Selected month for upload:', selectedMonth);
+      console.log('Transaction date being assigned:', transactionDate);
+      console.log('Date range for deletion:', `${selectedMonth}-01 to ${endDate}`);
 
       console.log('Deleting existing transactions for processor:', detectedProcessor.name, 'and month:', selectedMonth);
       const { error: deleteError } = await supabase
@@ -666,8 +673,6 @@ const FileUpload = () => {
               }
             }
 
-            const transactionDate = `${selectedMonth}-01`;
-
             const transactionData = {
               processor: detectedProcessor.name,
               volume: processedData.volume || 0,
@@ -675,16 +680,14 @@ const FileUpload = () => {
               agent_payout: processedData.agentPayout || 0,
               agent_name: null,
               account_id: processedData.accountId,
-              transaction_date: transactionDate,
+              transaction_date: transactionDate, // CRITICAL: Use the selected month's date
               raw_data: processedData.rawData
             };
 
-            console.log('Inserting transaction with enhanced volume data:', {
-              location: processedData.locationName,
-              bankCardVolume: processedData.volume,
-              debitCardVolume: processedData.debitVolume,
-              totalVolume: (processedData.volume || 0) + (processedData.debitVolume || 0)
-            });
+            console.log('=== TRANSACTION DATE ASSIGNMENT ===');
+            console.log('Selected month from UI:', selectedMonth);
+            console.log('Transaction date being stored:', transactionDate);
+            console.log('This ensures data appears when filtering by:', selectedMonth);
 
             const { error } = await supabase
               .from('transactions')
@@ -696,7 +699,7 @@ const FileUpload = () => {
               errors.push({ row: i + 1, error: error.message });
             } else {
               successCount++;
-              console.log(`✅ SUCCESS: Row ${i + 1} processed with location name: ${processedData.locationName}`);
+              console.log(`✅ SUCCESS: Row ${i + 1} processed with location name: ${processedData.locationName} for month: ${selectedMonth}`);
             }
           } catch (error) {
             console.error('❌ Error processing row', i + 1, ':', error);
@@ -712,6 +715,8 @@ const FileUpload = () => {
 
       console.log('=== ENHANCED UPLOAD SUMMARY ===');
       console.log('Processor:', detectedProcessor.name);
+      console.log('Selected month for data:', selectedMonth);
+      console.log('Transaction date assigned:', transactionDate);
       console.log('Success count:', successCount);
       console.log('Error count:', errorCount);
       console.log('Locations created:', locationsCreated);
@@ -740,7 +745,8 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
-      const successMessage = `${detectedProcessor.name} upload completed with enhanced volume handling! Processed ${successCount} rows for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for missing location names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} ${detectedProcessor.name === 'TRNXN' ? ' ✅ Bank Card (H) + Debit Card (I) volumes processed and summed correctly!' : ''}`;
+      const monthName = monthOptions.find(m => m.value === selectedMonth)?.label;
+      const successMessage = `${detectedProcessor.name} upload completed with enhanced volume handling! Processed ${successCount} rows for ${monthName}. ${errorCount} rows rejected for missing location names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} ${detectedProcessor.name === 'TRNXN' ? ' ✅ Bank Card (H) + Debit Card (I) volumes processed and summed correctly!' : ''} All data is tagged for ${monthName} and will appear when you filter by this month.`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
