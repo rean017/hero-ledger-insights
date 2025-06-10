@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,17 @@ const LocationCommissionReport = () => {
         .select('*');
 
       if (error) throw error;
+      
+      console.log('=== COMMISSION REPORT TRANSACTION DATA ===');
+      console.log('Total transactions loaded:', data.length);
+      console.log('Sample transactions with volume data:', data.slice(0, 3).map(t => ({
+        account_id: t.account_id,
+        processor: t.processor,
+        volume: t.volume,
+        debit_volume: t.debit_volume,
+        total_calculated: (Number(t.volume) || 0) + (Number(t.debit_volume) || 0)
+      })));
+      
       return data;
     }
   });

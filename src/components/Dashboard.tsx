@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, TrendingUp, Users, Building2 } from "lucide-react";
@@ -66,7 +65,7 @@ const Dashboard = () => {
     queryFn: async () => {
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout, processor')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 
@@ -96,6 +95,11 @@ const Dashboard = () => {
       
       console.log('=== DASHBOARD CALCULATION DEBUG ===');
       console.log('Raw transactions data:', transactions?.slice(0, 5)); // Show first 5 for debugging
+      console.log('Date range:', dateRange);
+      console.log('Total transactions loaded:', transactions?.length || 0);
+      
+      // Group by processor to see breakdown
+      const processorBreakdown: Record<string, { count: number; totalVolume: number; totalBankCard: number; totalDebit: number }> = {};
       
       transactions?.forEach(t => {
         // FIXED: For TRNXN, properly sum both Bank Card Volume (column H) and Debit Card Volume (column I)
@@ -108,9 +112,19 @@ const Dashboard = () => {
         const agentPayout = Number(t.agent_payout) || 0;
         totalAgentPayoutsFromTransactions += agentPayout;
         
+        // Track processor breakdown
+        const processor = t.processor || 'Unknown';
+        if (!processorBreakdown[processor]) {
+          processorBreakdown[processor] = { count: 0, totalVolume: 0, totalBankCard: 0, totalDebit: 0 };
+        }
+        processorBreakdown[processor].count++;
+        processorBreakdown[processor].totalVolume += totalTransactionVolume;
+        processorBreakdown[processor].totalBankCard += bankCardVolume;
+        processorBreakdown[processor].totalDebit += debitCardVolume;
+        
         // Debug logging for volume calculation
         if (debitCardVolume > 0 || bankCardVolume > 0) {
-          console.log(`TRNXN Volume calculation for account ${t.account_id}:`, {
+          console.log(`${processor} Volume calculation for account ${t.account_id}:`, {
             bankCardVolume: bankCardVolume,
             debitCardVolume: debitCardVolume,
             totalVolume: totalTransactionVolume
@@ -120,10 +134,22 @@ const Dashboard = () => {
         if (agentPayout > 0) {
           console.log('Transaction with agent_payout:', {
             account_id: t.account_id,
+            processor: processor,
             volume: totalTransactionVolume,
             agent_payout: agentPayout
           });
         }
+      });
+
+      console.log('=== PROCESSOR BREAKDOWN ===');
+      Object.entries(processorBreakdown).forEach(([processor, data]) => {
+        console.log(`${processor}:`, {
+          transactions: data.count,
+          totalVolume: data.totalVolume,
+          bankCardVolume: data.totalBankCard,
+          debitCardVolume: data.totalDebit,
+          percentage: ((data.totalVolume / totalRevenue) * 100).toFixed(2) + '%'
+        });
       });
 
       console.log('Transaction totals:', {
