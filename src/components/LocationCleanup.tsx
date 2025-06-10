@@ -16,14 +16,25 @@ const LocationCleanup = () => {
   const { data: recentLocations, isLoading } = useQuery({
     queryKey: ['recent-locations'],
     queryFn: async () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      
+      console.log('Fetching locations created between:', startOfDay.toISOString(), 'and', endOfDay.toISOString());
+      
       const { data, error } = await supabase
         .from('locations')
         .select('*')
-        .gte('created_at', `${today}T00:00:00.000Z`)
+        .gte('created_at', startOfDay.toISOString())
+        .lt('created_at', endOfDay.toISOString())
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching recent locations:', error);
+        throw error;
+      }
+      
+      console.log('Found recent locations:', data);
       return data;
     }
   });
@@ -35,6 +46,7 @@ const LocationCleanup = () => {
       }
 
       const locationIds = recentLocations.map(loc => loc.id);
+      console.log('Deleting locations with IDs:', locationIds);
       
       // First delete any agent assignments for these locations
       const { error: assignmentError } = await supabase
@@ -42,31 +54,52 @@ const LocationCleanup = () => {
         .delete()
         .in('location_id', locationIds);
 
-      if (assignmentError) throw assignmentError;
+      if (assignmentError) {
+        console.error('Error deleting assignments:', assignmentError);
+        throw assignmentError;
+      }
 
-      // Then delete the locations
+      // Then delete any transactions for these locations
+      const { error: transactionError } = await supabase
+        .from('transactions')
+        .delete()
+        .in('account_id', recentLocations.map(loc => loc.account_id).filter(Boolean));
+
+      if (transactionError) {
+        console.error('Error deleting transactions:', transactionError);
+        // Don't throw here, just log as some locations might not have transactions
+      }
+
+      // Finally delete the locations
       const { error: locationError } = await supabase
         .from('locations')
         .delete()
         .in('id', locationIds);
 
-      if (locationError) throw locationError;
+      if (locationError) {
+        console.error('Error deleting locations:', locationError);
+        throw locationError;
+      }
 
+      console.log('Successfully deleted', recentLocations.length, 'locations');
       return recentLocations.length;
     },
     onSuccess: (deletedCount) => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['recent-locations'] });
       queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-data'] });
+      queryClient.invalidateQueries({ queryKey: ['agents-data'] });
       toast({
         title: "Locations Deleted",
         description: `Successfully deleted ${deletedCount} recent locations and their assignments.`,
       });
     },
     onError: (error) => {
+      console.error('Delete mutation error:', error);
       toast({
         title: "Delete Failed",
-        description: `Error deleting locations: ${String(error)}`,
+        description: `Error deleting locations: ${error.message || String(error)}`,
         variant: "destructive"
       });
     }
@@ -102,7 +135,7 @@ const LocationCleanup = () => {
               <div className="max-h-40 overflow-y-auto space-y-1">
                 {recentLocations.slice(0, 10).map((location) => (
                   <div key={location.id} className="text-xs text-muted-foreground">
-                    • {location.name} ({location.account_id})
+                    • {location.name} ({location.account_id || 'No Account ID'})
                   </div>
                 ))}
                 {recentLocations.length > 10 && (
@@ -122,11 +155,11 @@ const LocationCleanup = () => {
             <AlertDialogTrigger asChild>
               <Button 
                 variant="destructive" 
-                disabled={!recentLocations || recentLocations.length === 0}
+                disabled={!recentLocations || recentLocations.length === 0 || deleteRecentLocationsMutation.isPending}
                 className="gap-2"
               >
                 <Trash2 className="h-4 w-4" />
-                Delete All Recent Locations
+                {deleteRecentLocationsMutation.isPending ? 'Deleting...' : 'Delete All Recent Locations'}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -134,7 +167,7 @@ const LocationCleanup = () => {
                 <AlertDialogTitle>Delete Recent Locations</AlertDialogTitle>
                 <AlertDialogDescription>
                   Are you sure you want to delete all {recentLocations?.length || 0} locations created today? 
-                  This will also remove any agent assignments for these locations. This action cannot be undone.
+                  This will also remove any agent assignments and related transaction data for these locations. This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
