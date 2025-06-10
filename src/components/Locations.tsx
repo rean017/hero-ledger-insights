@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Plus, Edit, MapPin, Building2, User } from "lucide-react";
+import { Trash2, Plus, Edit, MapPin, Building2, User, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
@@ -37,6 +37,7 @@ const Locations = () => {
   const [commissionRate, setCommissionRate] = useState("");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedLocationForEdit, setSelectedLocationForEdit] = useState<Location | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
   const { data: locations, refetch: refetchLocations } = useQuery({
@@ -200,12 +201,39 @@ const Locations = () => {
     return groups;
   }, {} as Record<string, LocationAssignment[]>) || {};
 
+  // Filter locations based on search term
+  const filteredLocations = locations?.filter(location => 
+    location.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (location.account_id && location.account_id.toLowerCase().includes(searchTerm.toLowerCase()))
+  ) || [];
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground mb-2">Location Management</h2>
         <p className="text-muted-foreground">Manage locations and assign agents with commission rates</p>
       </div>
+
+      {/* Search Bar */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="h-5 w-5" />
+            Search Locations
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by location name or account ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Agent Assignment */}
       <Card>
@@ -235,7 +263,7 @@ const Locations = () => {
                 <SelectValue placeholder="Select Location" />
               </SelectTrigger>
               <SelectContent>
-                {locations?.map((location) => (
+                {filteredLocations?.map((location) => (
                   <SelectItem key={location.id} value={location.id}>
                     {location.name}
                   </SelectItem>
@@ -313,9 +341,9 @@ const Locations = () => {
         </Card>
       </div>
 
-      {/* Locations Grid */}
+      {/* Locations Grid - now using filtered locations */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {locations?.map((location) => {
+        {filteredLocations?.map((location) => {
           const locationAssignments = locationAssignmentGroups[location.id] || [];
           
           return (
@@ -386,6 +414,14 @@ const Locations = () => {
           );
         })}
       </div>
+
+      {filteredLocations?.length === 0 && searchTerm && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center h-32">
+            <p className="text-muted-foreground">No locations found matching "{searchTerm}"</p>
+          </CardContent>
+        </Card>
+      )}
 
       {locations?.length === 0 && (
         <Card>
