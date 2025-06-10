@@ -47,10 +47,18 @@ export const calculateLocationCommissions = (
       };
     }
     
-    // Add both regular volume and debit volume
-    const volume = Number(transaction.volume) || 0;
-    const debitVolume = Number(transaction.debit_volume) || 0;
-    acc[accountId].totalVolume += volume + debitVolume;
+    // FIXED: For TRNXN, properly sum both Bank Card Volume (column H) and Debit Card Volume (column I)
+    const bankCardVolume = Number(transaction.volume) || 0;
+    const debitCardVolume = Number(transaction.debit_volume) || 0;
+    const totalTransactionVolume = bankCardVolume + debitCardVolume;
+    
+    acc[accountId].totalVolume += totalTransactionVolume;
+    
+    console.log(`Processing transaction for account ${accountId}:`);
+    console.log(`  - Bank Card Volume (H): ${bankCardVolume}`);
+    console.log(`  - Debit Card Volume (I): ${debitCardVolume}`);
+    console.log(`  - Total Volume for this transaction: ${totalTransactionVolume}`);
+    console.log(`  - Running total for location: ${acc[accountId].totalVolume}`);
     
     // agent_payout is what Merchant Hero receives on this transaction
     const agentPayout = Number(transaction.agent_payout) || 0;
@@ -115,6 +123,7 @@ export const calculateLocationCommissions = (
     }
 
     console.log(`Processing assignment: ${assignment.agent_name} at ${location.name}`);
+    console.log(`Location total volume (Bank Card + Debit Card): ${locationInfo.totalVolume}`);
 
     if (assignment.agent_name === 'Merchant Hero') {
       console.log(`DEBUG: Merchant Hero calculation for ${location.name}:`);
