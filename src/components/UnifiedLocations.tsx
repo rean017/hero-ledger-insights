@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,13 +44,18 @@ const UnifiedLocations = () => {
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [tempNotes, setTempNotes] = useState("");
   
-  // Get dynamic time frames and set default to current month
+  // Get dynamic time frames and set default to April (first option) since that's what was uploaded
   const timeFrames = getDynamicTimeFrames();
-  const [timeFrame, setTimeFrame] = useState(timeFrames[2].value); // Current month (3rd option)
+  const [timeFrame, setTimeFrame] = useState(timeFrames[0].value); // April (first option)
   
   const { toast } = useToast();
 
   const dateRange = getDateRangeForTimeFrame(timeFrame);
+
+  // Debug: Log the timeframe and date range
+  console.log('🗓️ UnifiedLocations: Current timeframe selected:', timeFrame);
+  console.log('🗓️ UnifiedLocations: Date range for timeframe:', dateRange);
+  console.log('🗓️ UnifiedLocations: Available timeframes:', timeFrames);
 
   // Ensure Merchant Hero exists and assign to locations without assignments
   const ensureMerchantHeroSetup = async () => {
@@ -265,10 +271,20 @@ const UnifiedLocations = () => {
       console.log('📅 UnifiedLocations: Date range:', dateRange);
       console.log('📊 UnifiedLocations: Total transactions fetched:', transactions.length);
 
+      // Debug: Log sample transaction dates
+      console.log('📊 UnifiedLocations: Sample transaction dates:', transactions.slice(0, 10).map(t => ({
+        account_id: t.account_id,
+        transaction_date: t.transaction_date,
+        parsedDate: t.transaction_date ? new Date(t.transaction_date + 'T00:00:00.000Z').toISOString() : 'No date'
+      })));
+
       // Apply date filtering FIRST, then calculate commissions with filtered data
       const filteredTransactions = dateRange 
         ? transactions.filter(t => {
-            if (!t.transaction_date) return false;
+            if (!t.transaction_date) {
+              console.log('⚠️ UnifiedLocations: Transaction with no date:', t.account_id);
+              return false;
+            }
             
             // CONSISTENT: Use same date parsing logic as other components
             const transactionDate = new Date(t.transaction_date + 'T00:00:00.000Z'); // Force UTC to avoid timezone issues
@@ -281,15 +297,16 @@ const UnifiedLocations = () => {
             
             const isInRange = transactionDate >= dateRange.from && transactionDate <= dateRange.to;
             
-            if (isInRange) {
-              console.log('✅ UnifiedLocations: Transaction date in range:', {
-                transactionDate: transactionDate.toISOString(),
-                fromDate: dateRange.from.toISOString(),
-                toDate: dateRange.to.toISOString(),
-                accountId: t.account_id,
-                timeFrame: timeFrame
-              });
-            }
+            // Debug: Log each transaction's date filtering
+            console.log('🔍 UnifiedLocations: Date filtering:', {
+              accountId: t.account_id,
+              originalDate: t.transaction_date,
+              transactionDate: transactionDate.toISOString(),
+              fromDate: dateRange.from.toISOString(),
+              toDate: dateRange.to.toISOString(),
+              isInRange,
+              timeFrame: timeFrame
+            });
             
             return isInRange;
           })
@@ -297,6 +314,19 @@ const UnifiedLocations = () => {
 
       console.log('📅 UnifiedLocations: Original transactions:', transactions.length);
       console.log('📅 UnifiedLocations: Filtered transactions:', filteredTransactions.length);
+      console.log('📅 UnifiedLocations: Timeframe:', timeFrame);
+      
+      // If no transactions after filtering, let's see what dates we actually have
+      if (filteredTransactions.length === 0 && transactions.length > 0) {
+        console.log('🚨 UnifiedLocations: NO TRANSACTIONS AFTER FILTERING!');
+        console.log('📅 UnifiedLocations: All unique transaction dates:', 
+          [...new Set(transactions.map(t => t.transaction_date))].sort()
+        );
+        console.log('📅 UnifiedLocations: Filter range:', {
+          from: dateRange.from.toISOString(),
+          to: dateRange.to.toISOString()
+        });
+      }
 
       // Calculate commissions for all locations using filtered transactions
       const commissions = calculateLocationCommissions(filteredTransactions, assignments, locations);
