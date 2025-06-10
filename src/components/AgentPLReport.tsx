@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -106,7 +105,7 @@ const AgentPLReport = () => {
 
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, transaction_date')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout')
         .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
 
       if (error) throw error;
@@ -173,7 +172,7 @@ const AgentPLReport = () => {
 
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout')
         .gte('transaction_date', format(threeMonthsAgo, 'yyyy-MM-dd'));
 
       if (error) throw error;
@@ -220,7 +219,7 @@ const AgentPLReport = () => {
       
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 
