@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +11,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import LocationAgentInlineEdit from "./LocationAgentInlineEdit";
 
 const UnifiedLocations = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -452,14 +452,11 @@ const UnifiedLocations = () => {
                       </td>
                       <td className="p-4 font-mono text-sm">{location.account_id || 'N/A'}</td>
                       <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{location.assignedAgents} agents</Badge>
-                          {location.agentNames && (
-                            <span className="text-sm text-muted-foreground truncate max-w-32">
-                              {location.agentNames}
-                            </span>
-                          )}
-                        </div>
+                        <LocationAgentInlineEdit
+                          locationId={location.id}
+                          locationName={location.name}
+                          onUpdate={refetch}
+                        />
                       </td>
                       <td className="p-4 font-semibold text-emerald-600">
                         ${(location.totalVolume || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
