@@ -649,5 +649,3 @@ const PLReports = () => {
 };
 
 export default PLReports;
-
-</edits_to_apply>
