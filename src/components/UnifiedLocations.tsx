@@ -1,5 +1,3 @@
-
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +6,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MapPin, Search, Users, DollarSign, TrendingUp, CalendarIcon, Plus } from "lucide-react";
+import { MapPin, Search, Users, DollarSign, TrendingUp, CalendarIcon } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -141,7 +139,7 @@ const UnifiedLocations = () => {
   // Calculate location data with commission details
   const locationData = locations.map(location => {
     const locationTransactions = filteredTransactions.filter(t => t.account_id === location.account_id);
-    const totalVolume = locationTransactions.reduce((sum, t) => sum + (t.volume || 0), 0);
+    const totalVolume = locationTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
     
     // Get agents for this location
     const locationAssignments = assignments.filter(a => a.location_id === location.id);
@@ -180,7 +178,7 @@ const UnifiedLocations = () => {
 
   // Filter based on search term
   const filteredLocations = locationData.filter(location =>
-    location.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    location.location_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     location.account_id?.includes(searchTerm) ||
     location.location_agent_assignments?.some((assignment: any) =>
       assignment.agent_name?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -328,7 +326,7 @@ const UnifiedLocations = () => {
         />
       </div>
 
-      {/* Locations Cards */}
+      {/* Locations Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -337,69 +335,61 @@ const UnifiedLocations = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredLocations.map((location) => (
-              <Card key={location.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="space-y-4">
-                    {/* Location Header */}
-                    <div className="flex flex-col space-y-2">
-                      <div className="flex items-start justify-between">
-                        <h3 className="font-semibold text-lg">{location.name}</h3>
-                        <Badge variant="secondary">
-                          {location.account_type || 'Business'}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground font-mono">
-                        {location.account_id}
-                      </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Location</TableHead>
+                <TableHead>Account ID</TableHead>
+                <TableHead>Total Volume</TableHead>
+                <TableHead>Assigned Agents</TableHead>
+                <TableHead>Merchant Hero Commission</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredLocations.map((location) => (
+                <TableRow key={location.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{location.location_name}</span>
+                      <Badge variant="secondary" className="w-fit mt-1">
+                        {location.business_type || 'Business'}
+                      </Badge>
                     </div>
-
-                    {/* Volume Information */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">Total Volume</span>
-                        <span className="font-semibold text-green-600">
-                          ${location.totalVolume.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">Transactions</span>
-                        <span className="text-xs text-muted-foreground">
-                          {location.transactionCount}
-                        </span>
-                      </div>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {location.account_id}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-green-600">
+                        ${location.totalVolume.toLocaleString()}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {location.transactionCount} transactions
+                      </span>
                     </div>
-
-                    {/* Agent Assignment */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Assigned Agents</span>
-                      </div>
-                      <LocationAgentInlineEdit
-                        locationId={location.id}
-                        locationName={location.name}
-                        onUpdate={refetchData}
-                      />
-                    </div>
-
-                    {/* Merchant Hero Commission */}
-                    <div className="pt-2 border-t space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Merchant Hero Commission</span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {location.merchantHeroBPS} BPS (Auto-Calculated)
-                      </div>
-                      <div className="text-green-600 font-medium">
+                  </TableCell>
+                  <TableCell>
+                    <LocationAgentInlineEdit
+                      locationId={location.id}
+                      locationName={location.location_name}
+                      onUpdate={refetchData}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-semibold">
+                        Merchant Hero – {location.merchantHeroBPS} BPS (Auto)
+                      </span>
+                      <span className="text-green-600 font-medium">
                         Earnings: ${location.merchantHeroCommission.toLocaleString()}
-                      </div>
+                      </span>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
           
           {filteredLocations.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
@@ -413,4 +403,3 @@ const UnifiedLocations = () => {
 };
 
 export default UnifiedLocations;
-
