@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,7 +111,6 @@ const AgentManagement = () => {
       // Build final agent data - for ALL agents
       const result = Array.from(allAgentNames).map(agentName => {
         const commissionSummary = agentCommissionSummaries.find(summary => summary.agentName === agentName);
-        const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
         const manualAgent = manualAgents?.find(a => a.name === agentName);
         
         // Count unique locations assigned to this agent
@@ -131,7 +129,7 @@ const AgentManagement = () => {
 
         console.log(`Agent ${agentName} assigned account IDs:`, Array.from(assignedAccountIds));
 
-        // Calculate volume and account stats ONLY for assigned locations
+        // Calculate volume ONLY for assigned locations/accounts
         const agentVolumeStats = transactions?.reduce((acc, t) => {
           // Only include transactions from accounts that correspond to assigned locations
           if (t.account_id && assignedAccountIds.has(t.account_id)) {
@@ -143,6 +141,9 @@ const AgentManagement = () => {
         }, { totalVolume: 0, accountIds: new Set<string>() }) || { totalVolume: 0, accountIds: new Set<string>() };
 
         const accountsCount = agentVolumeStats.accountIds.size;
+        
+        // Get total commission from commission calculations
+        const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
         
         // Calculate average rate as percentage of commission to volume
         let avgRate;
@@ -168,7 +169,8 @@ const AgentManagement = () => {
         console.log(`Final agent ${agentName} data:`, {
           ...agentData,
           assignedLocationIds: Array.from(assignedLocationIds),
-          assignedAccountIds: Array.from(assignedAccountIds)
+          assignedAccountIds: Array.from(assignedAccountIds),
+          commissionSummary
         });
         return agentData;
       });
