@@ -46,7 +46,24 @@ export const calculateLocationCommissions = (
     return acc;
   }, {} as Record<string, number>);
 
+  // Also calculate Merchant Hero commissions directly from transaction data
+  const merchantHeroCommissions = transactions.reduce((acc, transaction) => {
+    const accountId = transaction.account_id;
+    if (!accountId) return acc;
+    
+    if (!acc[accountId]) {
+      acc[accountId] = 0;
+    }
+    
+    // agent_payout represents what Merchant Hero earned on this transaction
+    const agentPayout = parseFloat(transaction.agent_payout) || 0;
+    acc[accountId] += agentPayout;
+    
+    return acc;
+  }, {} as Record<string, number>);
+
   console.log('Location volumes calculated:', locationVolumes);
+  console.log('Merchant Hero commissions by account:', merchantHeroCommissions);
 
   // Calculate commissions for each active assignment
   assignments.forEach(assignment => {
@@ -70,44 +87,60 @@ export const calculateLocationCommissions = (
     console.log(`Location ${location.name} (${location.account_id}) volume: ${locationVolume}`);
 
     if (locationVolume > 0) {
-      // For Merchant Hero assignments, the commission rate is already calculated based on actual earnings
-      // For other agents, use the standard BPS conversion
+      let commission: number;
       let decimalRate: number;
       let displayBPS: number;
       
       if (assignment.agent_name === 'Merchant Hero') {
-        // Merchant Hero rates are already stored as proper decimal rates from actual earnings
-        decimalRate = assignment.commission_rate;
-        displayBPS = Math.round(assignment.commission_rate * 10000); // Convert back to BPS for display
-        console.log(`Merchant Hero assignment - stored rate: ${assignment.commission_rate}, display BPS: ${displayBPS}`);
+        // For Merchant Hero, use actual earnings from transaction data
+        commission = merchantHeroCommissions[location.account_id] || 0;
+        
+        // Calculate the effective rate based on actual earnings
+        if (locationVolume > 0 && commission > 0) {
+          decimalRate = commission / locationVolume;
+          displayBPS = Math.round(decimalRate * 10000); // Convert to BPS for display
+        } else {
+          decimalRate = 0;
+          displayBPS = 0;
+        }
+        
+        console.log(`Merchant Hero calculation:`, {
+          locationName: location.name,
+          locationVolume,
+          actualCommission: commission,
+          calculatedDecimalRate: decimalRate,
+          displayBPS,
+          formula: `${commission} ÷ ${locationVolume} = ${decimalRate}`
+        });
       } else {
-        // Standard agent rate conversion
+        // For other agents, use the standard BPS conversion
         decimalRate = convertToDecimalRate(assignment.commission_rate);
         displayBPS = Math.round(assignment.commission_rate * 100);
+        commission = locationVolume * decimalRate;
+        
+        console.log(`Standard agent calculation:`, {
+          agentName: assignment.agent_name,
+          locationName: location.name,
+          locationVolume,
+          storedRate: assignment.commission_rate,
+          displayBPS,
+          decimalRate,
+          commission,
+          formula: `${locationVolume} × ${decimalRate} = ${commission}`
+        });
       }
-      
-      const commission = locationVolume * decimalRate;
 
-      console.log(`Commission calculation:`, {
-        agentName: assignment.agent_name,
-        locationName: location.name,
-        locationVolume,
-        storedRate: assignment.commission_rate,
-        displayBPS,
-        decimalRate,
-        commission,
-        formula: `${locationVolume} × ${decimalRate} = ${commission}`
-      });
-
-      commissions.push({
-        locationId: assignment.location_id,
-        locationName: location.name,
-        agentName: assignment.agent_name,
-        bpsRate: displayBPS,
-        decimalRate,
-        locationVolume,
-        commission
-      });
+      if (commission > 0 || assignment.agent_name === 'Merchant Hero') {
+        commissions.push({
+          locationId: assignment.location_id,
+          locationName: location.name,
+          agentName: assignment.agent_name,
+          bpsRate: displayBPS,
+          decimalRate,
+          locationVolume,
+          commission
+        });
+      }
     } else {
       console.log(`No volume found for location ${location.name} (${location.account_id})`);
     }

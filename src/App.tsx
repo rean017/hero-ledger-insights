@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,7 +5,7 @@ import Dashboard from "./components/Dashboard";
 import Sidebar from "./components/Sidebar";
 import FileUpload from "./components/FileUpload";
 import AgentManagement from "./components/AgentManagement";
-import Locations from "./components/Locations";
+import UnifiedLocations from "./components/UnifiedLocations";
 import PLReports from "./components/PLReports";
 import UploadManagement from "./components/UploadManagement";
 import LocationCommissionReport from "./components/LocationCommissionReport";
@@ -27,7 +26,7 @@ function App() {
       case "agents":
         return <AgentManagement />;
       case "locations":
-        return <Locations />;
+        return <UnifiedLocations />;
       case "commissions":
         return <LocationCommissionReport />;
       case "pl-reports":
