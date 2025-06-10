@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, Edit2 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -221,7 +222,8 @@ const AgentManagement = () => {
           totalCommission,
           avgRate,
           status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active',
-          notes: manualAgent?.notes || ''
+          notes: manualAgent?.notes || '',
+          locationCommissions: commissionSummary ? commissionSummary.locations : []
         };
 
         console.log(`Final agent ${agentName} data for timeframe ${timeFrame}:`, {
@@ -464,6 +466,34 @@ const AgentManagement = () => {
                   <p className="text-sm text-muted-foreground">Total Volume</p>
                   <p className="font-semibold text-emerald-600">${agent.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                 </div>
+
+                {agent.locationCommissions && agent.locationCommissions.length > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Commission by Location</p>
+                    <div className="bg-muted rounded-md p-3 max-h-40 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs p-1">Location</TableHead>
+                            <TableHead className="text-xs p-1 text-right">Commission</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {agent.locationCommissions.map((loc: any, locIndex: number) => (
+                            <TableRow key={locIndex}>
+                              <TableCell className="text-xs p-1 font-medium">
+                                {loc.locationName}
+                              </TableCell>
+                              <TableCell className="text-xs p-1 text-right text-emerald-600">
+                                ${(agent.name === 'Merchant Hero' ? loc.merchantHeroPayout : loc.agentPayout).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
 
                 {agent.notes && (
                   <div>
