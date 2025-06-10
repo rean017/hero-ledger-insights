@@ -99,8 +99,8 @@ const AgentManagement = () => {
     ? transactions.filter(t => {
         if (!t.transaction_date) return false;
         
-        // Create date object and ensure we're comparing properly
-        const transactionDate = new Date(t.transaction_date);
+        // Parse the transaction date as a local date (no timezone conversion)
+        const transactionDate = new Date(t.transaction_date + 'T00:00:00');
         
         // Ensure the transaction date is valid
         if (isNaN(transactionDate.getTime())) {
@@ -108,18 +108,19 @@ const AgentManagement = () => {
           return false;
         }
         
-        // Convert to start of day for comparison to avoid timezone issues
-        const transactionDateStart = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
-        const fromDateStart = new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), dateRange.from.getDate());
-        const toDateStart = new Date(dateRange.to.getFullYear(), dateRange.to.getMonth(), dateRange.to.getDate());
+        // Create date boundaries without timezone issues
+        const transactionDateOnly = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
+        const fromDateOnly = new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), dateRange.from.getDate());
+        const toDateOnly = new Date(dateRange.to.getFullYear(), dateRange.to.getMonth(), dateRange.to.getDate());
         
-        const isInRange = transactionDateStart >= fromDateStart && transactionDateStart <= toDateStart;
+        const isInRange = transactionDateOnly >= fromDateOnly && transactionDateOnly <= toDateOnly;
         
         if (isInRange) {
           console.log('✅ Transaction date in range:', {
-            transactionDate: transactionDate.toISOString(),
-            fromDate: dateRange.from.toISOString(),
-            toDate: dateRange.to.toISOString(),
+            originalDate: t.transaction_date,
+            transactionDateOnly: transactionDateOnly.toDateString(),
+            fromDate: fromDateOnly.toDateString(),
+            toDate: toDateOnly.toDateString(),
             accountId: t.account_id
           });
         }
@@ -129,7 +130,10 @@ const AgentManagement = () => {
     : transactions;
 
   console.log('📅 Date filtering for timeframe:', timeFrame);
-  console.log('📅 Date range:', dateRange);
+  console.log('📅 Date range:', dateRange ? {
+    from: dateRange.from.toDateString(),
+    to: dateRange.to.toDateString()
+  } : 'No date range');
   console.log('📅 Original transactions:', transactions.length);
   console.log('📅 Filtered transactions:', filteredTransactions.length);
   
@@ -138,7 +142,7 @@ const AgentManagement = () => {
     console.log('📊 Sample transaction dates:', transactions.slice(0, 5).map(t => ({
       account_id: t.account_id,
       transaction_date: t.transaction_date,
-      parsedDate: t.transaction_date ? new Date(t.transaction_date).toISOString() : 'No date'
+      parsedDate: t.transaction_date ? new Date(t.transaction_date + 'T00:00:00').toDateString() : 'No date'
     })));
   }
   
