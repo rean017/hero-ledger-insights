@@ -62,7 +62,7 @@ const FileUpload = () => {
 
   const monthOptions = generateMonthOptions();
 
-  // Enhanced processor configurations with separate debit volume column for TRNXN
+  // Enhanced processor configurations with better debit volume detection for TRNXN
   const processorConfigs: ProcessorConfig[] = [
     {
       name: 'Maverick',
@@ -81,10 +81,10 @@ const FileUpload = () => {
     {
       name: 'TRNXN',
       locationColumn: ['dba', 'dba name', 'dba_name'],
-      volumeColumn: ['bankcard volume', 'bankcard_volume', 'bank card volume', 'bank card vol', 'bankcard vol'],
-      debitVolumeColumn: ['debit card volume', 'debit_card_volume', 'debitcard volume', 'debit vol', 'debit card vol', 'debit volume'],
+      volumeColumn: ['bankcard volume', 'bankcard_volume', 'bank card volume', 'bank card vol', 'bankcard vol', 'volume'],
+      debitVolumeColumn: ['debit card volume', 'debit_card_volume', 'debitcard volume', 'debit vol', 'debit card vol', 'debit volume', 'debit card', 'debitcard'],
       commissionColumn: ['net commission', 'net_commission', 'commission'],
-      detection: ['dba', 'bankcard volume', 'net commission']
+      detection: ['dba', 'volume', 'commission']
     },
     {
       name: 'SignaPay',
@@ -156,7 +156,7 @@ const FileUpload = () => {
     return { processor: null, confidence: 0 };
   };
 
-  // Find column by possible names with enhanced TRNXN debugging
+  // ENHANCED: Better column finding with fuzzy matching for TRNXN
   const findColumn = (headers: string[], possibleNames: string[]): string | null => {
     const headerLower = headers.map(h => h.toLowerCase().trim());
     
@@ -164,15 +164,30 @@ const FileUpload = () => {
     console.log(`🔍 Looking for any of these names:`, possibleNames);
     
     for (const name of possibleNames) {
-      const index = headerLower.findIndex(header => 
-        header === name.toLowerCase() || 
-        header.includes(name.toLowerCase()) ||
-        header.replace(/[\s_-]/g, '') === name.replace(/[\s_-]/g, '').toLowerCase()
-      );
+      const nameLower = name.toLowerCase();
       
-      if (index !== -1) {
-        console.log(`✅ FOUND COLUMN "${headers[index]}" for search term "${name}"`);
-        return headers[index];
+      // Exact match first
+      const exactIndex = headerLower.findIndex(header => header === nameLower);
+      if (exactIndex !== -1) {
+        console.log(`✅ EXACT MATCH FOUND "${headers[exactIndex]}" for search term "${name}"`);
+        return headers[exactIndex];
+      }
+      
+      // Contains match
+      const containsIndex = headerLower.findIndex(header => header.includes(nameLower));
+      if (containsIndex !== -1) {
+        console.log(`✅ CONTAINS MATCH FOUND "${headers[containsIndex]}" for search term "${name}"`);
+        return headers[containsIndex];
+      }
+      
+      // Fuzzy match (remove spaces, underscores, hyphens)
+      const normalizedName = nameLower.replace(/[\s_-]/g, '');
+      const fuzzyIndex = headerLower.findIndex(header => 
+        header.replace(/[\s_-]/g, '') === normalizedName
+      );
+      if (fuzzyIndex !== -1) {
+        console.log(`✅ FUZZY MATCH FOUND "${headers[fuzzyIndex]}" for search term "${name}"`);
+        return headers[fuzzyIndex];
       }
     }
     
@@ -562,6 +577,11 @@ const FileUpload = () => {
             (h.toLowerCase().includes('card') && h.toLowerCase().includes('vol'))
           );
           console.log('Headers that might contain debit volume:', debitHeaders);
+          
+          // If we still can't find it, prompt user
+          if (debitHeaders.length === 0) {
+            throw new Error(`TRNXN file detected but could not find Debit Card Volume column. Please ensure your file has a column with "debit" in the name. Found headers: ${headers.join(', ')}`);
+          }
         } else {
           console.log('✅ TRNXN: Both Bank Card and Debit Card volume columns detected successfully!');
         }
@@ -884,3 +904,5 @@ const FileUpload = () => {
 };
 
 export default FileUpload;
+
+}
