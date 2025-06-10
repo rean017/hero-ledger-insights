@@ -92,10 +92,30 @@ export const getMonthString = (date: Date): string => {
   return format(date, 'yyyy-MM');
 };
 
-// ADDED: Helper function to normalize custom date ranges to match transaction format
+// FIXED: Helper function to normalize custom date ranges to match transaction format with proper validation
 export const normalizeCustomDateRange = (range: { from: Date; to: Date }): { from: Date; to: Date } => {
-  return {
-    from: new Date(format(range.from, 'yyyy-MM-dd') + 'T00:00:00.000Z'),
-    to: new Date(format(range.to, 'yyyy-MM-dd') + 'T23:59:59.999Z')
-  };
+  // Validate that both dates exist and are valid
+  if (!range.from || !range.to) {
+    throw new Error('Both from and to dates are required');
+  }
+  
+  // Check if dates are valid Date objects
+  if (!(range.from instanceof Date) || !(range.to instanceof Date)) {
+    throw new Error('Invalid date objects provided');
+  }
+  
+  // Check if dates have valid time values
+  if (isNaN(range.from.getTime()) || isNaN(range.to.getTime())) {
+    throw new Error('Invalid time values in date range');
+  }
+  
+  try {
+    return {
+      from: new Date(format(range.from, 'yyyy-MM-dd') + 'T00:00:00.000Z'),
+      to: new Date(format(range.to, 'yyyy-MM-dd') + 'T23:59:59.999Z')
+    };
+  } catch (error) {
+    console.error('Error normalizing custom date range:', error);
+    throw new Error('Failed to normalize date range');
+  }
 };

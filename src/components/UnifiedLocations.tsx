@@ -11,7 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Plus, Search, MapPin, Building2, Users, DollarSign, Edit3, Check, X, CalendarIcon } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, React } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,9 +56,23 @@ const UnifiedLocations = () => {
   const { toast } = useToast();
 
   // Get date range - use custom if selected and available, otherwise use timeframe
-  const dateRange = timeFrame === 'custom' && customDateRange 
-    ? normalizeCustomDateRange(customDateRange) 
-    : getDateRangeForTimeFrame(timeFrame);
+  const dateRange = React.useMemo(() => {
+    if (timeFrame === 'custom' && customDateRange) {
+      // Validate that both dates exist and are valid before normalizing
+      if (customDateRange.from && customDateRange.to && 
+          customDateRange.from instanceof Date && customDateRange.to instanceof Date &&
+          !isNaN(customDateRange.from.getTime()) && !isNaN(customDateRange.to.getTime())) {
+        try {
+          return normalizeCustomDateRange(customDateRange);
+        } catch (error) {
+          console.error('Error normalizing custom date range:', error);
+          return null;
+        }
+      }
+      return null;
+    }
+    return getDateRangeForTimeFrame(timeFrame);
+  }, [timeFrame, customDateRange]);
 
   // Debug: Log the timeframe and date range
   console.log('🗓️ UnifiedLocations: Current timeframe selected:', timeFrame);
@@ -812,3 +826,5 @@ const UnifiedLocations = () => {
 };
 
 export default UnifiedLocations;
+
+}
