@@ -673,7 +673,7 @@ const UnifiedLocations = () => {
                         )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {customDateRange ? (
+                        {customDateRange?.from && customDateRange?.to ? (
                           `${format(customDateRange.from, "MMM d")} - ${format(customDateRange.to, "MMM d")}`
                         ) : (
                           "Pick dates"
