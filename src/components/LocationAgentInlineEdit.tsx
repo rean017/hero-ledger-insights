@@ -97,7 +97,7 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
 
       toast({
         title: "Success",
-        description: `${newAgent} assigned to ${locationName} with ${newRate} BPS`
+        description: `${newAgent} assigned with ${newRate} BPS`
       });
 
       setNewAgent("");
@@ -164,7 +164,7 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
 
       toast({
         title: "Success",
-        description: `Removed ${agent_name} from ${locationName}`
+        description: `Removed ${agent_name}`
       });
 
       refetch();
@@ -192,74 +192,77 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
   ) || [];
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-1 min-w-[200px]">
       {/* Current Assignments */}
       {assignments?.map((assignment) => (
-        <div key={assignment.id} className="flex items-center gap-2 flex-wrap">
-          <Badge variant="outline" className="text-xs">
-            {assignment.agent_name}
-          </Badge>
-          
-          {editingAssignment === assignment.id ? (
-            <div className="flex items-center gap-1">
-              <Input
-                value={editRate}
-                onChange={(e) => setEditRate(e.target.value)}
-                placeholder="BPS"
-                className="w-16 h-6 text-xs"
-                type="number"
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => handleUpdateRate(assignment.id, assignment.agent_name)}
-              >
-                <Check className="h-3 w-3" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => {
-                  setEditingAssignment(null);
-                  setEditRate("");
-                }}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">
-                {Math.round(assignment.commission_rate * 100)} BPS
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => startEditing(assignment.id, assignment.commission_rate)}
-              >
-                <Pencil className="h-3 w-3" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                onClick={() => handleRemoveAgent(assignment.id, assignment.agent_name)}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
+        <div key={assignment.id} className="group flex items-center justify-between bg-muted/30 rounded-md px-2 py-1 hover:bg-muted/50 transition-colors">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">
+              {assignment.agent_name}
+            </span>
+            
+            {editingAssignment === assignment.id ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  value={editRate}
+                  onChange={(e) => setEditRate(e.target.value)}
+                  placeholder="BPS"
+                  className="w-16 h-7 text-xs border-input"
+                  type="number"
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0 hover:bg-green-100 hover:text-green-700"
+                  onClick={() => handleUpdateRate(assignment.id, assignment.agent_name)}
+                >
+                  <Check className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0 hover:bg-red-100 hover:text-red-700"
+                  onClick={() => {
+                    setEditingAssignment(null);
+                    setEditRate("");
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground bg-background px-1 py-0.5 rounded border">
+                  {Math.round(assignment.commission_rate * 100)} BPS
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 hover:text-blue-700"
+                  onClick={() => startEditing(assignment.id, assignment.commission_rate)}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 hover:text-red-700"
+                  onClick={() => handleRemoveAgent(assignment.id, assignment.agent_name)}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       ))}
 
       {/* Add New Agent */}
       {isEditing ? (
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1 bg-blue-50 rounded-md px-2 py-1 border border-blue-200">
           <Select value={newAgent} onValueChange={setNewAgent}>
-            <SelectTrigger className="w-32 h-6 text-xs">
+            <SelectTrigger className="w-28 h-7 text-xs border-blue-300">
               <SelectValue placeholder="Agent" />
             </SelectTrigger>
             <SelectContent>
@@ -275,18 +278,23 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
             value={newRate}
             onChange={(e) => setNewRate(e.target.value)}
             placeholder="BPS"
-            className="w-16 h-6 text-xs"
+            className="w-16 h-7 text-xs border-blue-300"
             type="number"
           />
           
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={handleAddAgent}>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-7 w-7 p-0 hover:bg-green-100 hover:text-green-700" 
+            onClick={handleAddAgent}
+          >
             <Check className="h-3 w-3" />
           </Button>
           
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 w-6 p-0"
+            className="h-7 w-7 p-0 hover:bg-red-100 hover:text-red-700"
             onClick={() => {
               setIsEditing(false);
               setNewAgent("");
@@ -300,7 +308,7 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
         <Button
           size="sm"
           variant="ghost"
-          className="h-6 w-6 p-0"
+          className="h-7 w-7 p-0 self-start hover:bg-green-100 hover:text-green-700 transition-colors"
           onClick={() => setIsEditing(true)}
           disabled={availableAgents.length === 0}
         >
