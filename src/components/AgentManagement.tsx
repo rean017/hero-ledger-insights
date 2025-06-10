@@ -22,7 +22,7 @@ const AgentManagement = () => {
   const [newAgentName, setNewAgentName] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [agentNotes, setAgentNotes] = useState("");
-  const [timeFrame, setTimeFrame] = useState("all"); // Changed default to "all" to show data
+  const [timeFrame, setTimeFrame] = useState("all");
   const { toast } = useToast();
 
   // Calculate date range based on timeFrame
@@ -45,187 +45,173 @@ const AgentManagement = () => {
           to: endOfMonth(now)
         };
       case 'all':
-        return {
-          from: new Date('2020-01-01'),
-          to: new Date('2030-12-31')
-        };
+        return null; // No date filtering for "all"
       default:
-        return {
-          from: new Date('2020-01-01'),
-          to: new Date('2030-12-31')
-        };
+        return null;
     }
   };
 
   const dateRange = getDateRange(timeFrame);
 
-  const { data: agents, isLoading, refetch } = useQuery({
-    queryKey: ['agents-data', timeFrame, dateRange],
+  // Fetch transactions - using the same approach as LocationCommissionReport
+  const { data: transactions = [] } = useQuery({
+    queryKey: ['transactions'],
     queryFn: async () => {
-      console.log('🔄 Fetching agents data for timeframe:', timeFrame, 'with date range:', dateRange);
-      
-      // Ensure Merchant Hero exists in agents table
-      const { data: existingMerchantHero } = await supabase
-        .from('agents')
-        .select('id')
-        .eq('name', 'Merchant Hero')
-        .single();
-
-      if (!existingMerchantHero) {
-        console.log('Creating Merchant Hero agent...');
-        await supabase
-          .from('agents')
-          .insert([{ name: 'Merchant Hero', is_active: true }]);
-      }
-      
-      // Fetch ALL transactions first to see what data exists
-      const { data: allTransactions, error: allTransactionError } = await supabase
+      console.log('🔄 Fetching ALL transactions for Agent Management...');
+      const { data, error } = await supabase
         .from('transactions')
-        .select('agent_name, volume, debit_volume, account_id, agent_payout, transaction_date')
-        .not('agent_name', 'is', null);
+        .select('*');
 
-      if (allTransactionError) {
-        console.error('❌ Error fetching all transactions:', allTransactionError);
-        throw allTransactionError;
+      if (error) {
+        console.error('❌ Error fetching transactions:', error);
+        throw error;
       }
-
-      console.log('📊 Total transactions in database:', allTransactions?.length || 0);
-
-      // For Agent Management, let's use ALL transactions to ensure we see the data
-      // This matches the approach used in LocationCommissionReport
-      let transactions = allTransactions || [];
       
-      // Only filter by date if not "all" and if we actually have transactions
-      if (timeFrame !== 'all' && transactions.length > 0) {
-        const originalLength = transactions.length;
-        transactions = transactions.filter(t => {
-          if (!t.transaction_date) return false;
-          const transactionDate = new Date(t.transaction_date);
-          return transactionDate >= dateRange.from && transactionDate <= dateRange.to;
-        });
-        console.log(`📅 Filtered transactions for ${timeFrame}: ${transactions.length} (from ${originalLength} total)`);
-      }
+      console.log('📊 Total transactions fetched:', data?.length || 0);
+      return data || [];
+    }
+  });
 
-      const { data: assignments, error: assignmentError } = await supabase
+  // Fetch assignments - using the same approach as LocationCommissionReport
+  const { data: assignments = [] } = useQuery({
+    queryKey: ['location_agent_assignments'],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          is_active
-        `)
+        .select('*')
         .eq('is_active', true);
 
-      if (assignmentError) throw assignmentError;
+      if (error) throw error;
+      console.log('📋 Assignments fetched:', data?.length || 0);
+      return data || [];
+    }
+  });
 
-      const { data: locations, error: locationError } = await supabase
+  // Fetch locations - using the same approach as LocationCommissionReport
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations'],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('locations')
-        .select('id, name, account_id');
+        .select('*');
 
-      if (locationError) throw locationError;
+      if (error) throw error;
+      console.log('📍 Locations fetched:', data?.length || 0);
+      return data || [];
+    }
+  });
 
-      const { data: manualAgents, error: manualError } = await supabase
+  // Fetch manual agents
+  const { data: manualAgents = [] } = useQuery({
+    queryKey: ['agents'],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('agents')
         .select('name, is_active, notes')
         .eq('is_active', true);
 
-      if (manualError) {
-        console.error('❌ Error fetching manual agents:', manualError);
-        throw manualError;
-      }
-
-      console.log('📈 Raw data loaded:', {
-        transactions: transactions?.length,
-        assignments: assignments?.length,
-        locations: locations?.length,
-        manualAgents: manualAgents?.length,
-        dateRange,
-        timeFrame
-      });
-
-      // Use the standardized commission calculation - this is the SAME calculation used everywhere
-      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-      const agentCommissionSummaries = groupCommissionsByAgent(commissions);
-
-      console.log('💰 Commission summaries calculated:', agentCommissionSummaries);
-
-      // Get all unique agent names from both manual agents and assignments
-      const allAgentNames = new Set<string>();
-      
-      // Add agents from manual agents table
-      manualAgents?.forEach(agent => {
-        if (agent.name && agent.is_active) {
-          allAgentNames.add(agent.name);
-        }
-      });
-
-      // Add agents from assignments (in case they're not in manual table)
-      assignments?.forEach(a => {
-        if (a.agent_name && a.is_active) {
-          allAgentNames.add(a.agent_name);
-        }
-      });
-
-      console.log('👥 All agent names:', Array.from(allAgentNames));
-
-      // Build final agent data using the commission summaries
-      const result = Array.from(allAgentNames).map(agentName => {
-        const commissionSummary = agentCommissionSummaries.find(summary => summary.agentName === agentName);
-        const manualAgent = manualAgents?.find(a => a.name === agentName);
-        
-        // Count unique locations assigned to this agent
-        const assignedLocations = assignments?.filter(a => a.agent_name === agentName && a.is_active) || [];
-        const locationsCount = assignedLocations.length;
-        
-        // Get total commission and location details from commission calculations
-        const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
-        const locationCommissions = commissionSummary ? commissionSummary.locations : [];
-        
-        // Calculate total volume from commission data
-        const totalVolume = locationCommissions.reduce((sum, loc) => sum + loc.locationVolume, 0);
-        
-        // Count unique accounts from commission data
-        const uniqueAccountIds = new Set(
-          locationCommissions
-            .map(loc => locations?.find(l => l.id === loc.locationId)?.account_id)
-            .filter(id => id)
-        );
-        const accountsCount = uniqueAccountIds.size;
-        
-        // Calculate average rate as percentage of commission to volume
-        let avgRate;
-        if (agentName === 'Merchant Hero') {
-          avgRate = 'Remainder';
-        } else {
-          avgRate = totalVolume > 0 
-            ? ((totalCommission / totalVolume) * 100).toFixed(2) + '%' 
-            : '0%';
-        }
-
-        console.log(`💼 Agent ${agentName} data:`, {
-          totalCommission,
-          locationCommissions: locationCommissions.length,
-          totalVolume,
-          accountsCount,
-          locationsCount
-        });
-
-        return {
-          name: agentName,
-          totalRevenue: totalVolume,
-          accountsCount,
-          locationsCount,
-          totalCommission,
-          avgRate,
-          status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active',
-          notes: manualAgent?.notes || '',
-          locationCommissions: locationCommissions // This now contains the correct commission data
-        };
-      });
-
-      console.log('✅ Final agents data with commissions:', result);
-      return result;
+      if (error) throw error;
+      console.log('👥 Manual agents fetched:', data?.length || 0);
+      return data || [];
     }
+  });
+
+  // Calculate commissions using the SAME logic as LocationCommissionReport
+  const commissions = calculateLocationCommissions(transactions, assignments, locations);
+  const agentCommissionSummaries = groupCommissionsByAgent(commissions);
+
+  console.log('💰 Agent commission summaries:', agentCommissionSummaries);
+
+  // Filter transactions by date if needed (but only for display, not for base calculation)
+  const filteredTransactions = dateRange 
+    ? transactions.filter(t => {
+        if (!t.transaction_date) return false;
+        const transactionDate = new Date(t.transaction_date);
+        return transactionDate >= dateRange.from && transactionDate <= dateRange.to;
+      })
+    : transactions;
+
+  // Recalculate commissions with filtered transactions if date range is applied
+  const filteredCommissions = dateRange 
+    ? calculateLocationCommissions(filteredTransactions, assignments, locations)
+    : commissions;
+  
+  const filteredAgentSummaries = dateRange
+    ? groupCommissionsByAgent(filteredCommissions)
+    : agentCommissionSummaries;
+
+  console.log('📅 Filtered commission summaries for timeframe:', timeFrame, filteredAgentSummaries);
+
+  // Get all unique agent names from both manual agents and assignments
+  const allAgentNames = new Set<string>();
+  
+  // Add agents from manual agents table
+  manualAgents?.forEach(agent => {
+    if (agent.name && agent.is_active) {
+      allAgentNames.add(agent.name);
+    }
+  });
+
+  // Add agents from assignments (in case they're not in manual table)
+  assignments?.forEach(a => {
+    if (a.agent_name && a.is_active) {
+      allAgentNames.add(a.agent_name);
+    }
+  });
+
+  // Build final agent data using the commission summaries
+  const agents = Array.from(allAgentNames).map(agentName => {
+    const commissionSummary = filteredAgentSummaries.find(summary => summary.agentName === agentName);
+    const manualAgent = manualAgents?.find(a => a.name === agentName);
+    
+    // Count unique locations assigned to this agent
+    const assignedLocations = assignments?.filter(a => a.agent_name === agentName && a.is_active) || [];
+    const locationsCount = assignedLocations.length;
+    
+    // Get total commission and location details from commission calculations
+    const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
+    const locationCommissions = commissionSummary ? commissionSummary.locations : [];
+    
+    // Calculate total volume from commission data
+    const totalVolume = locationCommissions.reduce((sum, loc) => sum + loc.locationVolume, 0);
+    
+    // Count unique accounts from commission data
+    const uniqueAccountIds = new Set(
+      locationCommissions
+        .map(loc => locations?.find(l => l.id === loc.locationId)?.account_id)
+        .filter(id => id)
+    );
+    const accountsCount = uniqueAccountIds.size;
+    
+    // Calculate average rate as percentage of commission to volume
+    let avgRate;
+    if (agentName === 'Merchant Hero') {
+      avgRate = 'Remainder';
+    } else {
+      avgRate = totalVolume > 0 
+        ? ((totalCommission / totalVolume) * 100).toFixed(2) + '%' 
+        : '0%';
+    }
+
+    console.log(`💼 Agent ${agentName} final data:`, {
+      totalCommission,
+      locationCommissions: locationCommissions.length,
+      totalVolume,
+      accountsCount,
+      locationsCount
+    });
+
+    return {
+      name: agentName,
+      totalRevenue: totalVolume,
+      accountsCount,
+      locationsCount,
+      totalCommission,
+      avgRate,
+      status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active',
+      notes: manualAgent?.notes || '',
+      locationCommissions: locationCommissions
+    };
   });
 
   const handleAddAgent = async () => {
@@ -256,7 +242,6 @@ const AgentManagement = () => {
 
       setNewAgentName("");
       setIsDialogOpen(false);
-      refetch();
     } catch (error: any) {
       console.error('Error adding agent:', error);
       toast({
@@ -286,7 +271,6 @@ const AgentManagement = () => {
       setIsEditNotesOpen(false);
       setSelectedAgent(null);
       setAgentNotes("");
-      refetch();
     } catch (error: any) {
       console.error('Error updating notes:', error);
       toast({
@@ -307,7 +291,7 @@ const AgentManagement = () => {
     agent.name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
-  if (isLoading) {
+  if (transactions.length === 0 && assignments.length === 0 && locations.length === 0) {
     return (
       <div className="space-y-6">
         <div>
