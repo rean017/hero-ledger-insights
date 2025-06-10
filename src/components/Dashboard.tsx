@@ -89,9 +89,12 @@ const Dashboard = () => {
 
       if (locationError) throw locationError;
 
-      // Calculate total sales volume from all transactions
+      // Calculate total sales volume
       let totalRevenue = 0;
       let totalAgentPayoutsFromTransactions = 0;
+      
+      console.log('=== DASHBOARD CALCULATION DEBUG ===');
+      console.log('Raw transactions data:', transactions?.slice(0, 5)); // Show first 5 for debugging
       
       transactions?.forEach(t => {
         const volume = Number(t.volume) || 0;
@@ -100,6 +103,14 @@ const Dashboard = () => {
         
         totalRevenue += volume + debitVolume;
         totalAgentPayoutsFromTransactions += agentPayout;
+        
+        if (agentPayout > 0) {
+          console.log('Transaction with agent_payout:', {
+            account_id: t.account_id,
+            volume: volume + debitVolume,
+            agent_payout: agentPayout
+          });
+        }
       });
 
       console.log('Transaction totals:', {
@@ -108,7 +119,7 @@ const Dashboard = () => {
         transactionCount: transactions?.length || 0
       });
 
-      // Calculate commissions for external agents only
+      // Calculate commissions using our unified logic
       const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
       console.log('All calculated commissions:', commissions);
       
@@ -116,8 +127,20 @@ const Dashboard = () => {
       const externalAgentCommissions = commissions.filter(c => c.agentName !== 'Merchant Hero');
       const totalExternalCommissions = externalAgentCommissions.reduce((sum, commission) => sum + commission.commission, 0);
       
-      // Merchant Hero's net income = Total agent payouts from transactions - External agent commissions
-      const merchantHeroNetIncome = totalAgentPayoutsFromTransactions - totalExternalCommissions;
+      // Get Merchant Hero commissions (this should be the net after paying other agents)
+      const merchantHeroCommissions = commissions.filter(c => c.agentName === 'Merchant Hero');
+      const merchantHeroNetFromCommissionCalc = merchantHeroCommissions.reduce((sum, commission) => sum + commission.commission, 0);
+      
+      console.log('Commission breakdown:', {
+        totalExternalCommissions,
+        merchantHeroNetFromCommissionCalc,
+        externalAgentCount: externalAgentCommissions.length,
+        merchantHeroCommissionCount: merchantHeroCommissions.length
+      });
+
+      // Use the commission calculation result for Merchant Hero's net income
+      // This should already be calculated as agent_payout - external_commissions per location
+      const merchantHeroNetIncome = merchantHeroNetFromCommissionCalc;
 
       // Get locations count
       const { count: locationsCount } = await supabase
@@ -129,14 +152,13 @@ const Dashboard = () => {
         totalAgentPayoutsFromTransactions,
         totalExternalCommissions,
         merchantHeroNetIncome,
-        externalAgentCommissions,
-        formula: `${totalAgentPayoutsFromTransactions} - ${totalExternalCommissions} = ${merchantHeroNetIncome}`
+        formula: `Using commission calculation result: ${merchantHeroNetIncome}`
       });
 
       return {
         totalRevenue,
-        totalAgentPayouts: totalExternalCommissions, // Only external agent commissions
-        netIncome: merchantHeroNetIncome, // Merchant Hero's net income
+        totalAgentPayouts: totalExternalCommissions, // External agent commissions
+        netIncome: merchantHeroNetIncome, // Merchant Hero's net income from commission calc
         locationsCount: locationsCount || 0
       };
     }
