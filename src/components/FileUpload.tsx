@@ -81,8 +81,8 @@ const FileUpload = () => {
     {
       name: 'TRNXN',
       locationColumn: ['dba', 'dba name', 'dba_name'],
-      volumeColumn: ['bankcard volume', 'bankcard_volume', 'bank card volume', 'bank card vol'],
-      debitVolumeColumn: ['debit card volume', 'debit_card_volume', 'debitcard volume', 'debit vol', 'debit card vol'],
+      volumeColumn: ['bankcard volume', 'bankcard_volume', 'bank card volume', 'bank card vol', 'bankcard vol'],
+      debitVolumeColumn: ['debit card volume', 'debit_card_volume', 'debitcard volume', 'debit vol', 'debit card vol', 'debit volume'],
       commissionColumn: ['net commission', 'net_commission', 'commission'],
       detection: ['dba', 'bankcard volume', 'net commission']
     },
@@ -156,9 +156,12 @@ const FileUpload = () => {
     return { processor: null, confidence: 0 };
   };
 
-  // Find column by possible names
+  // Find column by possible names with enhanced TRNXN debugging
   const findColumn = (headers: string[], possibleNames: string[]): string | null => {
     const headerLower = headers.map(h => h.toLowerCase().trim());
+    
+    console.log(`🔍 SEARCHING FOR COLUMN among headers:`, headers);
+    console.log(`🔍 Looking for any of these names:`, possibleNames);
     
     for (const name of possibleNames) {
       const index = headerLower.findIndex(header => 
@@ -168,12 +171,12 @@ const FileUpload = () => {
       );
       
       if (index !== -1) {
-        console.log(`Found column "${headers[index]}" for "${name}"`);
+        console.log(`✅ FOUND COLUMN "${headers[index]}" for search term "${name}"`);
         return headers[index];
       }
     }
     
-    console.log(`Column not found for any of: ${possibleNames.join(', ')}`);
+    console.log(`❌ COLUMN NOT FOUND for any of: ${possibleNames.join(', ')}`);
     return null;
   };
 
@@ -521,17 +524,17 @@ const FileUpload = () => {
 
       console.log(`=== PROCESSOR DETECTED: ${detectedProcessor.name} (${(confidence * 100).toFixed(1)}% confidence) ===`);
       
-      // Enhanced column mapping with separate debit volume for TRNXN
+      // Enhanced column mapping with detailed TRNXN debugging
       const locationColumn = findColumn(headers, detectedProcessor.locationColumn);
       const volumeColumn = findColumn(headers, detectedProcessor.volumeColumn);
       const debitVolumeColumn = detectedProcessor.debitVolumeColumn ? findColumn(headers, detectedProcessor.debitVolumeColumn) : null;
       const commissionColumn = findColumn(headers, detectedProcessor.commissionColumn);
       
-      console.log('=== ENHANCED COLUMN MAPPING FOR TRNXN H+I VOLUMES ===');
-      console.log('- Location column:', locationColumn);
-      console.log('- Bank Card Volume column (H):', volumeColumn);
-      console.log('- Debit Card Volume column (I):', debitVolumeColumn);
-      console.log('- Commission column:', commissionColumn);
+      console.log('=== ENHANCED COLUMN MAPPING WITH DETAILED TRNXN DEBUG ===');
+      console.log('- Location column found:', locationColumn);
+      console.log('- Bank Card Volume column (H) found:', volumeColumn);
+      console.log('- Debit Card Volume column (I) found:', debitVolumeColumn);
+      console.log('- Commission column found:', commissionColumn);
 
       if (!locationColumn) {
         throw new Error(`CRITICAL ERROR: No location column found for ${detectedProcessor.name}! Expected columns: ${detectedProcessor.locationColumn.join(', ')}`);
@@ -541,11 +544,27 @@ const FileUpload = () => {
         throw new Error(`Could not detect volume column for ${detectedProcessor.name}. Expected columns: ${detectedProcessor.volumeColumn.join(', ')}`);
       }
 
-      // ENHANCED: For TRNXN, warn if debit volume column is not found
-      if (detectedProcessor.name === 'TRNXN' && !debitVolumeColumn) {
-        console.log('⚠️ WARNING: TRNXN processor detected but no Debit Card Volume column found');
-        console.log('Available headers:', headers);
-        console.log('Looking for debit volume columns:', detectedProcessor.debitVolumeColumn);
+      // ENHANCED TRNXN VALIDATION: Check if we found both volume columns for TRNXN
+      if (detectedProcessor.name === 'TRNXN') {
+        console.log('=== TRNXN COLUMN VALIDATION ===');
+        console.log('Bank Card Volume column (H):', volumeColumn);
+        console.log('Debit Card Volume column (I):', debitVolumeColumn);
+        
+        if (!debitVolumeColumn) {
+          console.log('⚠️ CRITICAL WARNING: TRNXN processor detected but no Debit Card Volume column found!');
+          console.log('Available headers:', headers);
+          console.log('Searching for debit volume with patterns:', detectedProcessor.debitVolumeColumn);
+          
+          // Try a more aggressive search for debit volume
+          const debitHeaders = headers.filter(h => 
+            h.toLowerCase().includes('debit') || 
+            h.toLowerCase().includes('db') ||
+            (h.toLowerCase().includes('card') && h.toLowerCase().includes('vol'))
+          );
+          console.log('Headers that might contain debit volume:', debitHeaders);
+        } else {
+          console.log('✅ TRNXN: Both Bank Card and Debit Card volume columns detected successfully!');
+        }
       }
 
       const [year, month] = selectedMonth.split('-');
