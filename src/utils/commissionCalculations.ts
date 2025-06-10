@@ -17,6 +17,14 @@ export interface AgentLocationSummary {
   totalCommission: number;
 }
 
+interface LocationData {
+  totalVolume: number;
+  totalAgentPayout: number;
+  bankCardTotal: number;
+  debitCardTotal: number;
+  transactionCount: number;
+}
+
 export const calculateLocationCommissions = (
   transactions: any[],
   assignments: any[],
@@ -117,18 +125,12 @@ export const calculateLocationCommissions = (
     }
     
     return acc;
-  }, {} as Record<string, { 
-    totalVolume: number; 
-    totalAgentPayout: number; 
-    bankCardTotal: number; 
-    debitCardTotal: number; 
-    transactionCount: number;
-  }>);
+  }, {} as Record<string, LocationData>);
 
   console.log('🎯 ENHANCED FINAL LOCATION VOLUME DATA:', locationData);
 
   // Enhanced debug: Check total volumes across all locations with breakdown
-  const allLocationTotals = Object.entries(locationData).map(([accountId, data]) => ({
+  const allLocationTotals = Object.entries(locationData).map(([accountId, data]: [string, LocationData]) => ({
     accountId,
     totalVolume: data.totalVolume,
     bankCardTotal: data.bankCardTotal,
