@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, MapPin, Building2, Users, DollarSign } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Search, MapPin, Building2, Users, DollarSign, Edit3, Check, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -22,6 +23,8 @@ const UnifiedLocations = () => {
   const [newAccountId, setNewAccountId] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
   const [commissionRate, setCommissionRate] = useState("");
+  const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const [tempNotes, setTempNotes] = useState("");
   const { toast } = useToast();
 
   // Ensure Merchant Hero exists and assign to locations without assignments
@@ -267,6 +270,43 @@ const UnifiedLocations = () => {
     }
   });
 
+  const handleNotesUpdate = async (locationId: string, notes: string) => {
+    try {
+      const { error } = await supabase
+        .from('locations')
+        .update({ notes })
+        .eq('id', locationId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Notes updated successfully"
+      });
+
+      setEditingNotes(null);
+      setTempNotes("");
+      refetch();
+    } catch (error: any) {
+      console.error('Error updating notes:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update notes",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const startEditingNotes = (locationId: string, currentNotes: string) => {
+    setEditingNotes(locationId);
+    setTempNotes(currentNotes || "");
+  };
+
+  const cancelEditingNotes = () => {
+    setEditingNotes(null);
+    setTempNotes("");
+  };
+
   const AgentAssignmentDisplay = ({ location }: { location: any }) => {
     const { assignments = [], commissions = [], totalCommission = 0 } = location;
     
@@ -287,7 +327,7 @@ const UnifiedLocations = () => {
           
           const bpsDisplay = assignment.agent_name === 'Merchant Hero' && assignment.commission_rate === 0
             ? 'Prime Agent'
-            : `${Math.round(assignment.commission_rate * 100)} BPS`;
+            : `${Math.round(assignment.commission_rate * 10000)} BPS`;
 
           return (
             <div key={assignment.id} className="bg-muted/30 rounded-lg p-3">
@@ -521,7 +561,66 @@ const UnifiedLocations = () => {
                         <Users className="h-4 w-4" />
                         Assigned Agents ({location.assignedAgents || 0})
                       </div>
+                      <LocationAgentInlineEdit 
+                        locationId={location.id}
+                        locationName={location.name}
+                        onUpdate={refetch}
+                      />
+                    </div>
+
+                    <div>
                       <AgentAssignmentDisplay location={location} />
+                    </div>
+
+                    {/* Notes Section */}
+                    <div className="pt-3 border-t border-muted">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-muted-foreground">Notes</span>
+                        {editingNotes !== location.id && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={() => startEditingNotes(location.id, location.notes)}
+                          >
+                            <Edit3 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                      
+                      {editingNotes === location.id ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={tempNotes}
+                            onChange={(e) => setTempNotes(e.target.value)}
+                            placeholder="Add notes..."
+                            className="min-h-[60px] text-sm"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              onClick={() => handleNotesUpdate(location.id, tempNotes)}
+                            >
+                              <Check className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              onClick={cancelEditingNotes}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground min-h-[40px] p-2 bg-muted/20 rounded border">
+                          {location.notes || "No notes added"}
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
