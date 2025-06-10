@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,13 +50,16 @@ const UnifiedLocations = () => {
         const locationAssignments = assignments.filter(a => a.location_id === location.id);
         const locationTransactions = transactions.filter(t => t.account_id === location.account_id);
         
-        const totalVolume = locationTransactions.reduce((sum, t) => 
-          sum + (parseFloat(t.volume) || 0) + (parseFloat(t.debit_volume) || 0), 0
-        );
+        const totalVolume = locationTransactions.reduce((sum, t) => {
+          const volume = Number(t.volume) || 0;
+          const debitVolume = Number(t.debit_volume) || 0;
+          return sum + volume + debitVolume;
+        }, 0);
         
-        const totalCommission = locationTransactions.reduce((sum, t) => 
-          sum + (parseFloat(t.agent_payout) || 0), 0
-        );
+        const totalCommission = locationTransactions.reduce((sum, t) => {
+          const agentPayout = Number(t.agent_payout) || 0;
+          return sum + agentPayout;
+        }, 0);
 
         return {
           ...location,
