@@ -72,14 +72,37 @@ export const calculateLocationCommissions = (
     const locationInfo = locationData[location.account_id];
     if (!locationInfo) {
       console.log(`No transaction data found for location ${location.name} (${location.account_id})`);
+      // Still create a commission entry with zero values for display purposes
+      if (assignment.agent_name === 'Merchant Hero') {
+        commissions.push({
+          locationId: assignment.location_id,
+          locationName: location.name,
+          agentName: assignment.agent_name,
+          bpsRate: 0,
+          decimalRate: 0,
+          locationVolume: 0,
+          commission: 0
+        });
+      } else {
+        const decimalRate = convertToDecimalRate(assignment.commission_rate);
+        const displayBPS = Math.round(assignment.commission_rate * 100);
+        commissions.push({
+          locationId: assignment.location_id,
+          locationName: location.name,
+          agentName: assignment.agent_name,
+          bpsRate: displayBPS,
+          decimalRate,
+          locationVolume: 0,
+          commission: 0
+        });
+      }
       return;
     }
 
     console.log(`Processing assignment: ${assignment.agent_name} at ${location.name}`);
 
     if (assignment.agent_name === 'Merchant Hero') {
-      // For Merchant Hero, calculate net income = total agent_payout - commissions paid to other agents
-      // Merchant Hero is automatically assigned to every location and gets the remainder
+      // For Merchant Hero, they get the total agent_payout minus commissions paid to other agents
       const otherAgentAssignments = assignments.filter(a => 
         a.is_active && 
         a.location_id === assignment.location_id && 
@@ -93,26 +116,25 @@ export const calculateLocationCommissions = (
         totalCommissionsPaid += commission;
       });
       
+      // Merchant Hero gets the remainder after paying other agents
       const merchantHeroNet = locationInfo.totalAgentPayout - totalCommissionsPaid;
       
-      console.log(`Merchant Hero calculation for ${location.name} (gets remainder after paying other agents):`, {
+      console.log(`Merchant Hero calculation for ${location.name}:`, {
         totalAgentPayout: locationInfo.totalAgentPayout,
         totalCommissionsPaid,
         merchantHeroNet,
         formula: `${locationInfo.totalAgentPayout} - ${totalCommissionsPaid} = ${merchantHeroNet}`
       });
 
-      if (locationInfo.totalAgentPayout > 0) {
-        commissions.push({
-          locationId: assignment.location_id,
-          locationName: location.name,
-          agentName: assignment.agent_name,
-          bpsRate: 0, // Merchant Hero doesn't have a fixed BPS rate - gets remainder
-          decimalRate: 0,
-          locationVolume: locationInfo.totalVolume,
-          commission: merchantHeroNet
-        });
-      }
+      commissions.push({
+        locationId: assignment.location_id,
+        locationName: location.name,
+        agentName: assignment.agent_name,
+        bpsRate: 0, // Merchant Hero doesn't have a fixed BPS rate - gets remainder
+        decimalRate: 0,
+        locationVolume: locationInfo.totalVolume,
+        commission: Math.max(0, merchantHeroNet) // Ensure commission is not negative
+      });
     } else {
       // For other agents, use the standard BPS calculation on volume
       const decimalRate = convertToDecimalRate(assignment.commission_rate);
@@ -130,17 +152,15 @@ export const calculateLocationCommissions = (
         formula: `${locationInfo.totalVolume} × ${decimalRate} = ${commission}`
       });
 
-      if (commission > 0) {
-        commissions.push({
-          locationId: assignment.location_id,
-          locationName: location.name,
-          agentName: assignment.agent_name,
-          bpsRate: displayBPS,
-          decimalRate,
-          locationVolume: locationInfo.totalVolume,
-          commission
-        });
-      }
+      commissions.push({
+        locationId: assignment.location_id,
+        locationName: location.name,
+        agentName: assignment.agent_name,
+        bpsRate: displayBPS,
+        decimalRate,
+        locationVolume: locationInfo.totalVolume,
+        commission
+      });
     }
   });
 
