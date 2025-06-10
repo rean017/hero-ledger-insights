@@ -46,7 +46,7 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
     }
   });
 
-  // Fetch assignments for this location
+  // Fetch assignments for this location (including inactive ones to check for duplicates)
   const { data: assignments, refetch } = useQuery({
     queryKey: ['location-assignments', locationId],
     queryFn: async () => {
@@ -55,6 +55,20 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
         .select('*')
         .eq('location_id', locationId)
         .eq('is_active', true);
+
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // Fetch all assignments (including inactive) to check for existing records
+  const { data: allAssignments } = useQuery({
+    queryKey: ['all-location-assignments', locationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('location_agent_assignments')
+        .select('*')
+        .eq('location_id', locationId);
 
       if (error) throw error;
       return data;
@@ -71,7 +85,7 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
       return;
     }
 
-    // Check if agent is already assigned
+    // Check if agent is already active
     if (assignments?.some(a => a.agent_name === newAgent)) {
       toast({
         title: "Error",
@@ -84,21 +98,45 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
     const decimalRate = parseFloat(newRate) / 100; // Convert BPS to decimal
 
     try {
-      const { error } = await supabase
-        .from('location_agent_assignments')
-        .insert({
-          location_id: locationId,
-          agent_name: newAgent,
-          commission_rate: decimalRate,
-          is_active: true
+      // Check if there's an existing inactive assignment for this agent
+      const existingAssignment = allAssignments?.find(
+        a => a.agent_name === newAgent && !a.is_active
+      );
+
+      if (existingAssignment) {
+        // Reactivate the existing assignment with new rate
+        const { error } = await supabase
+          .from('location_agent_assignments')
+          .update({ 
+            is_active: true,
+            commission_rate: decimalRate
+          })
+          .eq('id', existingAssignment.id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Success",
+          description: `${newAgent} re-assigned with ${newRate} BPS`
         });
+      } else {
+        // Create new assignment
+        const { error } = await supabase
+          .from('location_agent_assignments')
+          .insert({
+            location_id: locationId,
+            agent_name: newAgent,
+            commission_rate: decimalRate,
+            is_active: true
+          });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: `${newAgent} assigned with ${newRate} BPS`
-      });
+        toast({
+          title: "Success",
+          description: `${newAgent} assigned with ${newRate} BPS`
+        });
+      }
 
       setNewAgent("");
       setNewRate("");
@@ -109,7 +147,9 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ['unified-locations'] });
       queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-location-assignments', locationId] });
     } catch (error: any) {
+      console.error('Error assigning agent:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to assign agent",
@@ -173,6 +213,7 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ['unified-locations'] });
       queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-location-assignments', locationId] });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -187,6 +228,7 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
     setEditRate((currentRate * 100).toString()); // Convert decimal to BPS for display
   };
 
+  // Filter available agents to exclude only those that are currently active
   const availableAgents = agents?.filter(
     agent => !assignments?.some(a => a.agent_name === agent.name)
   ) || [];
@@ -234,7 +276,9 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
             ) : (
               <div className="flex items-center gap-1">
                 <span className="text-xs text-muted-foreground bg-background px-1 py-0.5 rounded border">
-                  {Math.round(assignment.commission_rate * 100)} BPS
+                  {assignment.agent_name === 'Merchant Hero' && assignment.commission_rate === 0
+                    ? 'Prime Agent'
+                    : `${Math.round(assignment.commission_rate * 100)} BPS`}
                 </span>
                 <Button
                   size="sm"
