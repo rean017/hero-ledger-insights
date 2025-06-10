@@ -75,7 +75,8 @@ export const calculateLocationCommissions = (
   console.log('Location data calculated:', locationData);
 
   // Debug: Check if we have any agent_payout data at all
-  const totalAgentPayouts = Object.values(locationData).reduce((sum, data) => sum + data.totalAgentPayout, 0);
+  const locationEntries = Object.values(locationData) as { totalVolume: number; totalAgentPayout: number }[];
+  const totalAgentPayouts = locationEntries.reduce((sum, data) => sum + data.totalAgentPayout, 0);
   console.log('Total agent payouts across all locations:', totalAgentPayouts);
 
   // Calculate commissions for each active assignment
