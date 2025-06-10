@@ -598,7 +598,7 @@ const FileUpload = () => {
                   locationsCreated++;
                 }
 
-                // Create Merchant Hero assignment with calculated BPS rate
+                // FIXED: Calculate total volume correctly for TRNXN (Bank Card + Debit Card)
                 const totalVolume = (processedData.volume || 0) + (processedData.debitVolume || 0);
                 if (totalVolume > 0 && processedData.agentPayout) {
                   await createMerchantHeroAssignment(existingLocationId, totalVolume, processedData.agentPayout);
@@ -845,5 +845,3 @@ const FileUpload = () => {
 };
 
 export default FileUpload;
-
-}
