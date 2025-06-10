@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -139,7 +140,7 @@ const UnifiedLocations = () => {
   // Calculate location data with commission details
   const locationData = locations.map(location => {
     const locationTransactions = filteredTransactions.filter(t => t.account_id === location.account_id);
-    const totalVolume = locationTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const totalVolume = locationTransactions.reduce((sum, t) => sum + (t.volume || 0), 0);
     
     // Get agents for this location
     const locationAssignments = assignments.filter(a => a.location_id === location.id);
@@ -178,7 +179,7 @@ const UnifiedLocations = () => {
 
   // Filter based on search term
   const filteredLocations = locationData.filter(location =>
-    location.location_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    location.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     location.account_id?.includes(searchTerm) ||
     location.location_agent_assignments?.some((assignment: any) =>
       assignment.agent_name?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -350,9 +351,9 @@ const UnifiedLocations = () => {
                 <TableRow key={location.id}>
                   <TableCell>
                     <div className="flex flex-col">
-                      <span className="font-medium">{location.location_name}</span>
+                      <span className="font-medium">{location.name}</span>
                       <Badge variant="secondary" className="w-fit mt-1">
-                        {location.business_type || 'Business'}
+                        {location.account_type || 'Business'}
                       </Badge>
                     </div>
                   </TableCell>
@@ -372,7 +373,7 @@ const UnifiedLocations = () => {
                   <TableCell>
                     <LocationAgentInlineEdit
                       locationId={location.id}
-                      locationName={location.location_name}
+                      locationName={location.name}
                       onUpdate={refetchData}
                     />
                   </TableCell>
