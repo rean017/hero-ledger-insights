@@ -174,7 +174,8 @@ const UnifiedLocations = () => {
         .from('locations')
         .insert([{ 
           name: newLocationName.trim(), 
-          account_id: newAccountId.trim() 
+          account_id: newAccountId.trim(),
+          notes: ""
         }])
         .select()
         .single();
