@@ -47,18 +47,21 @@ export const calculateLocationCommissions = (
       };
     }
     
-    // FIXED: For TRNXN, properly sum both Bank Card Volume (column H) and Debit Card Volume (column I)
+    // CRITICAL FIX: Properly handle both volume columns for ALL processors
     const bankCardVolume = Number(transaction.volume) || 0;
     const debitCardVolume = Number(transaction.debit_volume) || 0;
+    
+    // For TRNXN and other processors that have separate debit volume, add both
+    // For processors that only have one volume column, debit_volume will be 0
     const totalTransactionVolume = bankCardVolume + debitCardVolume;
     
     acc[accountId].totalVolume += totalTransactionVolume;
     
-    console.log(`Processing transaction for account ${accountId}:`);
-    console.log(`  - Bank Card Volume (H): ${bankCardVolume}`);
-    console.log(`  - Debit Card Volume (I): ${debitCardVolume}`);
-    console.log(`  - Total Volume for this transaction: ${totalTransactionVolume}`);
-    console.log(`  - Running total for location: ${acc[accountId].totalVolume}`);
+    console.log(`🔍 VOLUME CALCULATION DEBUG for account ${accountId}:`);
+    console.log(`  - Bank Card Volume (from 'volume' column): ${bankCardVolume}`);
+    console.log(`  - Debit Card Volume (from 'debit_volume' column): ${debitCardVolume}`);
+    console.log(`  - Transaction Total Volume (H + I): ${totalTransactionVolume}`);
+    console.log(`  - Running Location Total: ${acc[accountId].totalVolume}`);
     
     // agent_payout is what Merchant Hero receives on this transaction
     const agentPayout = Number(transaction.agent_payout) || 0;
@@ -72,12 +75,18 @@ export const calculateLocationCommissions = (
     return acc;
   }, {} as Record<string, { totalVolume: number; totalAgentPayout: number }>);
 
-  console.log('Location data calculated:', locationData);
+  console.log('🎯 FINAL LOCATION VOLUME DATA:', locationData);
 
-  // Debug: Check if we have any agent_payout data at all
-  const locationEntries = Object.values(locationData) as { totalVolume: number; totalAgentPayout: number }[];
-  const totalAgentPayouts = locationEntries.reduce((sum, data) => sum + data.totalAgentPayout, 0);
-  console.log('Total agent payouts across all locations:', totalAgentPayouts);
+  // Debug: Check total volumes across all locations
+  const allLocationTotals = Object.entries(locationData).map(([accountId, data]) => ({
+    accountId,
+    totalVolume: data.totalVolume,
+    totalAgentPayout: data.totalAgentPayout
+  }));
+  console.log('📊 ALL LOCATION TOTALS:', allLocationTotals);
+  
+  const grandTotalVolume = allLocationTotals.reduce((sum, loc) => sum + loc.totalVolume, 0);
+  console.log(`🏆 GRAND TOTAL VOLUME ACROSS ALL LOCATIONS: ${grandTotalVolume}`);
 
   // Calculate commissions for each active assignment
   assignments.forEach(assignment => {
@@ -123,8 +132,8 @@ export const calculateLocationCommissions = (
       return;
     }
 
-    console.log(`Processing assignment: ${assignment.agent_name} at ${location.name}`);
-    console.log(`Location total volume (Bank Card + Debit Card): ${locationInfo.totalVolume}`);
+    console.log(`💰 Processing assignment: ${assignment.agent_name} at ${location.name}`);
+    console.log(`📈 Location calculated total volume (Bank Card + Debit Card): ${locationInfo.totalVolume}`);
 
     if (assignment.agent_name === 'Merchant Hero') {
       console.log(`DEBUG: Merchant Hero calculation for ${location.name}:`);
@@ -204,7 +213,15 @@ export const calculateLocationCommissions = (
     }
   });
 
-  console.log('Final commissions calculated:', commissions);
+  console.log('🎉 Final commissions calculated:', commissions);
+  
+  // Log final volume totals for verification
+  const finalVolumeTotals = commissions.reduce((acc, commission) => {
+    acc[commission.locationName] = commission.locationVolume;
+    return acc;
+  }, {} as Record<string, number>);
+  console.log('🔍 FINAL VOLUME TOTALS BY LOCATION:', finalVolumeTotals);
+  
   return commissions;
 };
 
