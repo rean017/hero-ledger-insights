@@ -17,17 +17,6 @@ const LocationCommissionReport = () => {
         .select('*');
 
       if (error) throw error;
-      
-      console.log('=== COMMISSION REPORT TRANSACTION DATA ===');
-      console.log('Total transactions loaded:', data.length);
-      console.log('Sample transactions with volume data:', data.slice(0, 3).map(t => ({
-        account_id: t.account_id,
-        processor: t.processor,
-        volume: t.volume,
-        debit_volume: t.debit_volume,
-        total_calculated: (Number(t.volume) || 0) + (Number(t.debit_volume) || 0)
-      })));
-      
       return data;
     }
   });
@@ -62,16 +51,46 @@ const LocationCommissionReport = () => {
   const commissions = calculateLocationCommissions(transactions, assignments, locations);
   const agentSummaries = groupCommissionsByAgent(commissions);
 
-  const totalCommissions = commissions.reduce((sum, c) => sum + c.commission, 0);
+  const totalCommissions = commissions.reduce((sum, c) => {
+    // Sum both agent payouts and merchant hero payouts
+    return sum + c.agentPayout + c.merchantHeroPayout;
+  }, 0);
+
+  const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
+  const totalNetPayout = commissions.reduce((sum, c) => sum + c.netAgentPayout, 0);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground flex items-center gap-2">
                 <Calculator className="h-4 w-4" />
+                Total Volume
+              </span>
+              <span className="font-semibold">${totalVolume.toLocaleString()}</span>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Net Agent Payout
+              </span>
+              <span className="font-semibold">${totalNetPayout.toLocaleString()}</span>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
                 Total Commissions
               </span>
               <span className="font-semibold">${totalCommissions.toLocaleString()}</span>
@@ -87,18 +106,6 @@ const LocationCommissionReport = () => {
                 Active Locations
               </span>
               <span className="font-semibold">{new Set(commissions.map(c => c.locationId)).size}</span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Active Agents
-              </span>
-              <span className="font-semibold">{agentSummaries.length}</span>
             </div>
           </CardContent>
         </Card>
@@ -127,8 +134,10 @@ const LocationCommissionReport = () => {
                     <TableRow>
                       <TableHead>Location</TableHead>
                       <TableHead>Volume</TableHead>
+                      <TableHead>Net Payout</TableHead>
                       <TableHead>Rate</TableHead>
-                      <TableHead>Commission</TableHead>
+                      <TableHead>Agent Commission</TableHead>
+                      <TableHead>Merchant Hero</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -136,6 +145,7 @@ const LocationCommissionReport = () => {
                       <TableRow key={`${location.locationId}-${location.agentName}`}>
                         <TableCell className="font-medium">{location.locationName}</TableCell>
                         <TableCell>${location.locationVolume.toLocaleString()}</TableCell>
+                        <TableCell>${location.netAgentPayout.toLocaleString()}</TableCell>
                         <TableCell>
                           {location.agentName === 'Merchant Hero' ? (
                             <Badge variant="secondary">Remainder</Badge>
@@ -144,7 +154,10 @@ const LocationCommissionReport = () => {
                           )}
                         </TableCell>
                         <TableCell className="font-semibold">
-                          ${location.commission.toLocaleString()}
+                          ${location.agentPayout.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          ${location.merchantHeroPayout.toLocaleString()}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -166,26 +179,29 @@ const LocationCommissionReport = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            Detailed Commission Breakdown
+            Detailed Revenue Breakdown (Your Exact Formula)
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Agent</TableHead>
                 <TableHead>Location</TableHead>
-                <TableHead>Location Volume</TableHead>
+                <TableHead>Agent</TableHead>
+                <TableHead>Total Volume</TableHead>
+                <TableHead>Net Agent Payout</TableHead>
                 <TableHead>BPS Rate</TableHead>
-                <TableHead>Commission</TableHead>
+                <TableHead>Agent Payout</TableHead>
+                <TableHead>Merchant Hero Payout</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {commissions.map((commission, index) => (
                 <TableRow key={index}>
-                  <TableCell className="font-medium">{commission.agentName}</TableCell>
-                  <TableCell>{commission.locationName}</TableCell>
+                  <TableCell className="font-medium">{commission.locationName}</TableCell>
+                  <TableCell>{commission.agentName}</TableCell>
                   <TableCell>${commission.locationVolume.toLocaleString()}</TableCell>
+                  <TableCell>${commission.netAgentPayout.toLocaleString()}</TableCell>
                   <TableCell>
                     {commission.agentName === 'Merchant Hero' ? (
                       <Badge variant="secondary">Remainder</Badge>
@@ -194,7 +210,10 @@ const LocationCommissionReport = () => {
                     )}
                   </TableCell>
                   <TableCell className="font-semibold">
-                    ${commission.commission.toLocaleString()}
+                    ${commission.agentPayout.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="font-semibold">
+                    ${commission.merchantHeroPayout.toLocaleString()}
                   </TableCell>
                 </TableRow>
               ))}
@@ -205,7 +224,7 @@ const LocationCommissionReport = () => {
             <div className="text-center py-8 text-muted-foreground">
               No commission data to display. Upload transaction data and assign agents to locations.
             </div>
-          )}
+            )}
         </CardContent>
       </Card>
     </div>
