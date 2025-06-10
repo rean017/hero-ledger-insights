@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import LocationEditDialog from "./LocationEditDialog";
+import LocationNameFixer from "./LocationNameFixer";
 import { convertToBPSDisplay, convertToDecimalRate } from "@/utils/bpsCalculations";
 
 interface Location {
@@ -214,6 +215,9 @@ const Locations = () => {
         <p className="text-muted-foreground">Manage locations and assign agents with commission rates</p>
       </div>
 
+      {/* Location Name Fixer */}
+      <LocationNameFixer />
+
       {/* Quick Agent Assignment */}
       <Card>
         <CardHeader>
@@ -274,7 +278,7 @@ const Locations = () => {
         </CardContent>
       </Card>
 
-      {/* Search Bar - moved here after Quick Agent Assignment */}
+      {/* Search Bar */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -341,7 +345,7 @@ const Locations = () => {
         </Card>
       </div>
 
-      {/* Locations Grid - now using filtered locations */}
+      {/* Locations Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredLocations?.map((location) => {
           const locationAssignments = locationAssignmentGroups[location.id] || [];
