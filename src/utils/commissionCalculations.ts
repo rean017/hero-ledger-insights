@@ -32,7 +32,7 @@ export const calculateLocationCommissions = (
   assignments: any[],
   locations: any[]
 ): LocationCommission[] => {
-  console.log('=== COMMISSION CALCULATION WITH BPS SYSTEM ===');
+  console.log('=== COMMISSION CALCULATION WITH AUTO MERCHANT HERO ===');
   console.log('Total transactions:', transactions.length);
   console.log('Total assignments:', assignments.length);
   console.log('Total locations:', locations.length);
@@ -78,17 +78,22 @@ export const calculateLocationCommissions = (
 
   console.log('📊 LOCATION DATA SUMMARY:', locationData);
 
-  // Calculate commissions for each active assignment using YOUR EXACT FORMULA
-  assignments.forEach(assignment => {
-    if (!assignment.is_active) {
-      console.log('Skipping inactive assignment:', assignment);
-      return;
+  // Group assignments by location to calculate Merchant Hero automatically
+  const assignmentsByLocation = assignments.reduce((acc, assignment) => {
+    if (!assignment.is_active) return acc;
+    
+    if (!acc[assignment.location_id]) {
+      acc[assignment.location_id] = [];
     }
+    acc[assignment.location_id].push(assignment);
+    return acc;
+  }, {} as Record<string, any[]>);
 
-    // Find the location for this assignment
-    const location = locations.find(loc => loc.id === assignment.location_id);
+  // Calculate commissions for each location
+  Object.entries(assignmentsByLocation).forEach(([locationId, locationAssignments]) => {
+    const location = locations.find(loc => loc.id === locationId);
     if (!location) {
-      console.log('Location not found for assignment:', assignment.location_id);
+      console.log('Location not found for assignment:', locationId);
       return;
     }
 
@@ -96,75 +101,46 @@ export const calculateLocationCommissions = (
     if (!locationInfo) {
       console.log(`No transaction data found for location ${location.name} (${location.account_id})`);
       // Create zero-value entries for display
-      commissions.push({
-        locationId: assignment.location_id,
-        locationName: location.name,
-        agentName: assignment.agent_name,
-        bpsRate: Math.round(assignment.commission_rate * 100),
-        decimalRate: convertToDecimalRate(assignment.commission_rate),
-        locationVolume: 0,
-        netAgentPayout: 0,
-        agentPayout: 0,
-        merchantHeroPayout: 0
+      locationAssignments.forEach(assignment => {
+        commissions.push({
+          locationId: assignment.location_id,
+          locationName: location.name,
+          agentName: assignment.agent_name,
+          bpsRate: assignment.agent_name === 'Merchant Hero' ? 0 : Math.round(assignment.commission_rate * 100),
+          decimalRate: convertToDecimalRate(assignment.commission_rate),
+          locationVolume: 0,
+          netAgentPayout: 0,
+          agentPayout: 0,
+          merchantHeroPayout: 0
+        });
       });
       return;
     }
 
-    console.log(`💼 Processing assignment: ${assignment.agent_name} at ${location.name}`);
+    console.log(`💼 Processing location: ${location.name}`);
     console.log(`📈 Location data:`, {
       totalVolume: locationInfo.totalVolume,
       netAgentPayout: locationInfo.totalAgentPayout
     });
 
-    if (assignment.agent_name === 'Merchant Hero') {
-      // For Merchant Hero, calculate what's left after paying other agents
-      const otherAgentAssignments = assignments.filter(a => 
-        a.is_active && 
-        a.location_id === assignment.location_id && 
-        a.agent_name !== 'Merchant Hero'
-      );
-      
-      let totalCommissionsPaid = 0;
-      otherAgentAssignments.forEach(otherAssignment => {
-        // YOUR EXACT FORMULA: agent_payout = total_volume * (bps_rate / 10000)
-        const bpsDecimal = otherAssignment.commission_rate / 100; // Convert stored decimal to BPS decimal
-        const agentPayout = locationInfo.totalVolume * bpsDecimal;
-        totalCommissionsPaid += agentPayout;
-        console.log(`  - Commission to ${otherAssignment.agent_name}: ${agentPayout} (${Math.round(otherAssignment.commission_rate * 100)} BPS)`);
-      });
-      
-      // YOUR EXACT FORMULA: merchant_hero_payout = net_agent_payout - agent_payout
-      const merchantHeroPayout = Math.max(0, locationInfo.totalAgentPayout - totalCommissionsPaid);
-      
-      console.log(`Merchant Hero calculation:`, {
-        netAgentPayout: locationInfo.totalAgentPayout,
-        totalCommissionsPaid,
-        merchantHeroPayout
-      });
-
-      commissions.push({
-        locationId: assignment.location_id,
-        locationName: location.name,
-        agentName: assignment.agent_name,
-        bpsRate: 0, // Merchant Hero gets remainder, not fixed BPS
-        decimalRate: 0,
-        locationVolume: locationInfo.totalVolume,
-        netAgentPayout: locationInfo.totalAgentPayout,
-        agentPayout: 0, // Merchant Hero doesn't have agent_payout, they get the remainder
-        merchantHeroPayout
-      });
-    } else {
-      // For other agents: YOUR EXACT FORMULA: agent_payout = total_volume * (bps_rate / 10000)
-      const bpsDisplay = Math.round(assignment.commission_rate * 100);
-      const bpsDecimal = assignment.commission_rate / 100; // Convert stored decimal to calculation decimal
+    // First, calculate all non-Merchant Hero agent payouts
+    const otherAgents = locationAssignments.filter(a => a.agent_name !== 'Merchant Hero');
+    const merchantHeroAssignment = locationAssignments.find(a => a.agent_name === 'Merchant Hero');
+    
+    let totalCommissionsPaid = 0;
+    
+    // Calculate payouts for other agents
+    otherAgents.forEach(assignment => {
+      const bpsDecimal = assignment.commission_rate / 100; // Convert stored decimal to BPS decimal
       const agentPayout = locationInfo.totalVolume * bpsDecimal;
+      totalCommissionsPaid += agentPayout;
       
       console.log(`Agent calculation:`, {
         agentName: assignment.agent_name,
         locationName: location.name,
         totalVolume: locationInfo.totalVolume,
         storedRate: assignment.commission_rate,
-        bpsDisplay,
+        bpsDisplay: Math.round(assignment.commission_rate * 100),
         bpsDecimal,
         agentPayout,
         formula: `${locationInfo.totalVolume} × ${bpsDecimal} = ${agentPayout}`
@@ -174,12 +150,42 @@ export const calculateLocationCommissions = (
         locationId: assignment.location_id,
         locationName: location.name,
         agentName: assignment.agent_name,
-        bpsRate: bpsDisplay,
+        bpsRate: Math.round(assignment.commission_rate * 100),
         decimalRate: bpsDecimal,
         locationVolume: locationInfo.totalVolume,
         netAgentPayout: locationInfo.totalAgentPayout,
         agentPayout,
         merchantHeroPayout: 0 // Only Merchant Hero gets this
+      });
+    });
+
+    // Calculate Merchant Hero's auto-calculated earnings and BPS
+    if (merchantHeroAssignment) {
+      const merchantHeroPayout = Math.max(0, locationInfo.totalAgentPayout - totalCommissionsPaid);
+      
+      // Auto-calculate Merchant Hero's BPS rate based on their earnings
+      const merchantHeroBPS = locationInfo.totalVolume > 0 
+        ? Math.round((merchantHeroPayout / locationInfo.totalVolume) * 10000) // Convert to BPS
+        : 0;
+      
+      console.log(`Merchant Hero auto-calculation:`, {
+        netAgentPayout: locationInfo.totalAgentPayout,
+        totalCommissionsPaid,
+        merchantHeroPayout,
+        autoCalculatedBPS: merchantHeroBPS,
+        formula: `(${merchantHeroPayout} / ${locationInfo.totalVolume}) × 10000 = ${merchantHeroBPS} BPS`
+      });
+
+      commissions.push({
+        locationId: merchantHeroAssignment.location_id,
+        locationName: location.name,
+        agentName: merchantHeroAssignment.agent_name,
+        bpsRate: merchantHeroBPS, // Auto-calculated BPS
+        decimalRate: merchantHeroPayout / locationInfo.totalVolume, // Auto-calculated decimal rate
+        locationVolume: locationInfo.totalVolume,
+        netAgentPayout: locationInfo.totalAgentPayout,
+        agentPayout: 0, // Merchant Hero doesn't have agent_payout, they get the remainder
+        merchantHeroPayout
       });
     }
   });

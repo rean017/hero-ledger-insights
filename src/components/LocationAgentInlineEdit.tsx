@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -229,8 +228,9 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
   };
 
   // Filter available agents to exclude only those that are currently active
+  // Also exclude Merchant Hero from manual assignment since they're auto-calculated
   const availableAgents = agents?.filter(
-    agent => !assignments?.some(a => a.agent_name === agent.name)
+    agent => agent.name !== 'Merchant Hero' && !assignments?.some(a => a.agent_name === agent.name)
   ) || [];
 
   return (
@@ -276,26 +276,32 @@ const LocationAgentInlineEdit = ({ locationId, locationName, onUpdate }: Locatio
             ) : (
               <div className="flex items-center gap-1">
                 <span className="text-xs text-muted-foreground bg-background px-1 py-0.5 rounded border">
-                  {assignment.agent_name === 'Merchant Hero' && assignment.commission_rate === 0
-                    ? 'Prime Agent'
+                  {assignment.agent_name === 'Merchant Hero'
+                    ? 'Auto-Calculated'
                     : `${Math.round(assignment.commission_rate * 100)} BPS`}
                 </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 hover:text-blue-700"
-                  onClick={() => startEditing(assignment.id, assignment.commission_rate)}
-                >
-                  <Pencil className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 hover:text-red-700"
-                  onClick={() => handleRemoveAgent(assignment.id, assignment.agent_name)}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+                {/* Don't allow editing Merchant Hero's rate since it's auto-calculated */}
+                {assignment.agent_name !== 'Merchant Hero' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 hover:text-blue-700"
+                    onClick={() => startEditing(assignment.id, assignment.commission_rate)}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                )}
+                {/* Don't allow removing Merchant Hero since they should always be present */}
+                {assignment.agent_name !== 'Merchant Hero' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 hover:text-red-700"
+                    onClick={() => handleRemoveAgent(assignment.id, assignment.agent_name)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             )}
           </div>

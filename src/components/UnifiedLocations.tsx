@@ -169,7 +169,7 @@ const UnifiedLocations = () => {
     }
 
     try {
-      // Insert the new location without notes field to avoid TypeScript error
+      // Insert the new location
       const { data: location, error: locationError } = await supabase
         .from('locations')
         .insert([{ 
@@ -181,13 +181,13 @@ const UnifiedLocations = () => {
 
       if (locationError) throw locationError;
 
-      // Always assign Merchant Hero to every location with 0 BPS (since they get the remainder)
+      // Always assign Merchant Hero to every location with 0 BPS (since they auto-calculate)
       const { error: merchantHeroError } = await supabase
         .from('location_agent_assignments')
         .insert([{
           location_id: location.id,
           agent_name: 'Merchant Hero',
-          commission_rate: 0, // 0 BPS since they get the remainder
+          commission_rate: 0, // 0 BPS since they auto-calculate
           is_active: true
         }]);
 
@@ -340,9 +340,9 @@ const UnifiedLocations = () => {
             ? commission?.merchantHeroPayout || 0
             : commission?.agentPayout || 0;
           
-          // Display BPS exactly as entered - convert stored decimal back to BPS display
-          const bpsDisplay = assignment.agent_name === 'Merchant Hero' && assignment.commission_rate === 0
-            ? 'Prime Agent'
+          // For Merchant Hero, show auto-calculated BPS; for others, show their set rate
+          const bpsDisplay = assignment.agent_name === 'Merchant Hero'
+            ? `${commission?.bpsRate || 0} BPS (Auto)`
             : `${Math.round(assignment.commission_rate * 100)} BPS`;
 
           return (
@@ -654,3 +654,5 @@ const UnifiedLocations = () => {
 };
 
 export default UnifiedLocations;
+
+</edits_to_apply>
