@@ -31,7 +31,7 @@ const AgentManagement = () => {
 
   const dateRange = getDateRangeForTimeFrame(timeFrame);
 
-  // Fetch transactions - using the same approach as LocationCommissionReport
+  // Fetch transactions
   const { data: transactions = [] } = useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
@@ -50,7 +50,7 @@ const AgentManagement = () => {
     }
   });
 
-  // Fetch assignments - using the same approach as LocationCommissionReport
+  // Fetch assignments
   const { data: assignments = [] } = useQuery({
     queryKey: ['location_agent_assignments'],
     queryFn: async () => {
@@ -65,7 +65,7 @@ const AgentManagement = () => {
     }
   });
 
-  // Fetch locations - using the same approach as LocationCommissionReport
+  // Fetch locations
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
     queryFn: async () => {
@@ -94,13 +94,7 @@ const AgentManagement = () => {
     }
   });
 
-  // Calculate commissions using the SAME logic as LocationCommissionReport
-  const commissions = calculateLocationCommissions(transactions, assignments, locations);
-  const agentCommissionSummaries = groupCommissionsByAgent(commissions);
-
-  console.log('💰 Agent commission summaries:', agentCommissionSummaries);
-
-  // Filter transactions by date if needed (but only for display, not for base calculation)
+  // Apply date filtering FIRST, then calculate commissions with filtered data
   const filteredTransactions = dateRange 
     ? transactions.filter(t => {
         if (!t.transaction_date) return false;
@@ -109,16 +103,16 @@ const AgentManagement = () => {
       })
     : transactions;
 
-  // Recalculate commissions with filtered transactions if date range is applied
-  const filteredCommissions = dateRange 
-    ? calculateLocationCommissions(filteredTransactions, assignments, locations)
-    : commissions;
+  console.log('📅 Date filtering for timeframe:', timeFrame);
+  console.log('📅 Date range:', dateRange);
+  console.log('📅 Original transactions:', transactions.length);
+  console.log('📅 Filtered transactions:', filteredTransactions.length);
   
-  const filteredAgentSummaries = dateRange
-    ? groupCommissionsByAgent(filteredCommissions)
-    : agentCommissionSummaries;
+  // Calculate commissions using filtered transactions
+  const filteredCommissions = calculateLocationCommissions(filteredTransactions, assignments, locations);
+  const filteredAgentSummaries = groupCommissionsByAgent(filteredCommissions);
 
-  console.log('📅 Filtered commission summaries for timeframe:', timeFrame, filteredAgentSummaries);
+  console.log('💰 Filtered commission summaries for timeframe:', timeFrame, filteredAgentSummaries);
 
   // Get all unique agent names from both manual agents and assignments
   const allAgentNames = new Set<string>();
@@ -137,7 +131,7 @@ const AgentManagement = () => {
     }
   });
 
-  // Build final agent data using the commission summaries
+  // Build final agent data using the filtered commission summaries
   const agents = Array.from(allAgentNames).map(agentName => {
     const commissionSummary = filteredAgentSummaries.find(summary => summary.agentName === agentName);
     const manualAgent = manualAgents?.find(a => a.name === agentName);
@@ -176,7 +170,8 @@ const AgentManagement = () => {
       locationCommissions: locationCommissions.length,
       totalVolume,
       accountsCount,
-      locationsCount
+      locationsCount,
+      timeFrame
     });
 
     return {
@@ -487,3 +482,5 @@ const AgentManagement = () => {
 };
 
 export default AgentManagement;
+
+</edits_to_apply>
