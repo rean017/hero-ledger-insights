@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -372,6 +371,70 @@ const FileUpload = () => {
     }
   };
 
+  // NEW: Create or update Merchant Hero agent assignment with calculated BPS rate
+  const createMerchantHeroAssignment = async (locationId: string, volume: number, netCommission: number): Promise<void> => {
+    try {
+      // Calculate BPS rate: (Net Commission ÷ Volume) × 10,000
+      let bpsRate = 0;
+      if (volume > 0 && netCommission > 0) {
+        bpsRate = (netCommission / volume) * 10000;
+        console.log(`Calculated Merchant Hero BPS rate: ${bpsRate} (${netCommission} ÷ ${volume} × 10,000)`);
+      }
+
+      // Store as decimal rate for database (BPS ÷ 10,000)
+      const decimalRate = bpsRate / 10000;
+
+      // Check if Merchant Hero assignment already exists for this location
+      const { data: existingAssignment, error: selectError } = await supabase
+        .from('location_agent_assignments')
+        .select('id, commission_rate')
+        .eq('location_id', locationId)
+        .eq('agent_name', 'Merchant Hero')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (selectError && selectError.code !== 'PGRST116') {
+        console.error('Error checking existing Merchant Hero assignment:', selectError);
+        return;
+      }
+
+      if (existingAssignment) {
+        // Update existing assignment with new rate
+        const { error: updateError } = await supabase
+          .from('location_agent_assignments')
+          .update({
+            commission_rate: decimalRate,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingAssignment.id);
+
+        if (updateError) {
+          console.error('Error updating Merchant Hero assignment:', updateError);
+        } else {
+          console.log(`✅ Updated Merchant Hero assignment with ${bpsRate.toFixed(2)} BPS rate`);
+        }
+      } else {
+        // Create new assignment
+        const { error: insertError } = await supabase
+          .from('location_agent_assignments')
+          .insert({
+            location_id: locationId,
+            agent_name: 'Merchant Hero',
+            commission_rate: decimalRate,
+            is_active: true
+          });
+
+        if (insertError) {
+          console.error('Error creating Merchant Hero assignment:', insertError);
+        } else {
+          console.log(`✅ Created Merchant Hero assignment with ${bpsRate.toFixed(2)} BPS rate`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in createMerchantHeroAssignment:', error);
+    }
+  };
+
   const ensureAgentExists = async (agentName: string): Promise<string | null> => {
     if (!agentName) return null;
 
@@ -464,7 +527,7 @@ const FileUpload = () => {
     setUploadStatus({ status: 'processing', message: 'Processing file with enhanced processor detection...', filename: file.name });
 
     try {
-      console.log('=== STARTING ENHANCED PROCESSOR-SPECIFIC UPLOAD ===');
+      console.log('=== STARTING ENHANCED PROCESSOR-SPECIFIC UPLOAD WITH MERCHANT HERO AUTO-ASSIGNMENT ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
@@ -540,9 +603,10 @@ const FileUpload = () => {
       let successCount = 0;
       let errorCount = 0;
       let locationsCreated = 0;
+      let merchantHeroAssignments = 0;
       const errors: any[] = [];
 
-      console.log('=== PROCESSING ROWS WITH PROCESSOR-SPECIFIC VALIDATION ===');
+      console.log('=== PROCESSING ROWS WITH PROCESSOR-SPECIFIC VALIDATION AND MERCHANT HERO ASSIGNMENT ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         console.log(`\n--- Processing row ${i + 1} with ${detectedProcessor.name} format ---`);
@@ -565,6 +629,12 @@ const FileUpload = () => {
                 
                 if (locationCheck && new Date(locationCheck.created_at).getTime() > Date.now() - 5000) {
                   locationsCreated++;
+                }
+
+                // Create Merchant Hero assignment with calculated BPS rate
+                if (processedData.volume && processedData.agentPayout) {
+                  await createMerchantHeroAssignment(existingLocationId, processedData.volume, processedData.agentPayout);
+                  merchantHeroAssignments++;
                 }
               }
             }
@@ -613,6 +683,7 @@ const FileUpload = () => {
       console.log('Success count:', successCount);
       console.log('Error count:', errorCount);
       console.log('Locations created with business names:', locationsCreated);
+      console.log('Merchant Hero assignments created/updated:', merchantHeroAssignments);
       console.log('Total rows processed:', rawData.length);
 
       await supabase
@@ -637,7 +708,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
-      const successMessage = `${detectedProcessor.name} upload completed! Processed ${successCount} rows with proper business names for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for having numeric names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using ONLY proper business names.` : ''}`;
+      const successMessage = `${detectedProcessor.name} upload completed! Processed ${successCount} rows with proper business names for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for having numeric names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using ONLY proper business names.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -717,6 +788,9 @@ const FileUpload = () => {
                   <p className="text-xs text-green-600 mt-1 font-medium">
                     <strong>AUTO-DETECT:</strong> Maverick, Green Payments, TRNXN, or SignaPay formats
                   </p>
+                  <p className="text-xs text-blue-600 mt-1 font-medium">
+                    <strong>AUTO-ASSIGN:</strong> Merchant Hero with calculated BPS rates
+                  </p>
                 </div>
                 <input
                   type="file"
@@ -765,6 +839,16 @@ const FileUpload = () => {
           <p className="mt-2 text-sm font-medium text-green-800">
             <strong>🔍 AUTOMATIC DETECTION:</strong> System will detect your processor type automatically
           </p>
+        </div>
+
+        <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="font-medium mb-2 text-blue-800">🤖 MERCHANT HERO AUTO-ASSIGNMENT:</p>
+          <ul className="space-y-1 text-blue-700">
+            <li><strong>✅ AUTO-CALCULATE:</strong> BPS rates based on Volume vs Net Commission</li>
+            <li><strong>✅ AUTO-ASSIGN:</strong> Merchant Hero as agent to every location</li>
+            <li><strong>✅ AUTO-UPDATE:</strong> Existing assignments with new calculated rates</li>
+            <li><strong>✅ FORMULA:</strong> (Net Commission ÷ Volume) × 10,000 = BPS Rate</li>
+          </ul>
         </div>
 
         <div className="text-xs text-muted-foreground bg-red-50 border border-red-200 rounded-lg p-3">

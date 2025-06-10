@@ -70,12 +70,23 @@ export const calculateLocationCommissions = (
     console.log(`Location ${location.name} (${location.account_id}) volume: ${locationVolume}`);
 
     if (locationVolume > 0) {
-      // Calculate commission for this agent at this location
-      const decimalRate = convertToDecimalRate(assignment.commission_rate);
+      // For Merchant Hero assignments, the commission rate is already calculated based on actual earnings
+      // For other agents, use the standard BPS conversion
+      let decimalRate: number;
+      let displayBPS: number;
+      
+      if (assignment.agent_name === 'Merchant Hero') {
+        // Merchant Hero rates are already stored as proper decimal rates from actual earnings
+        decimalRate = assignment.commission_rate;
+        displayBPS = Math.round(assignment.commission_rate * 10000); // Convert back to BPS for display
+        console.log(`Merchant Hero assignment - stored rate: ${assignment.commission_rate}, display BPS: ${displayBPS}`);
+      } else {
+        // Standard agent rate conversion
+        decimalRate = convertToDecimalRate(assignment.commission_rate);
+        displayBPS = Math.round(assignment.commission_rate * 100);
+      }
+      
       const commission = locationVolume * decimalRate;
-
-      // Get the BPS rate for display - convert stored decimal back to BPS
-      const displayBPS = Math.round(assignment.commission_rate * 100);
 
       console.log(`Commission calculation:`, {
         agentName: assignment.agent_name,
