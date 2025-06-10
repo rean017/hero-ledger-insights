@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -117,7 +118,7 @@ const PLReports = () => {
         
         const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
         const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
-        const totalCommissions = commissions.reduce((sum, c) => sum + c.commission, 0);
+        const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
         
         history.push({
           month: format(month, 'MMM yyyy'),
@@ -174,7 +175,8 @@ const PLReports = () => {
         .slice(0, 10)
         .map((item, index) => ({
           rank: index + 1,
-          ...item
+          ...item,
+          commission: item.agentName === 'Merchant Hero' ? item.merchantHeroPayout : item.agentPayout
         }));
     },
     refetchOnWindowFocus: false
@@ -222,7 +224,7 @@ const PLReports = () => {
 
       // Use the same commission calculation logic as the commission reports
       const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-      const totalExpenses = commissions.reduce((sum, commission) => sum + commission.commission, 0);
+      const totalExpenses = commissions.reduce((sum, commission) => sum + (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout), 0);
 
       const netIncome = totalVolume - totalExpenses;
 
@@ -282,8 +284,8 @@ const PLReports = () => {
         bpsRate: commission.bpsRate,
         volume: commission.locationVolume,
         debitVolume: 0, // We can calculate this separately if needed
-        calculatedPayout: commission.commission,
-        profitContribution: commission.locationVolume - commission.commission
+        calculatedPayout: commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout,
+        profitContribution: commission.locationVolume - (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout)
       }));
 
       return agentLocationResults;

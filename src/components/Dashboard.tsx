@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, TrendingUp, Users, Building2 } from "lucide-react";
@@ -164,11 +165,11 @@ const Dashboard = () => {
       
       // Get only external agent commissions (not Merchant Hero)
       const externalAgentCommissions = commissions.filter(c => c.agentName !== 'Merchant Hero');
-      const totalExternalCommissions = externalAgentCommissions.reduce((sum, commission) => sum + commission.commission, 0);
+      const totalExternalCommissions = externalAgentCommissions.reduce((sum, commission) => sum + (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout), 0);
       
       // Get Merchant Hero commissions (this should be the net after paying other agents)
       const merchantHeroCommissions = commissions.filter(c => c.agentName === 'Merchant Hero');
-      const merchantHeroNetFromCommissionCalc = merchantHeroCommissions.reduce((sum, commission) => sum + commission.commission, 0);
+      const merchantHeroNetFromCommissionCalc = merchantHeroCommissions.reduce((sum, commission) => sum + (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout), 0);
       
       console.log('Commission breakdown:', {
         totalExternalCommissions,

@@ -147,7 +147,7 @@ const AgentPLReport = () => {
         
         const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
         const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
-        const totalCommissions = commissions.reduce((sum, c) => sum + c.commission, 0);
+        const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
         
         history.push({
           month: format(month, 'MMM yyyy'),
@@ -204,7 +204,8 @@ const AgentPLReport = () => {
         .slice(0, 10)
         .map((item, index) => ({
           rank: index + 1,
-          ...item
+          ...item,
+          commission: item.agentName === 'Merchant Hero' ? item.merchantHeroPayout : item.agentPayout
         }));
     },
     refetchOnWindowFocus: false
@@ -251,11 +252,14 @@ const AgentPLReport = () => {
       const agentCommissions = commissions.filter(c => c.agentName === selectedAgent);
       
       const totalVolume = agentCommissions.reduce((sum, c) => sum + c.locationVolume, 0);
-      const totalCommission = agentCommissions.reduce((sum, c) => sum + c.commission, 0);
+      const totalCommission = agentCommissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
 
       return {
         agentName: selectedAgent,
-        locations: agentCommissions,
+        locations: agentCommissions.map(commission => ({
+          ...commission,
+          commission: commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout
+        })),
         totalVolume,
         totalCommission,
         period: dateRange.label,
