@@ -81,8 +81,8 @@ const FileUpload = () => {
     {
       name: 'TRNXN',
       locationColumn: ['dba', 'dba name', 'dba_name'],
-      volumeColumn: ['bankcard volume', 'bankcard_volume', 'bank card volume'],
-      debitVolumeColumn: ['debit card volume', 'debit_card_volume', 'debitcard volume'],
+      volumeColumn: ['bankcard volume', 'bankcard_volume', 'bank card volume', 'bank card vol'],
+      debitVolumeColumn: ['debit card volume', 'debit_card_volume', 'debitcard volume', 'debit vol', 'debit card vol'],
       commissionColumn: ['net commission', 'net_commission', 'commission'],
       detection: ['dba', 'bankcard volume', 'net commission']
     },
@@ -237,15 +237,20 @@ const FileUpload = () => {
           const volumeValue = String(row[volumeColumn]).replace(/[,$]/g, '');
           processed.volume = parseFloat(volumeValue) || 0;
           console.log('✅ Set bank card volume to:', processed.volume);
+        } else {
+          processed.volume = 0;
         }
         
-        // NEW: Handle debit volume separately for TRNXN
+        // ENHANCED: Handle debit volume separately for TRNXN with better detection
         if (debitVolumeColumn && row[debitVolumeColumn]) {
           const debitVolumeValue = String(row[debitVolumeColumn]).replace(/[,$]/g, '');
           processed.debitVolume = parseFloat(debitVolumeValue) || 0;
           console.log('✅ Set debit card volume to:', processed.debitVolume);
         } else {
           processed.debitVolume = 0;
+          if (processorConfig.name === 'TRNXN') {
+            console.log('⚠️ WARNING: TRNXN row has no debit volume - this may be incorrect');
+          }
         }
         
         // Commission detection
@@ -272,7 +277,7 @@ const FileUpload = () => {
       console.log('Location Name:', processed.locationName);
       console.log('Bank Card Volume:', processed.volume);
       console.log('Debit Card Volume:', processed.debitVolume);
-      console.log('Total Volume:', (processed.volume || 0) + (processed.debitVolume || 0));
+      console.log('Total Volume (H + I):', (processed.volume || 0) + (processed.debitVolume || 0));
       console.log('Commission:', processed.agentPayout);
       console.log('Account ID:', processed.accountId);
 
@@ -522,10 +527,10 @@ const FileUpload = () => {
       const debitVolumeColumn = detectedProcessor.debitVolumeColumn ? findColumn(headers, detectedProcessor.debitVolumeColumn) : null;
       const commissionColumn = findColumn(headers, detectedProcessor.commissionColumn);
       
-      console.log('=== ENHANCED COLUMN MAPPING ===');
+      console.log('=== ENHANCED COLUMN MAPPING FOR TRNXN H+I VOLUMES ===');
       console.log('- Location column:', locationColumn);
-      console.log('- Volume column:', volumeColumn);
-      console.log('- Debit volume column:', debitVolumeColumn);
+      console.log('- Bank Card Volume column (H):', volumeColumn);
+      console.log('- Debit Card Volume column (I):', debitVolumeColumn);
       console.log('- Commission column:', commissionColumn);
 
       if (!locationColumn) {
@@ -534,6 +539,13 @@ const FileUpload = () => {
 
       if (!volumeColumn) {
         throw new Error(`Could not detect volume column for ${detectedProcessor.name}. Expected columns: ${detectedProcessor.volumeColumn.join(', ')}`);
+      }
+
+      // ENHANCED: For TRNXN, warn if debit volume column is not found
+      if (detectedProcessor.name === 'TRNXN' && !debitVolumeColumn) {
+        console.log('⚠️ WARNING: TRNXN processor detected but no Debit Card Volume column found');
+        console.log('Available headers:', headers);
+        console.log('Looking for debit volume columns:', detectedProcessor.debitVolumeColumn);
       }
 
       const [year, month] = selectedMonth.split('-');
@@ -573,7 +585,7 @@ const FileUpload = () => {
       let merchantHeroAssignments = 0;
       const errors: any[] = [];
 
-      console.log('=== PROCESSING ROWS WITH ENHANCED TRNXN VOLUME HANDLING ===');
+      console.log('=== PROCESSING ROWS WITH ENHANCED TRNXN VOLUME HANDLING (H + I) ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         console.log(`\n--- Processing row ${i + 1} with ${detectedProcessor.name} format ---`);
@@ -598,8 +610,16 @@ const FileUpload = () => {
                   locationsCreated++;
                 }
 
-                // FIXED: Calculate total volume correctly for TRNXN (Bank Card + Debit Card)
-                const totalVolume = (processedData.volume || 0) + (processedData.debitVolume || 0);
+                // FIXED: Calculate total volume correctly for TRNXN (Bank Card + Debit Card) - This is the key fix!
+                const bankCardVolume = processedData.volume || 0;
+                const debitCardVolume = processedData.debitVolume || 0;
+                const totalVolume = bankCardVolume + debitCardVolume;
+                
+                console.log(`TOTAL VOLUME CALCULATION for ${processedData.locationName}:`);
+                console.log(`  Bank Card Volume (H): ${bankCardVolume}`);
+                console.log(`  Debit Card Volume (I): ${debitCardVolume}`);
+                console.log(`  TOTAL VOLUME (H + I): ${totalVolume}`);
+                
                 if (totalVolume > 0 && processedData.agentPayout) {
                   await createMerchantHeroAssignment(existingLocationId, totalVolume, processedData.agentPayout);
                   merchantHeroAssignments++;
@@ -681,7 +701,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
-      const successMessage = `${detectedProcessor.name} upload completed with enhanced volume handling! Processed ${successCount} rows for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for missing location names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} ${detectedProcessor.name === 'TRNXN' ? ' ✅ Bank Card + Debit Card volumes processed separately!' : ''}`;
+      const successMessage = `${detectedProcessor.name} upload completed with enhanced volume handling! Processed ${successCount} rows for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for missing location names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} ${detectedProcessor.name === 'TRNXN' ? ' ✅ Bank Card (H) + Debit Card (I) volumes processed and summed correctly!' : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
