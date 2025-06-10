@@ -214,6 +214,13 @@ const AgentManagement = () => {
             : '0%';
         }
 
+        // Debug commission data for this agent
+        console.log(`Commission data for ${agentName}:`, {
+          commissionSummary,
+          totalCommission,
+          locationCommissions: commissionSummary?.locations || []
+        });
+
         const agentData = {
           name: agentName,
           totalRevenue: agentVolumeStats.totalVolume,
@@ -223,7 +230,7 @@ const AgentManagement = () => {
           avgRate,
           status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active',
           notes: manualAgent?.notes || '',
-          locationCommissions: commissionSummary ? commissionSummary.locations : []
+          locationCommissions: commissionSummary?.locations || []
         };
 
         console.log(`Final agent ${agentName} data for timeframe ${timeFrame}:`, {
@@ -390,29 +397,29 @@ const AgentManagement = () => {
             type="single" 
             value={timeFrame} 
             onValueChange={setTimeFrame} 
-            className="bg-muted rounded-lg p-1"
+            className="grid grid-cols-2 lg:grid-cols-4 bg-muted rounded-lg p-1 w-full sm:w-auto"
           >
             <ToggleGroupItem 
               value="current" 
-              className="px-4 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
             >
-              Current Month
+              Current
             </ToggleGroupItem>
             <ToggleGroupItem 
               value="last" 
-              className="px-4 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
             >
-              Last Month
+              Last
             </ToggleGroupItem>
             <ToggleGroupItem 
               value="last3" 
-              className="px-4 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
             >
-              Last 3 Months
+              3 Months
             </ToggleGroupItem>
             <ToggleGroupItem 
               value="all" 
-              className="px-4 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
             >
               All Time
             </ToggleGroupItem>
@@ -479,16 +486,20 @@ const AgentManagement = () => {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {agent.locationCommissions.map((loc: any, locIndex: number) => (
-                            <TableRow key={locIndex}>
-                              <TableCell className="text-xs p-1 font-medium">
-                                {loc.locationName}
-                              </TableCell>
-                              <TableCell className="text-xs p-1 text-right text-emerald-600">
-                                ${(agent.name === 'Merchant Hero' ? loc.merchantHeroPayout : loc.agentPayout).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {agent.locationCommissions.map((loc: any, locIndex: number) => {
+                            const commissionAmount = agent.name === 'Merchant Hero' ? loc.merchantHeroPayout : loc.agentPayout;
+                            console.log(`Displaying commission for ${agent.name} at ${loc.locationName}: ${commissionAmount}`);
+                            return (
+                              <TableRow key={locIndex}>
+                                <TableCell className="text-xs p-1 font-medium">
+                                  {loc.locationName}
+                                </TableCell>
+                                <TableCell className="text-xs p-1 text-right text-emerald-600">
+                                  ${commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
