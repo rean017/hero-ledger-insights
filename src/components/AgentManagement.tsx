@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +43,11 @@ const AgentManagement = () => {
           from: startOfMonth(subMonths(now, 2)),
           to: endOfMonth(now)
         };
+      case 'all':
+        return {
+          from: new Date('2020-01-01'),
+          to: new Date('2030-12-31')
+        };
       default:
         return {
           from: startOfMonth(now),
@@ -73,20 +77,31 @@ const AgentManagement = () => {
           .insert([{ name: 'Merchant Hero', is_active: true }]);
       }
       
-      // Fetch transactions with date filtering
-      const { data: transactions, error: transactionError } = await supabase
+      // Fetch ALL transactions first to see what data exists
+      const { data: allTransactions, error: allTransactionError } = await supabase
         .from('transactions')
         .select('agent_name, volume, debit_volume, account_id, agent_payout, transaction_date')
-        .not('agent_name', 'is', null)
-        .gte('transaction_date', format(dateRange.from, 'yyyy-MM-dd'))
-        .lte('transaction_date', format(dateRange.to, 'yyyy-MM-dd'));
+        .not('agent_name', 'is', null);
 
-      if (transactionError) {
-        console.error('Error fetching transactions:', transactionError);
-        throw transactionError;
+      if (allTransactionError) {
+        console.error('Error fetching all transactions:', allTransactionError);
+        throw allTransactionError;
       }
 
-      console.log(`Loaded ${transactions?.length || 0} transactions for period ${format(dateRange.from, 'yyyy-MM-dd')} to ${format(dateRange.to, 'yyyy-MM-dd')}`);
+      console.log('Total transactions in database:', allTransactions?.length || 0);
+      console.log('Sample transaction dates:', allTransactions?.slice(0, 5).map(t => t.transaction_date));
+
+      // Now filter by date range - if timeframe is 'all', don't filter by date
+      let transactions = allTransactions || [];
+      if (timeFrame !== 'all') {
+        transactions = transactions.filter(t => {
+          if (!t.transaction_date) return false;
+          const transactionDate = new Date(t.transaction_date);
+          return transactionDate >= dateRange.from && transactionDate <= dateRange.to;
+        });
+      }
+
+      console.log(`Filtered transactions for ${timeFrame}:`, transactions.length);
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -121,7 +136,8 @@ const AgentManagement = () => {
         assignments: assignments?.length,
         locations: locations?.length,
         manualAgents: manualAgents?.length,
-        dateRange
+        dateRange,
+        timeFrame
       });
 
       // Use the standardized commission calculation
@@ -368,15 +384,35 @@ const AgentManagement = () => {
               className="pl-10"
             />
           </div>
-          <ToggleGroup type="single" value={timeFrame} onValueChange={setTimeFrame} className="border rounded-md">
-            <ToggleGroupItem value="current" aria-label="Current Month" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+          <ToggleGroup 
+            type="single" 
+            value={timeFrame} 
+            onValueChange={setTimeFrame} 
+            className="bg-muted rounded-lg p-1"
+          >
+            <ToggleGroupItem 
+              value="current" 
+              className="px-4 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+            >
               Current Month
             </ToggleGroupItem>
-            <ToggleGroupItem value="last" aria-label="Last Month" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+            <ToggleGroupItem 
+              value="last" 
+              className="px-4 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+            >
               Last Month
             </ToggleGroupItem>
-            <ToggleGroupItem value="last3" aria-label="Last 3 Months" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+            <ToggleGroupItem 
+              value="last3" 
+              className="px-4 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+            >
               Last 3 Months
+            </ToggleGroupItem>
+            <ToggleGroupItem 
+              value="all" 
+              className="px-4 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+            >
+              All Time
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
