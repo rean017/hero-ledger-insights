@@ -313,45 +313,6 @@ const AgentManagement = () => {
       </Card>
     </div>
   );
-
-  async function handleAddAgent() {
-    if (!newAgentName.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter an agent name",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      console.log('Adding new agent:', newAgentName.trim());
-      const { error } = await supabase
-        .from('agents')
-        .insert([{ name: newAgentName.trim(), is_active: true }]);
-
-      if (error) {
-        console.error('Error inserting agent:', error);
-        throw error;
-      }
-
-      toast({
-        title: "Success",
-        description: `Agent "${newAgentName}" has been added successfully`
-      });
-
-      setNewAgentName("");
-      setIsDialogOpen(false);
-      refetch();
-    } catch (error: any) {
-      console.error('Error adding agent:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add agent. Please try again.",
-        variant: "destructive"
-      });
-    }
-  }
 };
 
 export default AgentManagement;
