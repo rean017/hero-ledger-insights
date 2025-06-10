@@ -812,5 +812,3 @@ const UnifiedLocations = () => {
 };
 
 export default UnifiedLocations;
-
-}
