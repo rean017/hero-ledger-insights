@@ -17,7 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import LocationAgentInlineEdit from "./LocationAgentInlineEdit";
 import { calculateLocationCommissions } from "@/utils/commissionCalculations";
-import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
+import { getDynamicTimeFrames, getDateRangeForTimeFrame, normalizeCustomDateRange } from "@/utils/timeFrameUtils";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -57,13 +57,14 @@ const UnifiedLocations = () => {
 
   // Get date range - use custom if selected and available, otherwise use timeframe
   const dateRange = timeFrame === 'custom' && customDateRange 
-    ? customDateRange 
+    ? normalizeCustomDateRange(customDateRange) 
     : getDateRangeForTimeFrame(timeFrame);
 
   // Debug: Log the timeframe and date range
   console.log('🗓️ UnifiedLocations: Current timeframe selected:', timeFrame);
   console.log('🗓️ UnifiedLocations: Date range for timeframe:', dateRange);
   console.log('🗓️ UnifiedLocations: Available timeframes:', timeFrames);
+  console.log('🗓️ UnifiedLocations: Custom date range:', customDateRange);
 
   // Ensure Merchant Hero exists and assign to locations without assignments
   const ensureMerchantHeroSetup = async () => {
@@ -421,6 +422,7 @@ const UnifiedLocations = () => {
   };
 
   const handleCustomDateSelect = (range: { from: Date; to: Date } | undefined) => {
+    console.log('📅 Custom date range selected:', range);
     setCustomDateRange(range);
     if (range?.from && range?.to) {
       setIsCalendarOpen(false);
@@ -810,3 +812,5 @@ const UnifiedLocations = () => {
 };
 
 export default UnifiedLocations;
+
+}

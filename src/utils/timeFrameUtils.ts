@@ -30,27 +30,27 @@ export const getDynamicTimeFrames = (): TimeFrameOption[] => {
       value: format(twoMonthsAgo, 'MMM').toLowerCase(),
       label: format(twoMonthsAgo, 'MMM'),
       dateRange: {
-        // FIXED: Use UTC dates to match transaction date parsing
-        from: new Date(Date.UTC(twoMonthsAgo.getFullYear(), twoMonthsAgo.getMonth(), 1)),
-        to: new Date(Date.UTC(twoMonthsAgo.getFullYear(), twoMonthsAgo.getMonth() + 1, 0, 23, 59, 59, 999))
+        // FIXED: Use consistent date parsing to match transaction date format
+        from: new Date(format(startOfMonth(twoMonthsAgo), 'yyyy-MM-dd') + 'T00:00:00.000Z'),
+        to: new Date(format(endOfMonth(twoMonthsAgo), 'yyyy-MM-dd') + 'T23:59:59.999Z')
       }
     },
     {
       value: format(lastMonth, 'MMM').toLowerCase(),
       label: format(lastMonth, 'MMM'),
       dateRange: {
-        // FIXED: Use UTC dates to match transaction date parsing
-        from: new Date(Date.UTC(lastMonth.getFullYear(), lastMonth.getMonth(), 1)),
-        to: new Date(Date.UTC(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0, 23, 59, 59, 999))
+        // FIXED: Use consistent date parsing to match transaction date format
+        from: new Date(format(startOfMonth(lastMonth), 'yyyy-MM-dd') + 'T00:00:00.000Z'),
+        to: new Date(format(endOfMonth(lastMonth), 'yyyy-MM-dd') + 'T23:59:59.999Z')
       }
     },
     {
       value: format(currentMonth, 'MMM').toLowerCase(),
       label: format(currentMonth, 'MMM'),
       dateRange: {
-        // FIXED: Use UTC dates to match transaction date parsing
-        from: new Date(Date.UTC(currentMonth.getFullYear(), currentMonth.getMonth(), 1)),
-        to: new Date(Date.UTC(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999))
+        // FIXED: Use consistent date parsing to match transaction date format
+        from: new Date(format(startOfMonth(currentMonth), 'yyyy-MM-dd') + 'T00:00:00.000Z'),
+        to: new Date(format(endOfMonth(currentMonth), 'yyyy-MM-dd') + 'T23:59:59.999Z')
       }
     },
     {
@@ -90,4 +90,12 @@ export const formatDateForDatabase = (date: Date): string => {
 // ADDED: Helper function to get month string in YYYY-MM format (same as FileUpload)
 export const getMonthString = (date: Date): string => {
   return format(date, 'yyyy-MM');
+};
+
+// ADDED: Helper function to normalize custom date ranges to match transaction format
+export const normalizeCustomDateRange = (range: { from: Date; to: Date }): { from: Date; to: Date } => {
+  return {
+    from: new Date(format(range.from, 'yyyy-MM-dd') + 'T00:00:00.000Z'),
+    to: new Date(format(range.to, 'yyyy-MM-dd') + 'T23:59:59.999Z')
+  };
 };
