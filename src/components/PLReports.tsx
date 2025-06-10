@@ -2,11 +2,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, TrendingUp, Building2, Users, DollarSign } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalendarDays, TrendingUp, Building2, Users, DollarSign, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
+import AgentPLReport from "./AgentPLReport";
 
 const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("current-month");
@@ -181,21 +183,6 @@ const PLReports = () => {
             <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
             <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-muted-foreground">Period:</label>
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Select period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="current-month">Current Month</SelectItem>
-                <SelectItem value="last-month">Last Month</SelectItem>
-                <SelectItem value="current-quarter">Current Quarter</SelectItem>
-                <SelectItem value="current-year">Current Year</SelectItem>
-                <SelectItem value="last-12-months">Last 12 Months</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
         <div className="flex items-center justify-center h-64">
           <p className="text-muted-foreground">Loading P&L data...</p>
@@ -210,200 +197,220 @@ const PLReports = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
-          <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-muted-foreground">Period:</label>
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Select period" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="current-month">Current Month</SelectItem>
-              <SelectItem value="last-month">Last Month</SelectItem>
-              <SelectItem value="current-quarter">Current Quarter</SelectItem>
-              <SelectItem value="current-year">Current Year</SelectItem>
-              <SelectItem value="last-12-months">Last 12 Months</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div>
+        <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
+        <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Volume</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">
-              ${periodSummary?.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Overview Reports
+          </TabsTrigger>
+          <TabsTrigger value="agent-reports" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Agent P&L Reports
+          </TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Agent Payouts</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              ${periodSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+        <TabsContent value="overview" className="space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-muted-foreground">Period:</label>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select period" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current-month">Current Month</SelectItem>
+                  <SelectItem value="last-month">Last Month</SelectItem>
+                  <SelectItem value="current-quarter">Current Quarter</SelectItem>
+                  <SelectItem value="current-year">Current Year</SelectItem>
+                  <SelectItem value="last-12-months">Last 12 Months</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Net Income</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              ${periodSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
-          </CardContent>
-        </Card>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Volume</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-emerald-600">
+                  ${periodSummary?.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Transactions</CardTitle>
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {periodSummary?.transactionCount || 0}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
-          </CardContent>
-        </Card>
-      </div>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Agent Payouts</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">
+                  ${periodSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
+              </CardContent>
+            </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Top Performing Locations ({dateRange.label})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {topPerformers.length > 0 ? (
-              <div className="space-y-4">
-                {topPerformers.map((performer, index) => (
-                  <div key={index} className="flex justify-between items-center p-3 border rounded-lg">
-                    <div>
-                      <p className="font-medium">{performer.locationName}</p>
-                      <p className="text-sm text-muted-foreground">{performer.agentName} • {performer.bpsRate} BPS</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-emerald-600">${performer.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-                      <p className="text-sm text-muted-foreground">Volume</p>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Net Income</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  ${periodSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Transactions</CardTitle>
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {periodSummary?.transactionCount || 0}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Top Performing Locations ({dateRange.label})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {topPerformers.length > 0 ? (
+                  <div className="space-y-4">
+                    {topPerformers.map((performer, index) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded-lg">
+                        <div>
+                          <p className="font-medium">{performer.locationName}</p>
+                          <p className="text-sm text-muted-foreground">{performer.agentName} • {performer.bpsRate} BPS</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-emerald-600">${performer.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-sm text-muted-foreground">Volume</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-32">
+                    <p className="text-muted-foreground">No performance data available for this period</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  P&L Summary ({dateRange.label})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Gross Volume</span>
+                    <span className="font-semibold text-emerald-600">
+                      ${periodSummary?.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Total Agent Commissions</span>
+                    <span className="font-semibold text-red-600">
+                      -${periodSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                    </span>
+                  </div>
+                  <div className="border-t pt-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Net Profit</span>
+                      <span className="font-bold text-blue-600">
+                        ${periodSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-32">
-                <p className="text-muted-foreground">No performance data available for this period</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              P&L Summary ({dateRange.label})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Gross Volume</span>
-                <span className="font-semibold text-emerald-600">
-                  ${periodSummary?.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Agent Commissions</span>
-                <span className="font-semibold text-red-600">
-                  -${periodSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
-                </span>
-              </div>
-              <div className="border-t pt-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold">Net Profit</span>
-                  <span className="font-bold text-blue-600">
-                    ${periodSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
-                  </span>
+                  <div className="text-center pt-2">
+                    <span className="text-xs text-muted-foreground">
+                      Profit Margin: {periodSummary?.totalVolume ? ((periodSummary.netIncome / periodSummary.totalVolume) * 100).toFixed(2) : 0}%
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="text-center pt-2">
-                <span className="text-xs text-muted-foreground">
-                  Profit Margin: {periodSummary?.totalVolume ? ((periodSummary.netIncome / periodSummary.totalVolume) * 100).toFixed(2) : 0}%
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              </CardContent>
+            </Card>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Detailed Agent & Location Performance ({dateRange.label})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {agentLocationData && agentLocationData.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-4 font-medium text-muted-foreground">Agent</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Location</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">BPS Rate</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Total Volume</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Agent Payout</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Profit Contribution</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {agentLocationData.map((data, index) => (
-                    <tr key={index} className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="p-4">
-                        <Badge variant="secondary">{data.agentName}</Badge>
-                      </td>
-                      <td className="p-4 font-medium">{data.locationName}</td>
-                      <td className="p-4 font-semibold">{data.bpsRate} BPS</td>
-                      <td className="p-4 font-semibold text-emerald-600">
-                        ${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4 font-semibold text-red-600">
-                        ${data.calculatedPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4 font-semibold text-blue-600">
-                        ${data.profitContribution.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No agent/location data available for this period. Upload transaction data and assign agents to locations.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Detailed Agent & Location Performance ({dateRange.label})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {agentLocationData && agentLocationData.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-4 font-medium text-muted-foreground">Agent</th>
+                        <th className="text-left p-4 font-medium text-muted-foreground">Location</th>
+                        <th className="text-left p-4 font-medium text-muted-foreground">BPS Rate</th>
+                        <th className="text-left p-4 font-medium text-muted-foreground">Total Volume</th>
+                        <th className="text-left p-4 font-medium text-muted-foreground">Agent Payout</th>
+                        <th className="text-left p-4 font-medium text-muted-foreground">Profit Contribution</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {agentLocationData.map((data, index) => (
+                        <tr key={index} className="border-b hover:bg-muted/50 transition-colors">
+                          <td className="p-4">
+                            <Badge variant="secondary">{data.agentName}</Badge>
+                          </td>
+                          <td className="p-4 font-medium">{data.locationName}</td>
+                          <td className="p-4 font-semibold">{data.bpsRate} BPS</td>
+                          <td className="p-4 font-semibold text-emerald-600">
+                            ${data.volume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 font-semibold text-red-600">
+                            ${data.calculatedPayout.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 font-semibold text-blue-600">
+                            ${data.profitContribution.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-32">
+                  <p className="text-muted-foreground">No agent/location data available for this period. Upload transaction data and assign agents to locations.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="agent-reports">
+          <AgentPLReport />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
