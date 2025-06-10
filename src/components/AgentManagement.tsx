@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -5,12 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Search, Edit2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Plus, Search, Edit2, CalendarIcon } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
+import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 const AgentManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -19,12 +23,17 @@ const AgentManagement = () => {
   const [newAgentName, setNewAgentName] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [agentNotes, setAgentNotes] = useState("");
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
+    from: startOfMonth(subMonths(new Date(), 1)),
+    to: endOfMonth(new Date())
+  });
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: agents, isLoading, refetch } = useQuery({
-    queryKey: ['agents-data'],
+    queryKey: ['agents-data', dateRange],
     queryFn: async () => {
-      console.log('Fetching agents data for AgentManagement...');
+      console.log('Fetching agents data for AgentManagement with date range:', dateRange);
       
       // Ensure Merchant Hero exists in agents table
       const { data: existingMerchantHero } = await supabase
@@ -40,13 +49,18 @@ const AgentManagement = () => {
           .insert([{ name: 'Merchant Hero', is_active: true }]);
       }
       
-      // Fetch all required data
+      // Fetch transactions with date filtering
       const { data: transactions, error: transactionError } = await supabase
         .from('transactions')
-        .select('agent_name, volume, debit_volume, account_id, agent_payout')
-        .not('agent_name', 'is', null);
+        .select('agent_name, volume, debit_volume, account_id, agent_payout, transaction_date')
+        .not('agent_name', 'is', null)
+        .gte('transaction_date', format(dateRange.from, 'yyyy-MM-dd'))
+        .lte('transaction_date', format(dateRange.to, 'yyyy-MM-dd'));
 
-      if (transactionError) throw transactionError;
+      if (transactionError) {
+        console.error('Error fetching transactions:', transactionError);
+        throw transactionError;
+      }
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -80,14 +94,15 @@ const AgentManagement = () => {
         transactions: transactions?.length,
         assignments: assignments?.length,
         locations: locations?.length,
-        manualAgents: manualAgents?.length
+        manualAgents: manualAgents?.length,
+        dateRange
       });
 
       // Use the standardized commission calculation
       const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
       const agentCommissionSummaries = groupCommissionsByAgent(commissions);
 
-      console.log('Commission summaries:', agentCommissionSummaries);
+      console.log('Commission summaries for date range:', agentCommissionSummaries);
 
       // Get all unique agent names from both manual agents and assignments
       const allAgentNames = new Set<string>();
@@ -129,13 +144,14 @@ const AgentManagement = () => {
 
         console.log(`Agent ${agentName} assigned account IDs:`, Array.from(assignedAccountIds));
 
-        // Calculate volume ONLY for assigned locations/accounts
+        // Calculate volume ONLY for assigned locations/accounts within date range
         const agentVolumeStats = transactions?.reduce((acc, t) => {
           // Only include transactions from accounts that correspond to assigned locations
           if (t.account_id && assignedAccountIds.has(t.account_id)) {
-            acc.totalVolume += (t.volume || 0) + (t.debit_volume || 0);
+            const totalTransactionVolume = (Number(t.volume) || 0) + (Number(t.debit_volume) || 0);
+            acc.totalVolume += totalTransactionVolume;
             acc.accountIds.add(t.account_id);
-            console.log(`Adding transaction for ${agentName}: account ${t.account_id}, volume: ${t.volume}, debit: ${t.debit_volume}`);
+            console.log(`Adding transaction for ${agentName}: account ${t.account_id}, volume: ${t.volume}, debit: ${t.debit_volume}, total: ${totalTransactionVolume}, date: ${t.transaction_date}`);
           }
           return acc;
         }, { totalVolume: 0, accountIds: new Set<string>() }) || { totalVolume: 0, accountIds: new Set<string>() };
@@ -166,7 +182,7 @@ const AgentManagement = () => {
           notes: manualAgent?.notes || ''
         };
 
-        console.log(`Final agent ${agentName} data:`, {
+        console.log(`Final agent ${agentName} data for period ${format(dateRange.from, 'yyyy-MM-dd')} to ${format(dateRange.to, 'yyyy-MM-dd')}:`, {
           ...agentData,
           assignedLocationIds: Array.from(assignedLocationIds),
           assignedAccountIds: Array.from(assignedAccountIds),
@@ -255,6 +271,31 @@ const AgentManagement = () => {
     setIsEditNotesOpen(true);
   };
 
+  const setDatePreset = (preset: string) => {
+    const now = new Date();
+    let from: Date, to: Date;
+
+    switch (preset) {
+      case 'current':
+        from = startOfMonth(now);
+        to = endOfMonth(now);
+        break;
+      case 'last':
+        from = startOfMonth(subMonths(now, 1));
+        to = endOfMonth(subMonths(now, 1));
+        break;
+      case 'last3':
+        from = startOfMonth(subMonths(now, 2));
+        to = endOfMonth(now);
+        break;
+      default:
+        return;
+    }
+
+    setDateRange({ from, to });
+    setIsDatePickerOpen(false);
+  };
+
   const filteredAgents = agents?.filter(agent =>
     agent.name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
@@ -316,14 +357,71 @@ const AgentManagement = () => {
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h3 className="text-xl font-semibold">All Agents</h3>
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search agents..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+        <div className="flex gap-4 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-80">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search agents..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4" />
+                {format(dateRange.from, "MMM dd")} - {format(dateRange.to, "MMM dd")}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80" align="end">
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDatePreset('current')}
+                  >
+                    Current Month
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDatePreset('last')}
+                  >
+                    Last Month
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDatePreset('last3')}
+                  >
+                    Last 3 Months
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>From</Label>
+                    <Calendar
+                      mode="single"
+                      selected={dateRange.from}
+                      onSelect={(date) => date && setDateRange(prev => ({ ...prev, from: date }))}
+                      className="rounded-md border"
+                    />
+                  </div>
+                  <div>
+                    <Label>To</Label>
+                    <Calendar
+                      mode="single"
+                      selected={dateRange.to}
+                      onSelect={(date) => date && setDateRange(prev => ({ ...prev, to: date }))}
+                      className="rounded-md border"
+                    />
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
