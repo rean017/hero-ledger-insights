@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import LocationEditDialog from "./LocationEditDialog";
-import LocationNameFixer from "./LocationNameFixer";
 import { convertToBPSDisplay, convertToDecimalRate } from "@/utils/bpsCalculations";
 
 interface Location {
@@ -212,11 +212,8 @@ const Locations = () => {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground mb-2">Location Management</h2>
-        <p className="text-muted-foreground">Manage locations and assign agents with commission rates</p>
+        <p className="text-muted-foreground">Manage locations and assign agents with commission rates. Upload process now ensures only proper business names are used.</p>
       </div>
-
-      {/* Location Name Fixer - NEW: Added at the top for immediate visibility */}
-      <LocationNameFixer />
 
       {/* Quick Agent Assignment */}
       <Card>
@@ -430,7 +427,7 @@ const Locations = () => {
       {locations?.length === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center h-32">
-            <p className="text-muted-foreground">No locations found. Upload transaction data to see locations.</p>
+            <p className="text-muted-foreground">No locations found. Upload transaction data with proper business names to see locations.</p>
           </CardContent>
         </Card>
       )}

@@ -53,10 +53,10 @@ const FileUpload = () => {
 
   const monthOptions = generateMonthOptions();
 
-  // Strict DBA business name validation
+  // ENHANCED: Ultra-strict DBA business name validation - NEVER allow numeric names
   const isValidBusinessName = (value: string): boolean => {
     if (!value || typeof value !== 'string') {
-      console.log('❌ Invalid business name: not a string or empty');
+      console.log('❌ REJECTED: Invalid business name - not a string or empty');
       return false;
     }
     
@@ -64,103 +64,111 @@ const FileUpload = () => {
     
     // Must not be empty
     if (trimmed.length === 0) {
-      console.log('❌ Invalid business name: empty string');
+      console.log('❌ REJECTED: Invalid business name - empty string');
       return false;
     }
     
-    // Must not be purely numeric (these are account IDs, not business names)
+    // STRICT: Must not be purely numeric (these are account IDs, NOT business names)
     if (/^\d+$/.test(trimmed)) {
-      console.log('❌ Rejecting purely numeric value as business name:', trimmed);
+      console.log('❌ REJECTED: Purely numeric value is NOT a business name:', trimmed);
+      return false;
+    }
+    
+    // STRICT: Must not be mostly numeric (like "123456 CORP" where it's clearly an ID)
+    if (/^\d{4,}/.test(trimmed)) {
+      console.log('❌ REJECTED: Starts with 4+ digits, likely an account ID:', trimmed);
       return false;
     }
     
     // Must not be very short (likely codes or IDs)
     if (trimmed.length < 3) {
-      console.log('❌ Rejecting too short value as business name:', trimmed);
+      console.log('❌ REJECTED: Too short to be a valid business name:', trimmed);
       return false;
     }
     
-    // Must contain at least one letter (business names have letters)
+    // Must contain at least one letter (business names MUST have letters)
     if (!/[a-zA-Z]/.test(trimmed)) {
-      console.log('❌ Rejecting value with no letters as business name:', trimmed);
+      console.log('❌ REJECTED: No letters found, not a valid business name:', trimmed);
       return false;
     }
     
-    // Must not be common non-business patterns
+    // STRICT: Must not be common non-business patterns
     const invalidPatterns = [
       /^account\s*\d+$/i,
       /^mid\s*\d+$/i,
       /^merchant\s*\d+$/i,
       /^id\s*\d+$/i,
-      /^\d+\s*account$/i
+      /^\d+\s*account$/i,
+      /^loc\s*\d+$/i,
+      /^location\s*\d+$/i
     ];
     
     for (const pattern of invalidPatterns) {
       if (pattern.test(trimmed)) {
-        console.log('❌ Rejecting invalid pattern as business name:', trimmed);
+        console.log('❌ REJECTED: Invalid business name pattern:', trimmed);
         return false;
       }
     }
     
-    console.log('✅ Valid business name:', trimmed);
+    console.log('✅ VALID BUSINESS NAME CONFIRMED:', trimmed);
     return true;
   };
 
-  // Enhanced DBA column detection - MUST find the actual DBA Name column
+  // ENHANCED: Mandatory DBA column detection - MUST find actual business names
   const detectDBAColumn = (headers: string[]): string | null => {
-    console.log('=== Enhanced DBA Column Detection ===');
+    console.log('=== MANDATORY DBA BUSINESS NAME DETECTION ===');
     console.log('Available headers:', headers);
     
-    // HIGHEST PRIORITY: Look for exact "DBA Name" match (case insensitive)
+    // PRIORITY 1: Look for exact "DBA Name" match (case insensitive)
     const exactDBANameColumn = headers.find(header => 
       header.toLowerCase().trim() === 'dba name'
     );
     if (exactDBANameColumn) {
-      console.log('🎯 Found exact "DBA Name" column:', exactDBANameColumn);
+      console.log('🎯 FOUND: Exact "DBA Name" column:', exactDBANameColumn);
       return exactDBANameColumn;
     }
     
-    // SECOND PRIORITY: Look for "DBA Name" variations
-    const dbaNameVariations = ['dba name', 'dba_name', 'dbaname', 'dba-name'];
+    // PRIORITY 2: Look for "DBA Name" variations
+    const dbaNameVariations = ['dba name', 'dba_name', 'dbaname', 'dba-name', 'doing business as'];
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim().replace(/[\s_-]/g, '');
       for (const variation of dbaNameVariations) {
         const variationClean = variation.replace(/[\s_-]/g, '');
         if (headerLower === variationClean) {
-          console.log('🎯 Found DBA Name variation:', header);
+          console.log('🎯 FOUND: DBA Name variation:', header);
           return header;
         }
       }
     }
     
-    // THIRD PRIORITY: Look for exact "DBA" match
+    // PRIORITY 3: Look for exact "DBA" match
     const exactDbaColumn = headers.find(header => 
       header.toLowerCase().trim() === 'dba'
     );
     if (exactDbaColumn) {
-      console.log('🎯 Found exact "DBA" column:', exactDbaColumn);
+      console.log('🎯 FOUND: Exact "DBA" column:', exactDbaColumn);
       return exactDbaColumn;
     }
     
-    // FOURTH PRIORITY: Look for DBA-related patterns
-    const dbaPatterns = ['dba', 'doing business as'];
+    // PRIORITY 4: Look for business name patterns
+    const businessNamePatterns = ['business name', 'merchant name', 'company name', 'store name'];
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
-      for (const pattern of dbaPatterns) {
+      for (const pattern of businessNamePatterns) {
         if (headerLower.includes(pattern)) {
-          console.log('🎯 Found DBA pattern match:', header, 'contains', pattern);
+          console.log('🎯 FOUND: Business name pattern:', header, 'contains', pattern);
           return header;
         }
       }
     }
     
-    console.log('❌ No DBA column detected in headers');
+    console.log('❌ CRITICAL ERROR: No DBA/Business Name column found!');
     return null;
   };
 
   // Enhanced volume detection - prioritizes Sales Amount
   const detectVolumeColumn = (headers: string[]): string | null => {
-    console.log('=== Sales Amount Detection ===');
+    console.log('=== SALES AMOUNT DETECTION ===');
     console.log('Available headers:', headers);
     
     // HIGHEST PRIORITY: Look for exact "Sales Amount" match
@@ -222,7 +230,7 @@ const FileUpload = () => {
       'commission', 'payout', 'agent', 'residual', 'fee', 'earnings', 'profit'
     ];
     
-    console.log('=== Commission Detection ===');
+    console.log('=== COMMISSION DETECTION ===');
     
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
@@ -241,7 +249,7 @@ const FileUpload = () => {
   const detectProcessor = (headers: string[], firstDataRow?: any): string => {
     const headerStr = headers.join('|').toLowerCase();
     
-    console.log('=== Processor Detection ===');
+    console.log('=== PROCESSOR DETECTION ===');
     console.log('Headers for detection:', headers);
     
     // Check for DBA + Sales Amount pattern (likely a specific format)
@@ -287,13 +295,13 @@ const FileUpload = () => {
     return 'Maverick';
   };
 
+  // FIXED: Enhanced row processing with MANDATORY business name validation
   const processRow = (row: any, processor: string, dbaColumn: string | null, volumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
     try {
       let processed: ProcessedData = { rawData: row, processor };
 
-      console.log('\n=== Processing Row ===');
+      console.log('\n=== PROCESSING ROW WITH MANDATORY BUSINESS NAME ===');
       console.log('Processor:', processor);
-      console.log('Row data keys:', Object.keys(row));
       console.log('DBA column:', dbaColumn);
       console.log('Volume column:', volumeColumn);
 
@@ -303,52 +311,45 @@ const FileUpload = () => {
         const extraData = row.__parsed_extra;
         
         if (extraData.length >= 6) {
+          const businessName = extraData[0] as string;
+          
+          // CRITICAL: Validate business name for Green Payments format too
+          if (!isValidBusinessName(businessName)) {
+            console.log('❌ REJECTED: Green Payments row has invalid business name:', businessName);
+            return null;
+          }
+          
           processed.accountId = merchantId;
-          processed.locationName = extraData[0] as string;
+          processed.locationName = businessName;
           processed.volume = parseFloat(extraData[2] as string) || 0;
           processed.agentPayout = parseFloat(extraData[5] as string) || 0;
           processed.debitVolume = 0;
           processed.agentName = null;
         }
       } else {
-        // Enhanced DBA business name detection and strict validation
-        if (dbaColumn && row[dbaColumn]) {
-          const dbaValue = String(row[dbaColumn]).trim();
-          console.log('Raw DBA value from column', dbaColumn, ':', dbaValue);
-          
-          if (isValidBusinessName(dbaValue)) {
-            processed.locationName = dbaValue;
-            console.log('✅ Set location name to valid business name:', processed.locationName);
-          } else {
-            console.log('❌ DBA value failed validation, searching for alternative...');
-            
-            // Search all columns for a valid business name
-            let foundValidName = false;
-            for (const [key, value] of Object.entries(row)) {
-              const keyLower = key.toLowerCase();
-              const valueStr = String(value).trim();
-              
-              // Look for any column that might contain DBA or business name
-              if ((keyLower.includes('dba') || keyLower.includes('business') || keyLower.includes('merchant') || keyLower.includes('name')) 
-                  && isValidBusinessName(valueStr)) {
-                processed.locationName = valueStr;
-                console.log('✅ Found valid business name in alternate column:', key, '=', valueStr);
-                foundValidName = true;
-                break;
-              }
-            }
-            
-            // If still no valid business name found, this row is invalid
-            if (!foundValidName) {
-              console.log('❌ No valid business name found in any column for this row');
-              console.log('Available row data:', row);
-              return null;
-            }
-          }
-        } else {
-          console.log('❌ No DBA column found or DBA column is empty');
+        // CRITICAL: DBA business name detection with ZERO tolerance for numeric names
+        if (!dbaColumn) {
+          console.log('❌ FATAL ERROR: No DBA column detected - cannot process row');
           return null;
         }
+
+        if (!row[dbaColumn]) {
+          console.log('❌ REJECTED: DBA column is empty for this row');
+          return null;
+        }
+
+        const dbaValue = String(row[dbaColumn]).trim();
+        console.log('Raw DBA value from column', dbaColumn, ':', dbaValue);
+        
+        // ULTRA-STRICT: Business name validation - NEVER allow numeric names
+        if (!isValidBusinessName(dbaValue)) {
+          console.log('❌ CRITICAL REJECTION: DBA value failed strict validation:', dbaValue);
+          console.log('❌ This row will be SKIPPED to prevent numeric location names');
+          return null;
+        }
+
+        processed.locationName = dbaValue;
+        console.log('✅ CONFIRMED: Valid business name set:', processed.locationName);
         
         // Volume detection
         if (volumeColumn && row[volumeColumn]) {
@@ -378,23 +379,74 @@ const FileUpload = () => {
         }
       }
 
-      console.log('=== Final processed data ===');
+      console.log('=== FINAL VALIDATION ===');
       console.log('Location Name:', processed.locationName);
       console.log('Volume:', processed.volume);
       console.log('Account ID:', processed.accountId);
 
-      // Final validation - must have a valid business name to proceed
+      // FINAL MANDATORY VALIDATION: Ensure we have a proper business name
       if (!processed.locationName || !isValidBusinessName(processed.locationName)) {
-        console.log('❌ Final validation failed - no valid business name');
+        console.log('❌ FINAL REJECTION: No valid business name found - ROW WILL BE SKIPPED');
         return null;
       }
 
+      console.log('✅ ROW APPROVED: Valid business name confirmed for processing');
       return processed;
     } catch (error) {
       console.error('❌ Error processing row:', error);
       return null;
     }
   };
+
+  // ENHANCED: Location creation with business name validation
+  const ensureLocationExists = async (locationName: string, accountId?: string): Promise<string | null> => {
+    if (!locationName || !isValidBusinessName(locationName)) {
+      console.log('❌ CRITICAL: Attempting to create location with invalid business name:', locationName);
+      return null;
+    }
+
+    try {
+      const { data: existingLocation, error: selectError } = await supabase
+        .from('locations')
+        .select('id')
+        .eq('name', locationName)
+        .maybeSingle();
+
+      if (selectError && selectError.code !== 'PGRST116') {
+        console.error('Error checking existing location:', selectError);
+        return null;
+      }
+
+      if (existingLocation) {
+        console.log('✅ Found existing location with business name:', locationName);
+        return existingLocation.id;
+      }
+
+      console.log('✅ Creating new location with validated business name:', locationName);
+      const { data: newLocation, error: insertError } = await supabase
+        .from('locations')
+        .insert({
+          name: locationName,
+          account_id: accountId || null,
+          account_type: 'Business'
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        console.error('Error creating location:', insertError);
+        return null;
+      }
+
+      console.log('✅ Successfully created location with business name:', newLocation);
+      return newLocation.id;
+    } catch (error) {
+      console.error('Error in ensureLocationExists:', error);
+      return null;
+    }
+  };
+
+  // ... keep existing code (ensureAgentExists function)
 
   const ensureAgentExists = async (agentName: string): Promise<string | null> => {
     if (!agentName) return null;
@@ -433,48 +485,6 @@ const FileUpload = () => {
       return newAgent.id;
     } catch (error) {
       console.error('Error in ensureAgentExists:', error);
-      return null;
-    }
-  };
-
-  const ensureLocationExists = async (locationName: string, accountId?: string): Promise<string | null> => {
-    if (!locationName) return null;
-
-    try {
-      const { data: existingLocation, error: selectError } = await supabase
-        .from('locations')
-        .select('id')
-        .eq('name', locationName)
-        .maybeSingle();
-
-      if (selectError && selectError.code !== 'PGRST116') {
-        console.error('Error checking existing location:', selectError);
-        return null;
-      }
-
-      if (existingLocation) {
-        return existingLocation.id;
-      }
-
-      const { data: newLocation, error: insertError } = await supabase
-        .from('locations')
-        .insert({
-          name: locationName,
-          account_id: accountId || null,
-          account_type: 'Business'
-        })
-        .select('id')
-        .single();
-
-      if (insertError) {
-        console.error('Error creating location:', insertError);
-        return null;
-      }
-
-      console.log('Created new location:', newLocation);
-      return newLocation.id;
-    } catch (error) {
-      console.error('Error in ensureLocationExists:', error);
       return null;
     }
   };
@@ -527,10 +537,10 @@ const FileUpload = () => {
     }
 
     setUploading(true);
-    setUploadStatus({ status: 'processing', message: 'Processing file with strict DBA business name validation...', filename: file.name });
+    setUploadStatus({ status: 'processing', message: 'Processing file with ZERO TOLERANCE for numeric location names...', filename: file.name });
 
     try {
-      console.log('=== Starting Strict DBA Business Name Upload Process ===');
+      console.log('=== STARTING ZERO-TOLERANCE BUSINESS NAME UPLOAD ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
@@ -547,19 +557,19 @@ const FileUpload = () => {
       
       const detectedProcessor = detectProcessor(headers, rawData[1]);
       
-      // Enhanced column detection with strict business name validation
+      // MANDATORY column detection - MUST have DBA business names
       const dbaColumn = detectDBAColumn(headers);
       const volumeColumn = detectVolumeColumn(headers);
       const commissionColumn = detectCommissionColumn(headers);
       
-      console.log('=== Enhanced Column Detection Results ===');
+      console.log('=== MANDATORY BUSINESS NAME VALIDATION ===');
       console.log('- DBA Business Name column:', dbaColumn);
       console.log('- Sales Amount volume column:', volumeColumn);
       console.log('- Commission column:', commissionColumn);
       console.log('- Detected processor:', detectedProcessor);
 
       if (!dbaColumn) {
-        throw new Error('Could not detect DBA column in the file. Please ensure your file contains a "DBA Name" or "DBA" column with actual business names (not numeric account IDs).');
+        throw new Error('CRITICAL ERROR: No DBA/Business Name column found! Your file MUST contain a column with actual business names (like "Joe\'s Restaurant") not numeric account IDs. Please ensure your file has a "DBA Name", "Business Name", or similar column with proper business names.');
       }
 
       if (!volumeColumn) {
@@ -602,18 +612,14 @@ const FileUpload = () => {
       let locationsCreated = 0;
       const errors: any[] = [];
 
-      console.log('=== Processing Rows with Strict Business Name Validation ===');
+      console.log('=== PROCESSING ROWS WITH ZERO-TOLERANCE VALIDATION ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
-        console.log(`\n--- Processing row ${i + 1} ---`);
+        console.log(`\n--- Processing row ${i + 1} with mandatory business name validation ---`);
         const processedData = processRow(row, detectedProcessor, dbaColumn, volumeColumn, commissionColumn);
 
-        if (processedData && processedData.locationName && isValidBusinessName(processedData.locationName)) {
-          console.log('✅ Valid processed data for row', i + 1, ':', {
-            locationName: processedData.locationName,
-            volume: processedData.volume,
-            accountId: processedData.accountId
-          });
+        if (processedData && processedData.locationName) {
+          console.log('✅ APPROVED: Valid business name for row', i + 1, ':', processedData.locationName);
 
           try {
             let locationId = null;
@@ -646,7 +652,7 @@ const FileUpload = () => {
               raw_data: processedData.rawData
             };
 
-            console.log('Inserting transaction data:', transactionData);
+            console.log('Inserting transaction with business name:', processedData.locationName);
 
             const { error } = await supabase
               .from('transactions')
@@ -658,7 +664,7 @@ const FileUpload = () => {
               errors.push({ row: i + 1, error: error.message });
             } else {
               successCount++;
-              console.log(`✅ Successfully inserted row ${i + 1} with business name: ${processedData.locationName}`);
+              console.log(`✅ SUCCESS: Row ${i + 1} processed with business name: ${processedData.locationName}`);
             }
           } catch (error) {
             console.error('❌ Error processing row', i + 1, ':', error);
@@ -666,16 +672,16 @@ const FileUpload = () => {
             errors.push({ row: i + 1, error: String(error) });
           }
         } else {
-          console.log(`❌ Skipping row ${i + 1} - no valid business name found (DBA column must contain actual business names, not numeric IDs)`);
+          console.log(`❌ REJECTED: Row ${i + 1} - no valid business name found (NUMERIC NAMES ARE STRICTLY FORBIDDEN)`);
           errorCount++;
-          errors.push({ row: i + 1, error: 'No valid business name found in DBA column' });
+          errors.push({ row: i + 1, error: 'No valid business name found - numeric names are not allowed' });
         }
       }
 
-      console.log('=== Upload Summary ===');
+      console.log('=== UPLOAD SUMMARY - BUSINESS NAMES ONLY ===');
       console.log('Success count:', successCount);
       console.log('Error count:', errorCount);
-      console.log('Locations created:', locationsCreated);
+      console.log('Locations created with business names:', locationsCreated);
       console.log('Total rows processed:', rawData.length);
 
       await supabase
@@ -698,8 +704,9 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
-      const successMessage = `Strict DBA business name upload completed! Processed ${successCount} rows from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using proper business names from DBA column.` : ''}`;
+      const successMessage = `BUSINESS NAMES ONLY upload completed! Processed ${successCount} rows with proper business names from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for having numeric names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using ONLY proper business names.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -709,7 +716,7 @@ const FileUpload = () => {
       });
 
       toast({
-        title: "DBA Business Name Upload Complete",
+        title: "Business Names Only Upload Complete",
         description: successMessage,
       });
 
@@ -739,7 +746,7 @@ const FileUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5" />
-          Strict DBA Business Name Upload
+          Business Names Only Upload (Zero Tolerance for Numeric Names)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -776,8 +783,8 @@ const FileUpload = () => {
                   <p className="text-xs text-primary mt-1">
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    <strong>Required:</strong> DBA Name column (business names like "Joe's Crab Shack") and Sales Amount column
+                  <p className="text-xs text-red-600 mt-1 font-medium">
+                    <strong>MANDATORY:</strong> DBA Name column with business names (NO NUMERIC NAMES ALLOWED)
                   </p>
                 </div>
                 <input
@@ -816,19 +823,17 @@ const FileUpload = () => {
           </div>
         )}
 
-        <div className="text-xs text-muted-foreground bg-green-50 border border-green-200 rounded-lg p-3">
-          <p className="font-medium mb-2 text-green-800">🎯 Strict DBA Business Name Validation:</p>
-          <ul className="space-y-1 text-green-700">
-            <li><strong>✅ Priority 1:</strong> "DBA Name" column (exact match)</li>
-            <li><strong>✅ Priority 2:</strong> "DBA Name" variations (dba_name, etc.)</li>
-            <li><strong>✅ Priority 3:</strong> "DBA" column (exact match)</li>
-            <li><strong>✅ Priority 4:</strong> DBA-related patterns</li>
-            <li><strong>❌ Strict Rejection:</strong> Purely numeric values (like "100336")</li>
-            <li><strong>❌ Strict Rejection:</strong> Values with no letters</li>
-            <li><strong>❌ Strict Rejection:</strong> Account ID patterns</li>
+        <div className="text-xs text-muted-foreground bg-red-50 border border-red-200 rounded-lg p-3">
+          <p className="font-medium mb-2 text-red-800">🚫 ZERO TOLERANCE for Numeric Location Names:</p>
+          <ul className="space-y-1 text-red-700">
+            <li><strong>❌ STRICTLY FORBIDDEN:</strong> Numeric values like "100336", "12345"</li>
+            <li><strong>❌ STRICTLY FORBIDDEN:</strong> Account ID patterns</li>
+            <li><strong>❌ STRICTLY FORBIDDEN:</strong> Values with no letters</li>
+            <li><strong>✅ REQUIRED:</strong> Proper business names like "Joe's Restaurant"</li>
+            <li><strong>✅ REQUIRED:</strong> "DBA Name" or "Business Name" column</li>
           </ul>
-          <p className="mt-2 text-sm font-medium text-green-800">
-            <strong>✅ Result:</strong> Only proper business names like "Joe's Crab Shack" will be accepted as location names.
+          <p className="mt-2 text-sm font-medium text-red-800">
+            <strong>⚠️ ANY ROW WITH NUMERIC NAMES WILL BE COMPLETELY REJECTED</strong>
           </p>
         </div>
       </CardContent>
