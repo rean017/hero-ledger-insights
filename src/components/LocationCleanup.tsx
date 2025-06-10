@@ -140,41 +140,71 @@ const LocationCleanup = () => {
       const locationIds = numericLocations.map(loc => loc.id);
       console.log('Deleting numeric locations with IDs:', locationIds);
       
-      // First delete any agent assignments for these locations
-      const { error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .delete()
-        .in('location_id', locationIds);
-
-      if (assignmentError) {
-        console.error('Error deleting assignments:', assignmentError);
-        throw assignmentError;
+      // Try to delete in smaller batches to avoid connection issues
+      const batchSize = 50;
+      const batches = [];
+      for (let i = 0; i < locationIds.length; i += batchSize) {
+        batches.push(locationIds.slice(i, i + batchSize));
       }
 
-      // Then delete any transactions for these locations
-      const { error: transactionError } = await supabase
-        .from('transactions')
-        .delete()
-        .in('account_id', numericLocations.map(loc => loc.account_id).filter(Boolean));
+      let totalDeleted = 0;
 
-      if (transactionError) {
-        console.error('Error deleting transactions:', transactionError);
-        // Don't throw here, just log as some locations might not have transactions
+      for (const batch of batches) {
+        console.log(`Processing batch of ${batch.length} locations...`);
+        
+        try {
+          // Delete agent assignments for this batch
+          const { error: assignmentError } = await supabase
+            .from('location_agent_assignments')
+            .delete()
+            .in('location_id', batch);
+
+          if (assignmentError) {
+            console.error('Error deleting assignments for batch:', assignmentError);
+            // Continue with location deletion even if assignments fail
+          }
+
+          // Delete transactions for this batch - get account_ids first
+          const batchLocations = numericLocations.filter(loc => batch.includes(loc.id));
+          const accountIds = batchLocations.map(loc => loc.account_id).filter(Boolean);
+          
+          if (accountIds.length > 0) {
+            const { error: transactionError } = await supabase
+              .from('transactions')
+              .delete()
+              .in('account_id', accountIds);
+
+            if (transactionError) {
+              console.error('Error deleting transactions for batch:', transactionError);
+              // Continue even if transaction deletion fails
+            }
+          }
+
+          // Delete the locations in this batch
+          const { error: locationError } = await supabase
+            .from('locations')
+            .delete()
+            .in('id', batch);
+
+          if (locationError) {
+            console.error('Error deleting locations for batch:', locationError);
+            throw locationError;
+          }
+
+          totalDeleted += batch.length;
+          console.log(`Successfully deleted batch. Total deleted so far: ${totalDeleted}`);
+
+          // Small delay between batches to avoid overwhelming the database
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+        } catch (error) {
+          console.error(`Failed to delete batch:`, error);
+          throw new Error(`Failed to delete batch after ${totalDeleted} successful deletions: ${error.message}`);
+        }
       }
 
-      // Finally delete the locations
-      const { error: locationError } = await supabase
-        .from('locations')
-        .delete()
-        .in('id', locationIds);
-
-      if (locationError) {
-        console.error('Error deleting locations:', locationError);
-        throw locationError;
-      }
-
-      console.log('Successfully deleted', numericLocations.length, 'numeric locations');
-      return numericLocations.length;
+      console.log('Successfully deleted all', totalDeleted, 'numeric locations');
+      return totalDeleted;
     },
     onSuccess: (deletedCount) => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
