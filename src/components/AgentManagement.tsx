@@ -6,9 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Plus, Search, Edit2, CalendarIcon } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Plus, Search, Edit2 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -23,17 +22,42 @@ const AgentManagement = () => {
   const [newAgentName, setNewAgentName] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [agentNotes, setAgentNotes] = useState("");
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-    from: startOfMonth(subMonths(new Date(), 1)),
-    to: endOfMonth(new Date())
-  });
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [timeFrame, setTimeFrame] = useState("current");
   const { toast } = useToast();
 
+  // Calculate date range based on timeFrame
+  const getDateRange = (frame: string) => {
+    const now = new Date();
+    switch (frame) {
+      case 'current':
+        return {
+          from: startOfMonth(now),
+          to: endOfMonth(now)
+        };
+      case 'last':
+        return {
+          from: startOfMonth(subMonths(now, 1)),
+          to: endOfMonth(subMonths(now, 1))
+        };
+      case 'last3':
+        return {
+          from: startOfMonth(subMonths(now, 2)),
+          to: endOfMonth(now)
+        };
+      default:
+        return {
+          from: startOfMonth(now),
+          to: endOfMonth(now)
+        };
+    }
+  };
+
+  const dateRange = getDateRange(timeFrame);
+
   const { data: agents, isLoading, refetch } = useQuery({
-    queryKey: ['agents-data', dateRange],
+    queryKey: ['agents-data', timeFrame, dateRange],
     queryFn: async () => {
-      console.log('Fetching agents data for AgentManagement with date range:', dateRange);
+      console.log('Fetching agents data for timeframe:', timeFrame, 'with date range:', dateRange);
       
       // Ensure Merchant Hero exists in agents table
       const { data: existingMerchantHero } = await supabase
@@ -61,6 +85,8 @@ const AgentManagement = () => {
         console.error('Error fetching transactions:', transactionError);
         throw transactionError;
       }
+
+      console.log(`Loaded ${transactions?.length || 0} transactions for period ${format(dateRange.from, 'yyyy-MM-dd')} to ${format(dateRange.to, 'yyyy-MM-dd')}`);
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -102,7 +128,7 @@ const AgentManagement = () => {
       const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
       const agentCommissionSummaries = groupCommissionsByAgent(commissions);
 
-      console.log('Commission summaries for date range:', agentCommissionSummaries);
+      console.log('Commission summaries for timeframe:', agentCommissionSummaries);
 
       // Get all unique agent names from both manual agents and assignments
       const allAgentNames = new Set<string>();
@@ -123,7 +149,7 @@ const AgentManagement = () => {
 
       console.log('All agent names:', Array.from(allAgentNames));
 
-      // Build final agent data - for ALL agents
+      // Build final agent data
       const result = Array.from(allAgentNames).map(agentName => {
         const commissionSummary = agentCommissionSummaries.find(summary => summary.agentName === agentName);
         const manualAgent = manualAgents?.find(a => a.name === agentName);
@@ -164,7 +190,7 @@ const AgentManagement = () => {
         // Calculate average rate as percentage of commission to volume
         let avgRate;
         if (agentName === 'Merchant Hero') {
-          avgRate = 'Remainder'; // Merchant Hero gets the remainder, not a fixed rate
+          avgRate = 'Remainder';
         } else {
           avgRate = agentVolumeStats.totalVolume > 0 
             ? ((totalCommission / agentVolumeStats.totalVolume) * 100).toFixed(2) + '%' 
@@ -182,7 +208,7 @@ const AgentManagement = () => {
           notes: manualAgent?.notes || ''
         };
 
-        console.log(`Final agent ${agentName} data for period ${format(dateRange.from, 'yyyy-MM-dd')} to ${format(dateRange.to, 'yyyy-MM-dd')}:`, {
+        console.log(`Final agent ${agentName} data for timeframe ${timeFrame}:`, {
           ...agentData,
           assignedLocationIds: Array.from(assignedLocationIds),
           assignedAccountIds: Array.from(assignedAccountIds),
@@ -271,31 +297,6 @@ const AgentManagement = () => {
     setIsEditNotesOpen(true);
   };
 
-  const setDatePreset = (preset: string) => {
-    const now = new Date();
-    let from: Date, to: Date;
-
-    switch (preset) {
-      case 'current':
-        from = startOfMonth(now);
-        to = endOfMonth(now);
-        break;
-      case 'last':
-        from = startOfMonth(subMonths(now, 1));
-        to = endOfMonth(subMonths(now, 1));
-        break;
-      case 'last3':
-        from = startOfMonth(subMonths(now, 2));
-        to = endOfMonth(now);
-        break;
-      default:
-        return;
-    }
-
-    setDateRange({ from, to });
-    setIsDatePickerOpen(false);
-  };
-
   const filteredAgents = agents?.filter(agent =>
     agent.name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
@@ -367,61 +368,17 @@ const AgentManagement = () => {
               className="pl-10"
             />
           </div>
-          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4" />
-                {format(dateRange.from, "MMM dd")} - {format(dateRange.to, "MMM dd")}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80" align="end">
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDatePreset('current')}
-                  >
-                    Current Month
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDatePreset('last')}
-                  >
-                    Last Month
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDatePreset('last3')}
-                  >
-                    Last 3 Months
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>From</Label>
-                    <Calendar
-                      mode="single"
-                      selected={dateRange.from}
-                      onSelect={(date) => date && setDateRange(prev => ({ ...prev, from: date }))}
-                      className="rounded-md border"
-                    />
-                  </div>
-                  <div>
-                    <Label>To</Label>
-                    <Calendar
-                      mode="single"
-                      selected={dateRange.to}
-                      onSelect={(date) => date && setDateRange(prev => ({ ...prev, to: date }))}
-                      className="rounded-md border"
-                    />
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <ToggleGroup type="single" value={timeFrame} onValueChange={setTimeFrame} className="border rounded-md">
+            <ToggleGroupItem value="current" aria-label="Current Month" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              Current Month
+            </ToggleGroupItem>
+            <ToggleGroupItem value="last" aria-label="Last Month" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              Last Month
+            </ToggleGroupItem>
+            <ToggleGroupItem value="last3" aria-label="Last 3 Months" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              Last 3 Months
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
       </div>
 
