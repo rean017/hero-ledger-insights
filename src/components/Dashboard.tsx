@@ -100,29 +100,33 @@ const Dashboard = () => {
       // Use the unified commission calculation logic
       const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
       
-      // Calculate total agent payouts (what we pay to all agents including Merchant Hero net)
-      const totalAgentPayouts = commissions.reduce((sum, commission) => sum + commission.commission, 0);
+      console.log('Dashboard commission calculations:', commissions);
       
-      // Merchant Hero's net income is already calculated correctly in the commission logic
-      const merchantHeroCommission = commissions.find(c => c.agentName === 'Merchant Hero');
-      const merchantHeroNet = merchantHeroCommission ? merchantHeroCommission.commission : 0;
+      // Calculate Merchant Hero's total net income by summing all their location commissions
+      const merchantHeroCommissions = commissions.filter(c => c.agentName === 'Merchant Hero');
+      const merchantHeroNetIncome = merchantHeroCommissions.reduce((sum, commission) => sum + commission.commission, 0);
+      
+      // Calculate total commissions paid to other agents (excluding Merchant Hero)
+      const otherAgentCommissions = commissions.filter(c => c.agentName !== 'Merchant Hero');
+      const totalOtherAgentCommissions = otherAgentCommissions.reduce((sum, commission) => sum + commission.commission, 0);
 
       // Get locations count
       const { count: locationsCount } = await supabase
         .from('locations')
         .select('*', { count: 'exact', head: true });
 
-      console.log('Dashboard calculations:', {
+      console.log('Dashboard final calculations:', {
         totalRevenue,
-        totalAgentPayouts,
-        merchantHeroNet,
-        commissionsBreakdown: commissions
+        merchantHeroNetIncome,
+        totalOtherAgentCommissions,
+        merchantHeroCommissions,
+        otherAgentCommissions
       });
 
       return {
         totalRevenue,
-        totalAgentPayouts,
-        netIncome: merchantHeroNet, // This is Merchant Hero's actual net income
+        totalAgentPayouts: totalOtherAgentCommissions, // Only external agent commissions
+        netIncome: merchantHeroNetIncome, // Merchant Hero's total net income
         locationsCount: locationsCount || 0
       };
     }
@@ -218,7 +222,7 @@ const Dashboard = () => {
     },
     {
       title: "Agent Payouts",
-      value: `$${(stats?.totalAgentPayouts - (stats?.netIncome || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
+      value: `$${stats?.totalAgentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
       change: dateRange.label,
       trend: "up",
       icon: Users,
@@ -298,7 +302,7 @@ const Dashboard = () => {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Agent Commissions</span>
-                <span className="font-semibold text-red-600">-${((stats?.totalAgentPayouts || 0) - (stats?.netIncome || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="font-semibold text-red-600">-${stats?.totalAgentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
               </div>
               <div className="border-t pt-2">
                 <div className="flex justify-between items-center">
