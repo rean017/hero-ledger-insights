@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, TrendingUp, Users, Building2 } from "lucide-react";
@@ -89,7 +90,7 @@ const Dashboard = () => {
 
       if (locationError) throw locationError;
 
-      // Calculate total sales volume
+      // Calculate total sales volume - FIXED: Properly sum H and I columns for TRNXN
       let totalRevenue = 0;
       let totalAgentPayoutsFromTransactions = 0;
       
@@ -97,17 +98,29 @@ const Dashboard = () => {
       console.log('Raw transactions data:', transactions?.slice(0, 5)); // Show first 5 for debugging
       
       transactions?.forEach(t => {
-        const volume = Number(t.volume) || 0;
-        const debitVolume = Number(t.debit_volume) || 0;
-        const agentPayout = Number(t.agent_payout) || 0;
+        // FIXED: For TRNXN, properly sum both Bank Card Volume (column H) and Debit Card Volume (column I)
+        const bankCardVolume = Number(t.volume) || 0;
+        const debitCardVolume = Number(t.debit_volume) || 0;
+        const totalTransactionVolume = bankCardVolume + debitCardVolume;
         
-        totalRevenue += volume + debitVolume;
+        totalRevenue += totalTransactionVolume;
+        
+        const agentPayout = Number(t.agent_payout) || 0;
         totalAgentPayoutsFromTransactions += agentPayout;
+        
+        // Debug logging for volume calculation
+        if (debitCardVolume > 0 || bankCardVolume > 0) {
+          console.log(`TRNXN Volume calculation for account ${t.account_id}:`, {
+            bankCardVolume: bankCardVolume,
+            debitCardVolume: debitCardVolume,
+            totalVolume: totalTransactionVolume
+          });
+        }
         
         if (agentPayout > 0) {
           console.log('Transaction with agent_payout:', {
             account_id: t.account_id,
-            volume: volume + debitVolume,
+            volume: totalTransactionVolume,
             agent_payout: agentPayout
           });
         }
