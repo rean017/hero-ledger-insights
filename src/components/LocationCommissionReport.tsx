@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -270,7 +271,7 @@ const LocationCommissionReport = () => {
             <div className="text-center py-8 text-muted-foreground">
               No commission data to display. Upload transaction data and assign agents to locations.
             </div>
-            )}
+          )}
         </CardContent>
       </Card>
     </div>
@@ -278,5 +279,3 @@ const LocationCommissionReport = () => {
 };
 
 export default LocationCommissionReport;
-
-</edits_to_apply>
