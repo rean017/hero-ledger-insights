@@ -39,7 +39,6 @@ const FileUpload = () => {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     
-    // Add months from 2 years ago to next year
     for (let year = currentYear - 2; year <= currentYear + 1; year++) {
       for (let month = 0; month < 12; month++) {
         const date = new Date(year, month, 1);
@@ -49,71 +48,144 @@ const FileUpload = () => {
       }
     }
     
-    return months.reverse(); // Most recent first
+    return months.reverse();
   };
 
   const monthOptions = generateMonthOptions();
+
+  // Smart column detection for location names
+  const detectLocationColumn = (headers: string[]): string | null => {
+    const locationKeywords = [
+      'location', 'merchant', 'business', 'store', 'shop', 'company', 'name',
+      'dba', 'account', 'client', 'customer', 'venue', 'establishment', 'outlet'
+    ];
+    
+    console.log('Detecting location column from headers:', headers);
+    
+    for (const header of headers) {
+      const headerLower = header.toLowerCase().trim();
+      for (const keyword of locationKeywords) {
+        if (headerLower.includes(keyword)) {
+          console.log('Found location column:', header);
+          return header;
+        }
+      }
+    }
+    
+    // Fallback: look for the first text column that's not obviously numeric
+    for (const header of headers) {
+      if (!header.toLowerCase().includes('amount') && 
+          !header.toLowerCase().includes('volume') && 
+          !header.toLowerCase().includes('total') &&
+          !header.toLowerCase().includes('sum') &&
+          !header.toLowerCase().includes('commission') &&
+          !header.toLowerCase().includes('payout') &&
+          !header.toLowerCase().includes('rate') &&
+          !header.toLowerCase().includes('percent')) {
+        console.log('Using fallback location column:', header);
+        return header;
+      }
+    }
+    
+    console.log('No location column detected');
+    return null;
+  };
+
+  // Smart column detection for volume/sales amounts
+  const detectVolumeColumn = (headers: string[]): string | null => {
+    const volumeKeywords = [
+      'volume', 'sales', 'amount', 'total', 'revenue', 'income', 'gross',
+      'processing', 'transaction', 'card', 'payment', 'sum'
+    ];
+    
+    console.log('Detecting volume column from headers:', headers);
+    
+    // First pass: look for exact matches with volume keywords
+    for (const header of headers) {
+      const headerLower = header.toLowerCase().trim();
+      for (const keyword of volumeKeywords) {
+        if (headerLower.includes(keyword) && 
+            !headerLower.includes('debit') && 
+            !headerLower.includes('refund') && 
+            !headerLower.includes('chargeback') &&
+            !headerLower.includes('commission') &&
+            !headerLower.includes('payout')) {
+          console.log('Found volume column:', header);
+          return header;
+        }
+      }
+    }
+    
+    console.log('No volume column detected');
+    return null;
+  };
+
+  // Smart column detection for commission/payout amounts
+  const detectCommissionColumn = (headers: string[]): string | null => {
+    const commissionKeywords = [
+      'commission', 'payout', 'agent', 'residual', 'fee', 'earnings', 'profit'
+    ];
+    
+    console.log('Detecting commission column from headers:', headers);
+    
+    for (const header of headers) {
+      const headerLower = header.toLowerCase().trim();
+      for (const keyword of commissionKeywords) {
+        if (headerLower.includes(keyword)) {
+          console.log('Found commission column:', header);
+          return header;
+        }
+      }
+    }
+    
+    console.log('No commission column detected');
+    return null;
+  };
 
   const detectProcessor = (headers: string[], firstDataRow?: any): string => {
     const headerStr = headers.join('|').toLowerCase();
     
     console.log('Detecting processor from headers:', headers);
-    console.log('First data row sample:', firstDataRow);
     
-    // Check for TRNXN specific columns
+    // Check for known processor patterns
     if (headerStr.includes('bank card volume') || headerStr.includes('bankcard volume') || headerStr.includes('salescode')) {
       console.log('Detected TRNXN processor');
       return 'TRNXN';
     }
     
-    // Check for Maverick specific columns
     if (headerStr.includes('total amount') && headerStr.includes('sales rep')) {
       console.log('Detected Maverick processor');
       return 'Maverick';
     }
     
-    // Check for SignaPay specific columns
     if (headerStr.includes('gross sales') && headerStr.includes('residual')) {
       console.log('Detected SignaPay processor');
       return 'SignaPay';
     }
     
-    // Check for Green Payments specific columns
     if (headerStr.includes('processing volume') && headerStr.includes('agent revenue')) {
       console.log('Detected Green Payments processor');
       return 'Green Payments';
     }
 
-    // Additional check for Green Payments based on file name patterns or content
     if (headerStr.includes('fiserv') || headerStr.includes('residuals')) {
       console.log('Detected Green Payments processor (Fiserv format)');
       return 'Green Payments';
     }
     
-    // Default fallback
-    console.log('Could not detect processor, using Unknown');
-    return 'Unknown';
+    console.log('Could not detect specific processor, using Generic');
+    return 'Generic';
   };
 
-  const processRow = (row: any, processor: string): ProcessedData | null => {
+  const processRow = (row: any, processor: string, locationColumn: string | null, volumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
     try {
       let processed: ProcessedData = { rawData: row, processor };
 
       console.log('Processing row for processor:', processor);
       console.log('Row data keys:', Object.keys(row));
-      console.log('Row data sample:', row);
 
       // Handle the specific Green Payments CSV format with __parsed_extra
       if (row.__parsed_extra && Array.isArray(row.__parsed_extra)) {
-        // This appears to be a Green Payments Fiserv format where:
-        // Column 0: Merchant ID
-        // Column 1: Merchant Name  
-        // Column 2: Transactions
-        // Column 3: Sales Amount (Volume)
-        // Column 4: Net
-        // Column 5: BPS
-        // Column 6: Agent Net (Payout)
-        
         const merchantId = Object.values(row)[0] as string;
         const extraData = row.__parsed_extra;
         
@@ -122,62 +194,37 @@ const FileUpload = () => {
           processed.locationName = extraData[0] as string;
           processed.volume = parseFloat(extraData[2] as string) || 0;
           processed.agentPayout = parseFloat(extraData[5] as string) || 0;
-          processed.debitVolume = 0; // Not provided in this format
-          processed.agentName = null; // Will be assigned manually
+          processed.debitVolume = 0;
+          processed.agentName = null;
         }
       } else {
-        // Handle other processor formats
-        switch (processor) {
-          case 'TRNXN':
-            processed.volume = parseFloat(row['Bank Card Volume'] || row['Bankcard Volume'] || 0);
-            processed.debitVolume = parseFloat(row['Debit'] || 0);
-            processed.agentPayout = parseFloat(row['Net Commission'] || row['Commission'] || 0);
-            processed.agentName = row['SalesCode'] || row['Partner'] || row['Sales Code'];
-            processed.accountId = row['Account ID'] || row['MID'] || row['Merchant ID'] || row['Account'] || null;
-            processed.locationName = row['DBA'] || row['Business Name'] || row['Location'] || null;
-            processed.transactionDate = row['Date'] || row['Period'] || row['Transaction Date'] || null;
-            break;
+        // Smart column mapping
+        if (locationColumn && row[locationColumn]) {
+          processed.locationName = String(row[locationColumn]).trim();
+        }
+        
+        if (volumeColumn && row[volumeColumn]) {
+          const volumeValue = String(row[volumeColumn]).replace(/[,$]/g, '');
+          processed.volume = parseFloat(volumeValue) || 0;
+        }
+        
+        if (commissionColumn && row[commissionColumn]) {
+          const commissionValue = String(row[commissionColumn]).replace(/[,$]/g, '');
+          processed.agentPayout = parseFloat(commissionValue) || 0;
+        }
 
-          case 'Maverick':
-            processed.volume = parseFloat(row['Total Amount'] || row['Volume'] || row['Sales'] || 0);
-            processed.debitVolume = parseFloat(row['Debit Amount'] || row['Returns'] || 0);
-            processed.agentPayout = parseFloat(row['Commission'] || row['Agent Commission'] || 0);
-            processed.agentName = row['Sales Rep'] || row['Agent'] || row['Representative'];
-            processed.accountId = row['Merchant ID'] || row['MID'] || row['Account'];
-            processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
-            processed.transactionDate = row['Settlement Date'] || row['Date'] || row['Trans Date'];
+        // Set default values
+        processed.debitVolume = 0;
+        processed.agentName = null;
+        
+        // Try to find account ID from various possible columns
+        const accountColumns = ['account_id', 'mid', 'merchant_id', 'account', 'id'];
+        for (const col of accountColumns) {
+          const foundCol = Object.keys(row).find(key => key.toLowerCase().includes(col));
+          if (foundCol && row[foundCol]) {
+            processed.accountId = String(row[foundCol]);
             break;
-
-          case 'SignaPay':
-            processed.volume = parseFloat(row['Gross Sales'] || row['Volume'] || row['Amount'] || 0);
-            processed.debitVolume = parseFloat(row['Returns'] || row['Chargebacks'] || 0);
-            processed.agentPayout = parseFloat(row['Residual'] || row['Agent Pay'] || 0);
-            processed.agentName = row['Agent Name'] || row['Rep'] || row['Sales Agent'];
-            processed.accountId = row['DBA'] || row['Merchant'] || row['Account Number'];
-            processed.locationName = row['DBA'] || row['Business Name'] || row['Merchant Name'] || row['Location'];
-            processed.transactionDate = row['Process Date'] || row['Date'] || row['Settlement Date'];
-            break;
-
-          case 'Green Payments':
-            processed.volume = parseFloat(row['Processing Volume'] || row['Volume'] || row['Sales Volume'] || 0);
-            processed.debitVolume = parseFloat(row['Debit Volume'] || row['Refunds'] || 0);
-            processed.agentPayout = parseFloat(row['Agent Revenue'] || row['Commission'] || 0);
-            processed.agentName = row['Agent'] || row['Partner'] || row['Sales Partner'];
-            processed.accountId = row['Merchant ID'] || row['Account'] || row['Customer ID'];
-            processed.locationName = row['Business Name'] || row['DBA'] || row['Merchant Name'] || row['Location'];
-            processed.transactionDate = row['Date'] || row['Processing Date'] || row['Trans Date'];
-            break;
-
-          default:
-            // Generic mapping - try common column names
-            processed.volume = parseFloat(row['Volume'] || row['Bankcard Volume'] || row['Income'] || row['Sales'] || row['Amount'] || 0);
-            processed.debitVolume = parseFloat(row['Debit Volume'] || row['Returns'] || 0);
-            processed.agentPayout = parseFloat(row['Commission'] || row['Agent Payout'] || row['Payout'] || row['Net Commission'] || row['Gross Commission'] || 0);
-            processed.agentName = row['Agent'] || row['Sales Code'] || row['Partner'] || row['Rep'];
-            processed.accountId = row['MID'] || row['Account ID'] || row['Merchant ID'];
-            processed.locationName = row['DBA'] || row['Business Name'] || row['Location'] || row['Merchant Name'];
-            processed.transactionDate = row['Date'] || row['Period'] || row['Transaction Date'];
-            break;
+          }
         }
       }
 
@@ -201,7 +248,6 @@ const FileUpload = () => {
     if (!agentName) return null;
 
     try {
-      // Check if agent already exists
       const { data: existingAgent, error: selectError } = await supabase
         .from('agents')
         .select('id')
@@ -217,7 +263,6 @@ const FileUpload = () => {
         return existingAgent.id;
       }
 
-      // Create new agent
       const { data: newAgent, error: insertError } = await supabase
         .from('agents')
         .insert({
@@ -244,7 +289,6 @@ const FileUpload = () => {
     if (!locationName) return null;
 
     try {
-      // Check if location already exists
       const { data: existingLocation, error: selectError } = await supabase
         .from('locations')
         .select('id')
@@ -260,7 +304,6 @@ const FileUpload = () => {
         return existingLocation.id;
       }
 
-      // Create new location
       const { data: newLocation, error: insertError } = await supabase
         .from('locations')
         .insert({
@@ -335,11 +378,10 @@ const FileUpload = () => {
     setUploadStatus({ status: 'processing', message: 'Processing file...', filename: file.name });
 
     try {
-      console.log('=== Starting File Upload Process ===');
+      console.log('=== Starting Smart File Upload Process ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
-      // Parse the file
       const rawData = await parseFile(file);
       console.log('Parsed data length:', rawData.length);
       console.log('Parsed data sample (first 3 rows):', rawData.slice(0, 3));
@@ -348,14 +390,24 @@ const FileUpload = () => {
         throw new Error('No data found in file');
       }
 
-      // Detect processor based on column headers and first data row
       const headers = Object.keys(rawData[0]);
       const detectedProcessor = detectProcessor(headers, rawData[1]);
       
-      console.log('Detected processor:', detectedProcessor);
-      console.log('File headers:', headers);
+      // Smart column detection
+      const locationColumn = detectLocationColumn(headers);
+      const volumeColumn = detectVolumeColumn(headers);
+      const commissionColumn = detectCommissionColumn(headers);
+      
+      console.log('Smart column detection results:');
+      console.log('- Location column:', locationColumn);
+      console.log('- Volume column:', volumeColumn);
+      console.log('- Commission column:', commissionColumn);
+      console.log('- Detected processor:', detectedProcessor);
 
-      // Fix the date range issue - use proper last day of month
+      if (!locationColumn && !volumeColumn) {
+        throw new Error('Could not detect location or volume columns in the file. Please ensure your file contains recognizable location names and sales/volume amounts.');
+      }
+
       const [year, month] = selectedMonth.split('-');
       const lastDayOfMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
       const endDate = `${selectedMonth}-${lastDayOfMonth}`;
@@ -374,7 +426,6 @@ const FileUpload = () => {
         console.log('Successfully deleted existing transactions');
       }
 
-      // Create file upload record
       const { data: uploadRecord, error: uploadError } = await supabase
         .from('file_uploads')
         .insert({
@@ -393,12 +444,11 @@ const FileUpload = () => {
       let locationsCreated = 0;
       const errors: any[] = [];
 
-      // Process each row
-      console.log('=== Processing Rows ===');
+      console.log('=== Processing Rows with Smart Detection ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         console.log(`\n--- Processing row ${i + 1} ---`);
-        const processedData = processRow(row, detectedProcessor);
+        const processedData = processRow(row, detectedProcessor, locationColumn, volumeColumn, commissionColumn);
 
         if (processedData) {
           console.log('Processed data for row', i + 1, ':', {
@@ -406,19 +456,18 @@ const FileUpload = () => {
             debitVolume: processedData.debitVolume,
             agentPayout: processedData.agentPayout,
             agentName: processedData.agentName,
-            accountId: processedData.accountId
+            accountId: processedData.accountId,
+            locationName: processedData.locationName
           });
 
-          // Check if we have meaningful data (volume OR agent payout)
-          if ((processedData.volume && processedData.volume > 0) || (processedData.agentPayout && processedData.agentPayout > 0)) {
+          // Check if we have meaningful data (location name OR volume)
+          if (processedData.locationName || (processedData.volume && processedData.volume > 0)) {
             try {
-              // Ensure location exists if we have location data
               let locationId = null;
               if (processedData.locationName) {
                 const existingLocationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
                 if (existingLocationId) {
                   locationId = existingLocationId;
-                  // Check if this was a newly created location
                   const { data: locationCheck } = await supabase
                     .from('locations')
                     .select('created_at')
@@ -431,7 +480,6 @@ const FileUpload = () => {
                 }
               }
 
-              // Use the selected month instead of the transaction date from file
               const transactionDate = `${selectedMonth}-01`;
 
               const transactionData = {
@@ -439,7 +487,7 @@ const FileUpload = () => {
                 volume: processedData.volume || 0,
                 debit_volume: processedData.debitVolume || 0,
                 agent_payout: processedData.agentPayout || 0,
-                agent_name: null, // Don't store agent names from uploads
+                agent_name: null,
                 account_id: processedData.accountId,
                 transaction_date: transactionDate,
                 raw_data: processedData.rawData
@@ -465,9 +513,9 @@ const FileUpload = () => {
               errors.push({ row: i + 1, error: String(error) });
             }
           } else {
-            console.log(`Skipping row ${i + 1} - no valid volume or payout data (volume: ${processedData.volume}, payout: ${processedData.agentPayout})`);
+            console.log(`Skipping row ${i + 1} - no valid location or volume data`);
             errorCount++;
-            errors.push({ row: i + 1, error: 'No valid volume or payout data found' });
+            errors.push({ row: i + 1, error: 'No valid location or volume data found' });
           }
         } else {
           console.log(`Skipping row ${i + 1} - failed to process`);
@@ -481,7 +529,6 @@ const FileUpload = () => {
       console.log('Error count:', errorCount);
       console.log('Total rows processed:', rawData.length);
 
-      // Update file upload record
       await supabase
         .from('file_uploads')
         .update({
@@ -491,7 +538,7 @@ const FileUpload = () => {
         })
         .eq('id', uploadRecord.id);
 
-      // Invalidate all relevant queries to refresh dashboard and other components
+      // Invalidate all relevant queries
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['top-agents'] });
       queryClient.invalidateQueries({ queryKey: ['agents-data'] });
@@ -503,7 +550,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
 
-      const successMessage = `Processed ${successCount} rows successfully from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}`;
+      const successMessage = `Smart upload completed! Processed ${successCount} rows from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -513,7 +560,7 @@ const FileUpload = () => {
       });
 
       toast({
-        title: "Upload Complete",
+        title: "Smart Upload Complete",
         description: successMessage,
       });
 
@@ -532,7 +579,6 @@ const FileUpload = () => {
       });
     } finally {
       setUploading(false);
-      // Reset file input
       if (event.target) {
         event.target.value = '';
       }
@@ -544,7 +590,7 @@ const FileUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5" />
-          Upload Transaction Data
+          Smart Upload Transaction Data
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -582,7 +628,7 @@ const FileUpload = () => {
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Processor will be automatically detected
+                    Smart detection will find location names and volume automatically
                   </p>
                 </div>
                 <input
@@ -622,14 +668,14 @@ const FileUpload = () => {
         )}
 
         <div className="text-xs text-muted-foreground">
-          <p className="font-medium mb-1">System automatically detects processor and applies correct mapping:</p>
+          <p className="font-medium mb-1">Smart Upload automatically detects:</p>
           <ul className="space-y-1">
-            <li><strong>TRNXN:</strong> Bank Card Volume (for Volume), Debit (for Debit Volume), Net Commission/Commission (for Agent Payout), SalesCode/Partner (for Agent Name)</li>
-            <li><strong>Maverick:</strong> Total Amount, Debit Amount, Commission, Sales Rep, Merchant ID, Business Name/DBA, Settlement Date</li>
-            <li><strong>SignaPay:</strong> Gross Sales, Returns, Residual, Agent Name, DBA, Business Name, Process Date</li>
-            <li><strong>Green Payments:</strong> Processing Volume, Debit Volume, Agent Revenue, Agent, Merchant ID, Business Name, Date</li>
+            <li><strong>Location Names:</strong> Business names, merchant names, DBA, store names, etc.</li>
+            <li><strong>Volume/Sales:</strong> Sales amounts, processing volume, transaction amounts, revenue, etc.</li>
+            <li><strong>Commission:</strong> Agent payouts, commissions, residuals, fees (if available)</li>
+            <li><strong>File Format:</strong> Works with any reasonable CSV or Excel file structure</li>
           </ul>
-          <p className="mt-2 text-xs"><strong>Note:</strong> Agent data is NOT imported from files. Create agents manually and assign them to locations. Uploading data replaces existing data for that month and processor.</p>
+          <p className="mt-2 text-xs"><strong>Note:</strong> The system focuses on location names and sales amounts. Column names can vary - the smart detection will find the right data automatically. Agent assignments are managed separately in the Locations tab.</p>
         </div>
       </CardContent>
     </Card>
