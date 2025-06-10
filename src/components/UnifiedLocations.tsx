@@ -110,6 +110,18 @@ const UnifiedLocations = () => {
 
       if (locationError) throw locationError;
 
+      // Always assign Merchant Hero to every location with 0 BPS (since they get the remainder)
+      const { error: merchantHeroError } = await supabase
+        .from('location_agent_assignments')
+        .insert([{
+          location_id: location.id,
+          agent_name: 'Merchant Hero',
+          commission_rate: 0, // 0 BPS since they get the remainder
+          is_active: true
+        }]);
+
+      if (merchantHeroError) throw merchantHeroError;
+
       // If an agent and commission rate are selected, create assignment
       if (selectedAgent && commissionRate) {
         const { error: assignmentError } = await supabase
@@ -126,7 +138,7 @@ const UnifiedLocations = () => {
 
       toast({
         title: "Success",
-        description: `Location "${newLocationName}" has been added successfully`
+        description: `Location "${newLocationName}" has been added successfully with Merchant Hero automatically assigned`
       });
 
       setNewLocationName("");

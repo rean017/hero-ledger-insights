@@ -79,6 +79,7 @@ export const calculateLocationCommissions = (
 
     if (assignment.agent_name === 'Merchant Hero') {
       // For Merchant Hero, calculate net income = total agent_payout - commissions paid to other agents
+      // Merchant Hero is automatically assigned to every location and gets the remainder
       const otherAgentAssignments = assignments.filter(a => 
         a.is_active && 
         a.location_id === assignment.location_id && 
@@ -94,7 +95,7 @@ export const calculateLocationCommissions = (
       
       const merchantHeroNet = locationInfo.totalAgentPayout - totalCommissionsPaid;
       
-      console.log(`Merchant Hero calculation for ${location.name}:`, {
+      console.log(`Merchant Hero calculation for ${location.name} (gets remainder after paying other agents):`, {
         totalAgentPayout: locationInfo.totalAgentPayout,
         totalCommissionsPaid,
         merchantHeroNet,
@@ -106,7 +107,7 @@ export const calculateLocationCommissions = (
           locationId: assignment.location_id,
           locationName: location.name,
           agentName: assignment.agent_name,
-          bpsRate: 0, // Merchant Hero doesn't have a fixed BPS rate
+          bpsRate: 0, // Merchant Hero doesn't have a fixed BPS rate - gets remainder
           decimalRate: 0,
           locationVolume: locationInfo.totalVolume,
           commission: merchantHeroNet

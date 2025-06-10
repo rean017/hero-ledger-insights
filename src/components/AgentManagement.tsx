@@ -23,10 +23,24 @@ const AgentManagement = () => {
     queryFn: async () => {
       console.log('Fetching agents data for AgentManagement...');
       
+      // Ensure Merchant Hero exists in agents table
+      const { data: existingMerchantHero } = await supabase
+        .from('agents')
+        .select('id')
+        .eq('name', 'Merchant Hero')
+        .single();
+
+      if (!existingMerchantHero) {
+        console.log('Creating Merchant Hero agent...');
+        await supabase
+          .from('agents')
+          .insert([{ name: 'Merchant Hero', is_active: true }]);
+      }
+      
       // Fetch all required data
       const { data: transactions, error: transactionError } = await supabase
         .from('transactions')
-        .select('agent_name, volume, debit_volume, account_id')
+        .select('agent_name, volume, debit_volume, account_id, agent_payout')
         .not('agent_name', 'is', null);
 
       if (transactionError) throw transactionError;
@@ -126,9 +140,14 @@ const AgentManagement = () => {
         const accountsCount = agentVolumeStats.accountIds.size;
         
         // Calculate average rate as percentage of commission to volume
-        const avgRate = agentVolumeStats.totalVolume > 0 
-          ? ((totalCommission / agentVolumeStats.totalVolume) * 100).toFixed(2) + '%' 
-          : '0%';
+        let avgRate;
+        if (agentName === 'Merchant Hero') {
+          avgRate = 'Remainder'; // Merchant Hero gets the remainder, not a fixed rate
+        } else {
+          avgRate = agentVolumeStats.totalVolume > 0 
+            ? ((totalCommission / agentVolumeStats.totalVolume) * 100).toFixed(2) + '%' 
+            : '0%';
+        }
 
         const agentData = {
           name: agentName,

@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -116,7 +115,7 @@ const LocationCommissionReport = () => {
                     <TableRow>
                       <TableHead>Location</TableHead>
                       <TableHead>Volume</TableHead>
-                      <TableHead>BPS Rate</TableHead>
+                      <TableHead>Rate</TableHead>
                       <TableHead>Commission</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -126,7 +125,11 @@ const LocationCommissionReport = () => {
                         <TableCell className="font-medium">{location.locationName}</TableCell>
                         <TableCell>${location.locationVolume.toLocaleString()}</TableCell>
                         <TableCell>
-                          <Badge variant="outline">{location.bpsRate} BPS</Badge>
+                          {location.agentName === 'Merchant Hero' ? (
+                            <Badge variant="secondary">Remainder</Badge>
+                          ) : (
+                            <Badge variant="outline">{location.bpsRate} BPS</Badge>
+                          )}
                         </TableCell>
                         <TableCell className="font-semibold">
                           ${location.commission.toLocaleString()}
@@ -172,7 +175,11 @@ const LocationCommissionReport = () => {
                   <TableCell>{commission.locationName}</TableCell>
                   <TableCell>${commission.locationVolume.toLocaleString()}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{commission.bpsRate} BPS</Badge>
+                    {commission.agentName === 'Merchant Hero' ? (
+                      <Badge variant="secondary">Remainder</Badge>
+                    ) : (
+                      <Badge variant="outline">{commission.bpsRate} BPS</Badge>
+                    )}
                   </TableCell>
                   <TableCell className="font-semibold">
                     ${commission.commission.toLocaleString()}
