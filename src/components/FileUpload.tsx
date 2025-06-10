@@ -53,14 +53,36 @@ const FileUpload = () => {
 
   const monthOptions = generateMonthOptions();
 
-  // Smart column detection for location names
+  // Enhanced smart column detection for location names - prioritizes DBA
   const detectLocationColumn = (headers: string[]): string | null => {
+    console.log('Detecting location column from headers:', headers);
+    
+    // First priority: Look for exact "DBA" match
+    const dbaColumn = headers.find(header => 
+      header.toLowerCase().trim() === 'dba'
+    );
+    if (dbaColumn) {
+      console.log('Found DBA column:', dbaColumn);
+      return dbaColumn;
+    }
+    
+    // Second priority: Look for DBA-related variations
+    const dbaVariations = ['dba', 'doing business as', 'business name'];
+    for (const header of headers) {
+      const headerLower = header.toLowerCase().trim();
+      for (const variation of dbaVariations) {
+        if (headerLower.includes(variation)) {
+          console.log('Found DBA variation:', header);
+          return header;
+        }
+      }
+    }
+    
+    // Fallback: Original location detection logic
     const locationKeywords = [
       'location', 'merchant', 'business', 'store', 'shop', 'company', 'name',
-      'dba', 'account', 'client', 'customer', 'venue', 'establishment', 'outlet'
+      'account', 'client', 'customer', 'venue', 'establishment', 'outlet'
     ];
-    
-    console.log('Detecting location column from headers:', headers);
     
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
@@ -72,32 +94,36 @@ const FileUpload = () => {
       }
     }
     
-    // Fallback: look for the first text column that's not obviously numeric or count-related
-    for (const header of headers) {
-      const headerLower = header.toLowerCase().trim();
-      if (!headerLower.includes('amount') && 
-          !headerLower.includes('volume') && 
-          !headerLower.includes('total') &&
-          !headerLower.includes('sum') &&
-          !headerLower.includes('commission') &&
-          !headerLower.includes('payout') &&
-          !headerLower.includes('rate') &&
-          !headerLower.includes('percent') &&
-          !headerLower.includes('count') &&
-          !headerLower.includes('transaction') &&
-          !headerLower.includes('sales') &&
-          !headerLower.includes('number')) {
-        console.log('Using fallback location column:', header);
-        return header;
-      }
-    }
-    
     console.log('No location column detected');
     return null;
   };
 
-  // Smart column detection for volume/sales amounts - EXCLUDES count columns
+  // Enhanced smart column detection for volume/sales amounts - prioritizes Sales Amount
   const detectVolumeColumn = (headers: string[]): string | null => {
+    console.log('Detecting volume column from headers:', headers);
+    
+    // First priority: Look for exact "Sales Amount" match
+    const salesAmountColumn = headers.find(header => 
+      header.toLowerCase().trim() === 'sales amount'
+    );
+    if (salesAmountColumn) {
+      console.log('Found Sales Amount column:', salesAmountColumn);
+      return salesAmountColumn;
+    }
+    
+    // Second priority: Look for Sales Amount variations
+    const salesAmountVariations = ['sales amount', 'total sales', 'sales total'];
+    for (const header of headers) {
+      const headerLower = header.toLowerCase().trim();
+      for (const variation of salesAmountVariations) {
+        if (headerLower.includes(variation)) {
+          console.log('Found Sales Amount variation:', header);
+          return header;
+        }
+      }
+    }
+    
+    // Fallback: Original volume detection logic (excluding count columns)
     const volumeKeywords = [
       'volume', 'sales', 'amount', 'total', 'revenue', 'income', 'gross',
       'processing', 'transaction', 'card', 'payment', 'sum'
@@ -107,8 +133,6 @@ const FileUpload = () => {
     const countKeywords = [
       'count', 'number', 'qty', 'quantity', 'transactions', 'items'
     ];
-    
-    console.log('Detecting volume column from headers:', headers);
     
     // First pass: look for exact matches with volume keywords, but exclude count-related columns
     for (const header of headers) {
@@ -165,6 +189,12 @@ const FileUpload = () => {
     
     console.log('Detecting processor from headers:', headers);
     
+    // Check for DBA + Sales Amount pattern (likely a specific format)
+    if (headerStr.includes('dba') && headerStr.includes('sales amount')) {
+      console.log('Detected DBA + Sales Amount format, using Maverick processor');
+      return 'Maverick';
+    }
+    
     // Check for known processor patterns
     if (headerStr.includes('bank card volume') || headerStr.includes('bankcard volume') || headerStr.includes('salescode')) {
       console.log('Detected TRNXN processor');
@@ -197,7 +227,7 @@ const FileUpload = () => {
       return 'Maverick';
     }
     
-    // Default to Maverick instead of Generic (as it seems to be a common format)
+    // Default to Maverick (as it seems to be a common format)
     console.log('Could not detect specific processor, defaulting to Maverick');
     return 'Maverick';
   };
@@ -418,7 +448,7 @@ const FileUpload = () => {
       const headers = Object.keys(rawData[0]);
       const detectedProcessor = detectProcessor(headers, rawData[1]);
       
-      // Smart column detection
+      // Smart column detection with priority for DBA and Sales Amount
       const locationColumn = detectLocationColumn(headers);
       const volumeColumn = detectVolumeColumn(headers);
       const commissionColumn = detectCommissionColumn(headers);
@@ -430,7 +460,7 @@ const FileUpload = () => {
       console.log('- Detected processor:', detectedProcessor);
 
       if (!locationColumn && !volumeColumn) {
-        throw new Error('Could not detect location or volume columns in the file. Please ensure your file contains recognizable location names and sales/volume amounts (not transaction counts).');
+        throw new Error('Could not detect DBA (location) or Sales Amount (volume) columns in the file. Please ensure your file contains these columns.');
       }
 
       const [year, month] = selectedMonth.split('-');
@@ -653,7 +683,7 @@ const FileUpload = () => {
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Smart detection will find location names and volume automatically
+                    Looking for: <strong>DBA</strong> (location) and <strong>Sales Amount</strong> (volume)
                   </p>
                 </div>
                 <input
@@ -693,14 +723,14 @@ const FileUpload = () => {
         )}
 
         <div className="text-xs text-muted-foreground">
-          <p className="font-medium mb-1">Smart Upload automatically detects:</p>
+          <p className="font-medium mb-1">Optimized for your file format:</p>
           <ul className="space-y-1">
-            <li><strong>Location Names:</strong> Business names, merchant names, DBA, store names, etc.</li>
-            <li><strong>Volume/Sales:</strong> Sales amounts, processing volume, transaction amounts, revenue, etc.</li>
-            <li><strong>Commission:</strong> Agent payouts, commissions, residuals, fees (if available)</li>
-            <li><strong>File Format:</strong> Works with any reasonable CSV or Excel file structure</li>
+            <li><strong>DBA Column:</strong> Automatically detected as location/business name</li>
+            <li><strong>Sales Amount Column:</strong> Automatically detected as monthly volume</li>
+            <li><strong>Other Data:</strong> All other columns are safely ignored</li>
+            <li><strong>Count Columns:</strong> Transaction counts, sales counts automatically excluded</li>
           </ul>
-          <p className="mt-2 text-xs"><strong>Note:</strong> The system focuses on location names and sales dollar amounts only. Transaction counts, sales counts, and other quantity fields are automatically ignored. Agent assignments are managed separately in the Locations tab.</p>
+          <p className="mt-2 text-xs"><strong>Note:</strong> Only DBA and Sales Amount columns are required for successful upload. Agent assignments are managed separately in the Locations tab.</p>
         </div>
       </CardContent>
     </Card>
