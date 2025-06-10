@@ -116,7 +116,7 @@ const AgentManagement = () => {
         const isInRange = transactionDateStart >= fromDateStart && transactionDateStart <= toDateStart;
         
         if (isInRange) {
-          console.log('✅ Transaction date in range:', {\
+          console.log('✅ Transaction date in range:', {
             transactionDate: transactionDate.toISOString(),
             fromDate: dateRange.from.toISOString(),
             toDate: dateRange.to.toISOString(),
