@@ -7,7 +7,7 @@ import { useState } from "react";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
 
 const Dashboard = () => {
-  const [timeFrame, setTimeFrame] = useState("current-month");
+  const [timeFrame, setTimeFrame] = useState("last-month");
 
   const getDateRange = (period: string) => {
     const currentDate = new Date();
