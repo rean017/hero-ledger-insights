@@ -276,7 +276,7 @@ const UnifiedLocations = () => {
                 Total Volume
               </span>
               <span className="font-semibold">
-                ${locations?.reduce((sum, l) => sum + l.totalVolume, 0).toLocaleString() || '0'}
+                ${(locations?.reduce((sum, l) => sum + (l.totalVolume || 0), 0) || 0).toLocaleString()}
               </span>
             </div>
           </CardContent>
@@ -290,7 +290,7 @@ const UnifiedLocations = () => {
                 Total Commission
               </span>
               <span className="font-semibold">
-                ${locations?.reduce((sum, l) => sum + l.totalCommission, 0).toLocaleString() || '0'}
+                ${(locations?.reduce((sum, l) => sum + (l.totalCommission || 0), 0) || 0).toLocaleString()}
               </span>
             </div>
           </CardContent>
@@ -346,10 +346,10 @@ const UnifiedLocations = () => {
                         </div>
                       </td>
                       <td className="p-4 font-semibold text-emerald-600">
-                        ${location.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${(location.totalVolume || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-4 font-semibold text-emerald-600">
-                        ${location.totalCommission.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${(location.totalCommission || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-4">
                         <Badge variant="secondary">
