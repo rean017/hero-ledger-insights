@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +14,22 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import LocationAgentInlineEdit from "./LocationAgentInlineEdit";
 import { calculateLocationCommissions } from "@/utils/commissionCalculations";
+
+interface LocationWithExtras {
+  id: string;
+  name: string;
+  account_id?: string;
+  account_type?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  assignedAgents: number;
+  totalVolume: number;
+  totalCommission: number;
+  agentNames: string;
+  assignments: any[];
+  commissions: any[];
+}
 
 const UnifiedLocations = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -185,7 +200,7 @@ const UnifiedLocations = () => {
           .insert([{
             location_id: location.id,
             agent_name: selectedAgent,
-            commission_rate: parseFloat(commissionRate) / 10000, // Convert BPS to decimal
+            commission_rate: parseFloat(commissionRate) / 100, // Convert BPS to decimal
             is_active: true
           }]);
 
@@ -265,7 +280,7 @@ const UnifiedLocations = () => {
           agentNames: locationAssignments.map(a => a.agent_name).join(', '),
           assignments: locationAssignments,
           commissions: locationCommissions
-        };
+        } as LocationWithExtras;
       });
     }
   });
@@ -307,7 +322,7 @@ const UnifiedLocations = () => {
     setTempNotes("");
   };
 
-  const AgentAssignmentDisplay = ({ location }: { location: any }) => {
+  const AgentAssignmentDisplay = ({ location }: { location: LocationWithExtras }) => {
     const { assignments = [], commissions = [], totalCommission = 0 } = location;
     
     // Sort assignments to show Merchant Hero first
@@ -325,9 +340,10 @@ const UnifiedLocations = () => {
             ? commission?.merchantHeroPayout || 0
             : commission?.agentPayout || 0;
           
+          // Display BPS exactly as entered - convert stored decimal back to BPS display
           const bpsDisplay = assignment.agent_name === 'Merchant Hero' && assignment.commission_rate === 0
             ? 'Prime Agent'
-            : `${Math.round(assignment.commission_rate * 10000)} BPS`;
+            : `${Math.round(assignment.commission_rate * 100)} BPS`;
 
           return (
             <div key={assignment.id} className="bg-muted/30 rounded-lg p-3">
@@ -581,7 +597,7 @@ const UnifiedLocations = () => {
                             size="sm"
                             variant="ghost"
                             className="h-6 w-6 p-0"
-                            onClick={() => startEditingNotes(location.id, location.notes)}
+                            onClick={() => startEditingNotes(location.id, location.notes || "")}
                           >
                             <Edit3 className="h-3 w-3" />
                           </Button>
