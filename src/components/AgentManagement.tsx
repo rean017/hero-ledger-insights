@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Search } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Search, Edit2 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -15,7 +16,10 @@ import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/c
 const AgentManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditNotesOpen, setIsEditNotesOpen] = useState(false);
   const [newAgentName, setNewAgentName] = useState("");
+  const [selectedAgent, setSelectedAgent] = useState<any>(null);
+  const [agentNotes, setAgentNotes] = useState("");
   const { toast } = useToast();
 
   const { data: agents, isLoading, refetch } = useQuery({
@@ -65,7 +69,8 @@ const AgentManagement = () => {
 
       const { data: manualAgents, error: manualError } = await supabase
         .from('agents')
-        .select('name, is_active');
+        .select('name, is_active, notes')
+        .eq('is_active', true);
 
       if (manualError) {
         console.error('Error fetching manual agents:', manualError);
@@ -156,7 +161,8 @@ const AgentManagement = () => {
           locationsCount,
           totalCommission,
           avgRate,
-          status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active'
+          status: manualAgent ? (manualAgent.is_active ? 'active' : 'inactive') : 'active',
+          notes: manualAgent?.notes || ''
         };
 
         console.log(`Final agent ${agentName} data:`, {
@@ -209,6 +215,42 @@ const AgentManagement = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleUpdateNotes = async () => {
+    if (!selectedAgent) return;
+
+    try {
+      const { error } = await supabase
+        .from('agents')
+        .update({ notes: agentNotes })
+        .eq('name', selectedAgent.name);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Agent notes updated successfully"
+      });
+
+      setIsEditNotesOpen(false);
+      setSelectedAgent(null);
+      setAgentNotes("");
+      refetch();
+    } catch (error: any) {
+      console.error('Error updating notes:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update notes. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const openEditNotes = (agent: any) => {
+    setSelectedAgent(agent);
+    setAgentNotes(agent.notes || '');
+    setIsEditNotesOpen(true);
   };
 
   const filteredAgents = agents?.filter(agent =>
@@ -270,66 +312,109 @@ const AgentManagement = () => {
         </Dialog>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle>All Agents</CardTitle>
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search agents..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h3 className="text-xl font-semibold">All Agents</h3>
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search agents..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      </div>
+
+      {filteredAgents.length > 0 ? (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {filteredAgents.map((agent, index) => (
+            <Card key={index} className="hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-lg">{agent.name}</CardTitle>
+                    <Badge variant="default" className="mt-2">
+                      {agent.status}
+                    </Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openEditNotes(agent)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Avg Rate</p>
+                    <p className="font-semibold">{agent.avgRate}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Locations</p>
+                    <p className="font-semibold">{agent.locationsCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Accounts</p>
+                    <p className="font-semibold">{agent.accountsCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Commission</p>
+                    <p className="font-semibold text-emerald-600">${agent.totalCommission.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Volume</p>
+                  <p className="font-semibold text-emerald-600">${agent.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                </div>
+
+                {agent.notes && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Notes</p>
+                    <p className="text-sm bg-muted p-2 rounded-md mt-1">{agent.notes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center justify-center h-32">
+          <p className="text-muted-foreground">No agents found. Add an agent to get started.</p>
+        </div>
+      )}
+
+      <Dialog open={isEditNotesOpen} onOpenChange={setIsEditNotesOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Notes for {selectedAgent?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="agentNotes">Notes</Label>
+              <Textarea
+                id="agentNotes"
+                value={agentNotes}
+                onChange={(e) => setAgentNotes(e.target.value)}
+                placeholder="Enter notes for this agent..."
+                rows={4}
               />
             </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsEditNotesOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateNotes}>
+                Save Notes
+              </Button>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          {filteredAgents.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-4 font-medium text-muted-foreground">Agent</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Avg Rate</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Locations</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Accounts</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Total Volume</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Calculated Commission</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAgents.map((agent, index) => (
-                    <tr key={index} className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="p-4">
-                        <div>
-                          <p className="font-medium">{agent.name}</p>
-                        </div>
-                      </td>
-                      <td className="p-4 font-semibold">{agent.avgRate}</td>
-                      <td className="p-4">{agent.locationsCount}</td>
-                      <td className="p-4">{agent.accountsCount}</td>
-                      <td className="p-4 font-semibold text-emerald-600">${agent.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-4 font-semibold text-emerald-600">${agent.totalCommission.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-4">
-                        <Badge variant="default">
-                          {agent.status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No agents found. Add an agent to get started.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
