@@ -53,21 +53,21 @@ const FileUpload = () => {
 
   const monthOptions = generateMonthOptions();
 
-  // Enhanced smart column detection for location names - prioritizes DBA
+  // Enhanced smart column detection for location names - MUST prioritize DBA
   const detectLocationColumn = (headers: string[]): string | null => {
     console.log('Detecting location column from headers:', headers);
     
-    // First priority: Look for exact "DBA" match
+    // HIGHEST PRIORITY: Look for exact "DBA" match (case insensitive)
     const dbaColumn = headers.find(header => 
       header.toLowerCase().trim() === 'dba'
     );
     if (dbaColumn) {
-      console.log('Found DBA column:', dbaColumn);
+      console.log('Found exact DBA column:', dbaColumn);
       return dbaColumn;
     }
     
-    // Second priority: Look for DBA-related variations
-    const dbaVariations = ['dba', 'doing business as', 'business name'];
+    // SECOND PRIORITY: Look for DBA-related variations
+    const dbaVariations = ['dba', 'doing business as', 'business name', 'dba name'];
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
       for (const variation of dbaVariations) {
@@ -78,23 +78,30 @@ const FileUpload = () => {
       }
     }
     
-    // Fallback: Original location detection logic
-    const locationKeywords = [
-      'location', 'merchant', 'business', 'store', 'shop', 'company', 'name',
-      'account', 'client', 'customer', 'venue', 'establishment', 'outlet'
-    ];
+    // THIRD PRIORITY: Look for business/merchant name columns (but avoid account/ID columns)
+    const businessKeywords = ['merchant', 'business', 'store', 'shop', 'company', 'name', 'location'];
+    const avoidKeywords = ['account', 'id', 'number', 'code', 'mid'];
     
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
-      for (const keyword of locationKeywords) {
+      
+      // Skip if it contains avoid keywords (likely numeric IDs)
+      const hasAvoidKeyword = avoidKeywords.some(avoid => headerLower.includes(avoid));
+      if (hasAvoidKeyword) {
+        console.log('Skipping potential ID column:', header);
+        continue;
+      }
+      
+      // Check for business-related keywords
+      for (const keyword of businessKeywords) {
         if (headerLower.includes(keyword)) {
-          console.log('Found location column:', header);
+          console.log('Found business name column:', header);
           return header;
         }
       }
     }
     
-    console.log('No location column detected');
+    console.log('No DBA/location column detected');
     return null;
   };
 
@@ -107,34 +114,26 @@ const FileUpload = () => {
       header.toLowerCase().trim() === 'sales amount'
     );
     if (salesAmountColumn) {
-      console.log('Found Sales Amount column:', salesAmountColumn);
+      console.log('Found exact Sales Amount column:', salesAmountColumn);
       return salesAmountColumn;
     }
     
     // Second priority: Look for Sales Amount variations
-    const salesAmountVariations = ['sales amount', 'total sales', 'sales total'];
+    const salesAmountVariations = ['sales amount', 'total sales', 'sales total', 'amount'];
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
       for (const variation of salesAmountVariations) {
-        if (headerLower.includes(variation)) {
+        if (headerLower === variation) {
           console.log('Found Sales Amount variation:', header);
           return header;
         }
       }
     }
     
-    // Fallback: Original volume detection logic (excluding count columns)
-    const volumeKeywords = [
-      'volume', 'sales', 'amount', 'total', 'revenue', 'income', 'gross',
-      'processing', 'transaction', 'card', 'payment', 'sum'
-    ];
+    // Third priority: Look for other volume keywords (excluding count columns)
+    const volumeKeywords = ['volume', 'sales', 'revenue', 'income', 'gross', 'processing', 'transaction', 'card', 'payment'];
+    const countKeywords = ['count', 'number', 'qty', 'quantity', 'transactions', 'items'];
     
-    // Keywords that indicate count/quantity rather than dollar amounts
-    const countKeywords = [
-      'count', 'number', 'qty', 'quantity', 'transactions', 'items'
-    ];
-    
-    // First pass: look for exact matches with volume keywords, but exclude count-related columns
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
       
@@ -238,6 +237,8 @@ const FileUpload = () => {
 
       console.log('Processing row for processor:', processor);
       console.log('Row data keys:', Object.keys(row));
+      console.log('Location column to use:', locationColumn);
+      console.log('Volume column to use:', volumeColumn);
 
       // Handle the specific Green Payments CSV format with __parsed_extra
       if (row.__parsed_extra && Array.isArray(row.__parsed_extra)) {
@@ -253,14 +254,34 @@ const FileUpload = () => {
           processed.agentName = null;
         }
       } else {
-        // Smart column mapping
+        // Smart column mapping with improved DBA detection
         if (locationColumn && row[locationColumn]) {
-          processed.locationName = String(row[locationColumn]).trim();
+          const locationValue = String(row[locationColumn]).trim();
+          console.log('Raw location value from column', locationColumn, ':', locationValue);
+          
+          // Validate that this looks like a business name (not just numbers)
+          if (locationValue && !/^\d+$/.test(locationValue)) {
+            processed.locationName = locationValue;
+            console.log('Set location name to:', processed.locationName);
+          } else {
+            console.log('Location value appears to be numeric ID, skipping:', locationValue);
+            // Try to find the actual DBA value in other columns
+            for (const [key, value] of Object.entries(row)) {
+              const keyLower = key.toLowerCase();
+              const valueStr = String(value).trim();
+              if (keyLower.includes('dba') && valueStr && !/^\d+$/.test(valueStr)) {
+                processed.locationName = valueStr;
+                console.log('Found DBA in alternate column:', key, '=', valueStr);
+                break;
+              }
+            }
+          }
         }
         
         if (volumeColumn && row[volumeColumn]) {
           const volumeValue = String(row[volumeColumn]).replace(/[,$]/g, '');
           processed.volume = parseFloat(volumeValue) || 0;
+          console.log('Set volume to:', processed.volume);
         }
         
         if (commissionColumn && row[commissionColumn]) {
@@ -283,7 +304,7 @@ const FileUpload = () => {
         }
       }
 
-      console.log('Processed data result:', {
+      console.log('Final processed data result:', {
         volume: processed.volume,
         debitVolume: processed.debitVolume,
         agentPayout: processed.agentPayout,
@@ -446,16 +467,18 @@ const FileUpload = () => {
       }
 
       const headers = Object.keys(rawData[0]);
+      console.log('All headers found:', headers);
+      
       const detectedProcessor = detectProcessor(headers, rawData[1]);
       
-      // Smart column detection with priority for DBA and Sales Amount
+      // Smart column detection with enhanced DBA prioritization
       const locationColumn = detectLocationColumn(headers);
       const volumeColumn = detectVolumeColumn(headers);
       const commissionColumn = detectCommissionColumn(headers);
       
-      console.log('Smart column detection results:');
-      console.log('- Location column:', locationColumn);
-      console.log('- Volume column:', volumeColumn);
+      console.log('=== Smart Column Detection Results ===');
+      console.log('- Location column (DBA):', locationColumn);
+      console.log('- Volume column (Sales Amount):', volumeColumn);
       console.log('- Commission column:', commissionColumn);
       console.log('- Detected processor:', detectedProcessor);
 
@@ -499,7 +522,7 @@ const FileUpload = () => {
       let locationsCreated = 0;
       const errors: any[] = [];
 
-      console.log('=== Processing Rows with Smart Detection ===');
+      console.log('=== Processing Rows with Enhanced DBA Detection ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         console.log(`\n--- Processing row ${i + 1} ---`);
@@ -515,7 +538,7 @@ const FileUpload = () => {
             locationName: processedData.locationName
           });
 
-          // Check if we have meaningful data (location name OR volume)
+          // Check if we have meaningful data (DBA location name OR volume)
           if (processedData.locationName || (processedData.volume && processedData.volume > 0)) {
             try {
               let locationId = null;
@@ -568,9 +591,9 @@ const FileUpload = () => {
               errors.push({ row: i + 1, error: String(error) });
             }
           } else {
-            console.log(`Skipping row ${i + 1} - no valid location or volume data`);
+            console.log(`Skipping row ${i + 1} - no valid DBA location or volume data`);
             errorCount++;
-            errors.push({ row: i + 1, error: 'No valid location or volume data found' });
+            errors.push({ row: i + 1, error: 'No valid DBA location or volume data found' });
           }
         } else {
           console.log(`Skipping row ${i + 1} - failed to process`);
@@ -605,7 +628,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
 
-      const successMessage = `Smart upload completed! Processed ${successCount} rows from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''}`;
+      const successMessage = `Smart upload completed! Processed ${successCount} rows from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} errors.${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using DBA names.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -683,7 +706,7 @@ const FileUpload = () => {
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Looking for: <strong>DBA</strong> (location) and <strong>Sales Amount</strong> (volume)
+                    Looking for: <strong>DBA</strong> (business names) and <strong>Sales Amount</strong> (volume)
                   </p>
                 </div>
                 <input
@@ -723,14 +746,15 @@ const FileUpload = () => {
         )}
 
         <div className="text-xs text-muted-foreground">
-          <p className="font-medium mb-1">Optimized for your file format:</p>
+          <p className="font-medium mb-1">Enhanced DBA Detection:</p>
           <ul className="space-y-1">
-            <li><strong>DBA Column:</strong> Automatically detected as location/business name</li>
-            <li><strong>Sales Amount Column:</strong> Automatically detected as monthly volume</li>
-            <li><strong>Other Data:</strong> All other columns are safely ignored</li>
-            <li><strong>Count Columns:</strong> Transaction counts, sales counts automatically excluded</li>
+            <li><strong>Priority 1:</strong> Exact "DBA" column match</li>
+            <li><strong>Priority 2:</strong> DBA variations (doing business as, business name)</li>
+            <li><strong>Priority 3:</strong> Business/merchant name columns (excluding IDs)</li>
+            <li><strong>Sales Amount:</strong> Automatically detected for volume data</li>
+            <li><strong>Validation:</strong> Numeric-only values are rejected as business names</li>
           </ul>
-          <p className="mt-2 text-xs"><strong>Note:</strong> Only DBA and Sales Amount columns are required for successful upload. Agent assignments are managed separately in the Locations tab.</p>
+          <p className="mt-2 text-xs"><strong>Note:</strong> Location names will now use proper DBA business names instead of account numbers.</p>
         </div>
       </CardContent>
     </Card>
