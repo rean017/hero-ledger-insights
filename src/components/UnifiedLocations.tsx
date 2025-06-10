@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -277,7 +278,7 @@ const UnifiedLocations = () => {
     });
 
     return (
-      <div className="space-y-2 min-w-[200px]">
+      <div className="space-y-3">
         {sortedAssignments.map((assignment) => {
           const commission = commissions.find(c => c.agentName === assignment.agent_name);
           const earnings = assignment.agent_name === 'Merchant Hero' 
@@ -289,8 +290,8 @@ const UnifiedLocations = () => {
             : `${Math.round(assignment.commission_rate * 100)} BPS`;
 
           return (
-            <div key={assignment.id} className="bg-muted/30 rounded-md p-2 text-sm">
-              <div className="font-medium text-foreground">
+            <div key={assignment.id} className="bg-muted/30 rounded-lg p-3">
+              <div className="font-medium text-foreground mb-1">
                 {assignment.agent_name} – {bpsDisplay}
               </div>
               <div className="text-emerald-600 font-semibold">
@@ -301,11 +302,11 @@ const UnifiedLocations = () => {
         })}
         
         {assignments.length === 0 && (
-          <div className="text-xs text-muted-foreground">No agents assigned</div>
+          <div className="text-sm text-muted-foreground">No agents assigned</div>
         )}
         
-        <div className="pt-2 border-t border-muted">
-          <div className="text-xs text-muted-foreground">Total Net Payout:</div>
+        <div className="pt-3 border-t border-muted">
+          <div className="text-sm text-muted-foreground mb-1">Total Net Payout:</div>
           <div className="font-semibold text-emerald-600">
             ${totalCommission.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
@@ -485,47 +486,52 @@ const UnifiedLocations = () => {
         </CardHeader>
         <CardContent>
           {filteredLocations.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-4 font-medium text-muted-foreground">Location Name</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Account ID</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Assigned Agents</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Total Volume</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Account Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLocations.map((location, index) => (
-                    <tr key={index} className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="p-4">
-                        <div>
-                          <p className="font-medium">{location.name}</p>
-                        </div>
-                      </td>
-                      <td className="p-4 font-mono text-sm">{location.account_id || 'N/A'}</td>
-                      <td className="p-4">
-                        <AgentAssignmentDisplay location={location} />
-                      </td>
-                      <td className="p-4 font-semibold text-emerald-600">
-                        ${(location.totalVolume || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              {filteredLocations.map((location, index) => (
+                <Card key={index} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-4">
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Building2 className="h-5 w-5" />
+                          {location.name}
+                        </CardTitle>
                         <Badge variant="secondary">
                           {location.account_type || 'Unknown'}
                         </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      {location.account_id && (
+                        <p className="text-sm text-muted-foreground font-mono">
+                          Account: {location.account_id}
+                        </p>
+                      )}
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Total Volume</span>
+                      <span className="font-semibold text-emerald-600">
+                        ${(location.totalVolume || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Assigned Agents ({location.assignedAgents || 0})
+                      </div>
+                      <AgentAssignmentDisplay location={location} />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           ) : (
             <div className="flex items-center justify-center h-32">
               <p className="text-muted-foreground">No locations found. Add a location to get started.</p>
             </div>
-            )}
+          )}
         </CardContent>
       </Card>
     </div>
