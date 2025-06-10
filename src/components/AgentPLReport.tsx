@@ -105,7 +105,7 @@ const AgentPLReport = () => {
 
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout, transaction_date')
         .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
 
       if (error) throw error;
