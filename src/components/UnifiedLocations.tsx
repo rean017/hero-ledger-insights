@@ -46,7 +46,7 @@ const UnifiedLocations = () => {
   const [commissionRate, setCommissionRate] = useState("");
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [tempNotes, setTempNotes] = useState("");
-  const [customDateRange, setCustomDateRange] = useState<{ from: Date; to: Date } | null>(null);
+  const [customDateRange, setCustomDateRange] = useState<{ from: Date; to: Date } | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   
   // Get dynamic time frames and set default to April (first option) since that's what was uploaded
@@ -416,13 +416,13 @@ const UnifiedLocations = () => {
   const handleTimeFrameChange = (value: string) => {
     setTimeFrame(value);
     if (value !== 'custom') {
-      setCustomDateRange(null);
+      setCustomDateRange(undefined);
     }
   };
 
-  const handleCustomDateSelect = (range: { from: Date; to: Date } | null) => {
+  const handleCustomDateSelect = (range: { from: Date; to: Date } | undefined) => {
+    setCustomDateRange(range);
     if (range?.from && range?.to) {
-      setCustomDateRange(range);
       setIsCalendarOpen(false);
     }
   };
@@ -685,14 +685,9 @@ const UnifiedLocations = () => {
                         initialFocus
                         mode="range"
                         defaultMonth={customDateRange?.from}
-                        selected={customDateRange ? { from: customDateRange.from, to: customDateRange.to } : undefined}
-                        onSelect={(range) => {
-                          if (range?.from && range?.to) {
-                            handleCustomDateSelect({ from: range.from, to: range.to });
-                          }
-                        }}
+                        selected={customDateRange}
+                        onSelect={handleCustomDateSelect}
                         numberOfMonths={2}
-                        className="pointer-events-auto"
                       />
                     </PopoverContent>
                   </Popover>
