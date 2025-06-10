@@ -72,16 +72,21 @@ const FileUpload = () => {
       }
     }
     
-    // Fallback: look for the first text column that's not obviously numeric
+    // Fallback: look for the first text column that's not obviously numeric or count-related
     for (const header of headers) {
-      if (!header.toLowerCase().includes('amount') && 
-          !header.toLowerCase().includes('volume') && 
-          !header.toLowerCase().includes('total') &&
-          !header.toLowerCase().includes('sum') &&
-          !header.toLowerCase().includes('commission') &&
-          !header.toLowerCase().includes('payout') &&
-          !header.toLowerCase().includes('rate') &&
-          !header.toLowerCase().includes('percent')) {
+      const headerLower = header.toLowerCase().trim();
+      if (!headerLower.includes('amount') && 
+          !headerLower.includes('volume') && 
+          !headerLower.includes('total') &&
+          !headerLower.includes('sum') &&
+          !headerLower.includes('commission') &&
+          !headerLower.includes('payout') &&
+          !headerLower.includes('rate') &&
+          !headerLower.includes('percent') &&
+          !headerLower.includes('count') &&
+          !headerLower.includes('transaction') &&
+          !headerLower.includes('sales') &&
+          !headerLower.includes('number')) {
         console.log('Using fallback location column:', header);
         return header;
       }
@@ -91,18 +96,31 @@ const FileUpload = () => {
     return null;
   };
 
-  // Smart column detection for volume/sales amounts
+  // Smart column detection for volume/sales amounts - EXCLUDES count columns
   const detectVolumeColumn = (headers: string[]): string | null => {
     const volumeKeywords = [
       'volume', 'sales', 'amount', 'total', 'revenue', 'income', 'gross',
       'processing', 'transaction', 'card', 'payment', 'sum'
     ];
     
+    // Keywords that indicate count/quantity rather than dollar amounts
+    const countKeywords = [
+      'count', 'number', 'qty', 'quantity', 'transactions', 'items'
+    ];
+    
     console.log('Detecting volume column from headers:', headers);
     
-    // First pass: look for exact matches with volume keywords
+    // First pass: look for exact matches with volume keywords, but exclude count-related columns
     for (const header of headers) {
       const headerLower = header.toLowerCase().trim();
+      
+      // Skip if this looks like a count column
+      const isCountColumn = countKeywords.some(keyword => headerLower.includes(keyword));
+      if (isCountColumn) {
+        console.log('Skipping count column:', header);
+        continue;
+      }
+      
       for (const keyword of volumeKeywords) {
         if (headerLower.includes(keyword) && 
             !headerLower.includes('debit') && 
@@ -405,7 +423,7 @@ const FileUpload = () => {
       console.log('- Detected processor:', detectedProcessor);
 
       if (!locationColumn && !volumeColumn) {
-        throw new Error('Could not detect location or volume columns in the file. Please ensure your file contains recognizable location names and sales/volume amounts.');
+        throw new Error('Could not detect location or volume columns in the file. Please ensure your file contains recognizable location names and sales/volume amounts (not transaction counts).');
       }
 
       const [year, month] = selectedMonth.split('-');
@@ -675,7 +693,7 @@ const FileUpload = () => {
             <li><strong>Commission:</strong> Agent payouts, commissions, residuals, fees (if available)</li>
             <li><strong>File Format:</strong> Works with any reasonable CSV or Excel file structure</li>
           </ul>
-          <p className="mt-2 text-xs"><strong>Note:</strong> The system focuses on location names and sales amounts. Column names can vary - the smart detection will find the right data automatically. Agent assignments are managed separately in the Locations tab.</p>
+          <p className="mt-2 text-xs"><strong>Note:</strong> The system focuses on location names and sales dollar amounts only. Transaction counts, sales counts, and other quantity fields are automatically ignored. Agent assignments are managed separately in the Locations tab.</p>
         </div>
       </CardContent>
     </Card>
