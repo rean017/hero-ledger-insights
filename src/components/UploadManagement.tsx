@@ -12,6 +12,7 @@ import { FileText, Edit, Trash2, Search, Calendar, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import LocationCleanup from "./LocationCleanup";
 
 const UploadManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -162,6 +163,9 @@ const UploadManagement = () => {
           <p className="text-muted-foreground">View, edit, and delete your file uploads</p>
         </div>
       </div>
+
+      {/* Location Cleanup Section */}
+      <LocationCleanup />
 
       <Card>
         <CardHeader>
