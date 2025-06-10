@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Plus, Search, MapPin, Building2, Users, DollarSign, Edit3, Check, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import LocationAgentInlineEdit from "./LocationAgentInlineEdit";
 import { calculateLocationCommissions } from "@/utils/commissionCalculations";
+import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
 
 interface LocationWithExtras {
   id: string;
@@ -41,7 +42,14 @@ const UnifiedLocations = () => {
   const [commissionRate, setCommissionRate] = useState("");
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [tempNotes, setTempNotes] = useState("");
+  
+  // Get dynamic time frames and set default to current month
+  const timeFrames = getDynamicTimeFrames();
+  const [timeFrame, setTimeFrame] = useState(timeFrames[2].value); // Current month (3rd option)
+  
   const { toast } = useToast();
+
+  const dateRange = getDateRangeForTimeFrame(timeFrame);
 
   // Ensure Merchant Hero exists and assign to locations without assignments
   const ensureMerchantHeroSetup = async () => {
@@ -231,7 +239,7 @@ const UnifiedLocations = () => {
 
   // Fetch locations with assignment data and commission calculations
   const { data: locations, isLoading, refetch } = useQuery({
-    queryKey: ['unified-locations'],
+    queryKey: ['unified-locations', timeFrame],
     queryFn: async () => {
       const { data: locations, error: locationError } = await supabase
         .from('locations')
@@ -249,17 +257,54 @@ const UnifiedLocations = () => {
 
       const { data: transactions, error: transactionError } = await supabase
         .from('transactions')
-        .select('account_id, volume, debit_volume, agent_payout');
+        .select('account_id, volume, debit_volume, agent_payout, transaction_date');
 
       if (transactionError) throw transactionError;
 
-      // Calculate commissions for all locations
-      const commissions = calculateLocationCommissions(transactions, assignments, locations);
+      console.log('🔄 UnifiedLocations: Fetching transactions for date filtering...');
+      console.log('📅 UnifiedLocations: Date range:', dateRange);
+      console.log('📊 UnifiedLocations: Total transactions fetched:', transactions.length);
+
+      // Apply date filtering FIRST, then calculate commissions with filtered data
+      const filteredTransactions = dateRange 
+        ? transactions.filter(t => {
+            if (!t.transaction_date) return false;
+            
+            // CONSISTENT: Use same date parsing logic as other components
+            const transactionDate = new Date(t.transaction_date + 'T00:00:00.000Z'); // Force UTC to avoid timezone issues
+            
+            // Ensure the transaction date is valid
+            if (isNaN(transactionDate.getTime())) {
+              console.log('⚠️ UnifiedLocations: Invalid transaction date:', t.transaction_date);
+              return false;
+            }
+            
+            const isInRange = transactionDate >= dateRange.from && transactionDate <= dateRange.to;
+            
+            if (isInRange) {
+              console.log('✅ UnifiedLocations: Transaction date in range:', {
+                transactionDate: transactionDate.toISOString(),
+                fromDate: dateRange.from.toISOString(),
+                toDate: dateRange.to.toISOString(),
+                accountId: t.account_id,
+                timeFrame: timeFrame
+              });
+            }
+            
+            return isInRange;
+          })
+        : transactions;
+
+      console.log('📅 UnifiedLocations: Original transactions:', transactions.length);
+      console.log('📅 UnifiedLocations: Filtered transactions:', filteredTransactions.length);
+
+      // Calculate commissions for all locations using filtered transactions
+      const commissions = calculateLocationCommissions(filteredTransactions, assignments, locations);
 
       // Map locations with their assignment data and commission calculations
       return locations.map(location => {
         const locationAssignments = assignments.filter(a => a.location_id === location.id);
-        const locationTransactions = transactions.filter(t => t.account_id === location.account_id);
+        const locationTransactions = filteredTransactions.filter(t => t.account_id === location.account_id);
         const locationCommissions = commissions.filter(c => c.locationId === location.id);
         
         const totalVolume = locationTransactions.reduce((sum, t) => {
@@ -272,6 +317,13 @@ const UnifiedLocations = () => {
           const agentPayout = Number(t.agent_payout) || 0;
           return sum + agentPayout;
         }, 0);
+
+        console.log(`🏢 Location ${location.name} data for ${timeFrame}:`, {
+          totalVolume,
+          totalCommission,
+          transactionCount: locationTransactions.length,
+          commissionsCount: locationCommissions.length
+        });
 
         return {
           ...location,
@@ -530,14 +582,32 @@ const UnifiedLocations = () => {
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle>All Locations</CardTitle>
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search locations, accounts, or agents..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+            <div className="flex gap-4 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-80">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search locations, accounts, or agents..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <ToggleGroup 
+                type="single" 
+                value={timeFrame} 
+                onValueChange={setTimeFrame} 
+                className="grid grid-cols-2 lg:grid-cols-4 bg-muted rounded-lg p-1 w-full sm:w-auto"
+              >
+                {timeFrames.map((frame) => (
+                  <ToggleGroupItem 
+                    key={frame.value}
+                    value={frame.value} 
+                    className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                  >
+                    {frame.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
           </div>
         </CardHeader>
