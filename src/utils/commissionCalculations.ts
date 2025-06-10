@@ -77,11 +77,11 @@ export const calculateLocationCommissions = (
 
   console.log('🎯 FINAL LOCATION VOLUME DATA:', locationData);
 
-  // Debug: Check total volumes across all locations
+  // Debug: Check total volumes across all locations - Fixed typing
   const allLocationTotals = Object.entries(locationData).map(([accountId, data]) => ({
     accountId,
-    totalVolume: data.totalVolume,
-    totalAgentPayout: data.totalAgentPayout
+    totalVolume: (data as { totalVolume: number; totalAgentPayout: number }).totalVolume,
+    totalAgentPayout: (data as { totalVolume: number; totalAgentPayout: number }).totalAgentPayout
   }));
   console.log('📊 ALL LOCATION TOTALS:', allLocationTotals);
   
