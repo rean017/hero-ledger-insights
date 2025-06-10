@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,18 +71,27 @@ const AgentManagement = () => {
 
       console.log('Commission summaries:', agentCommissionSummaries);
 
-      // Get agents who have active location assignments
-      const agentsWithAssignments = new Set<string>();
-      assignments?.forEach(a => {
-        if (a.agent_name && a.is_active) {
-          agentsWithAssignments.add(a.agent_name);
+      // Get all unique agent names from both manual agents and assignments
+      const allAgentNames = new Set<string>();
+      
+      // Add agents from manual agents table
+      manualAgents?.forEach(agent => {
+        if (agent.name && agent.is_active) {
+          allAgentNames.add(agent.name);
         }
       });
 
-      console.log('Agents with assignments:', Array.from(agentsWithAssignments));
+      // Add agents from assignments (in case they're not in manual table)
+      assignments?.forEach(a => {
+        if (a.agent_name && a.is_active) {
+          allAgentNames.add(a.agent_name);
+        }
+      });
 
-      // Build final agent data - ONLY for agents with assignments
-      const result = Array.from(agentsWithAssignments).map(agentName => {
+      console.log('All agent names:', Array.from(allAgentNames));
+
+      // Build final agent data - for ALL agents
+      const result = Array.from(allAgentNames).map(agentName => {
         const commissionSummary = agentCommissionSummaries.find(summary => summary.agentName === agentName);
         const totalCommission = commissionSummary ? commissionSummary.totalCommission : 0;
         const manualAgent = manualAgents?.find(a => a.name === agentName);
@@ -296,13 +306,52 @@ const AgentManagement = () => {
             </div>
           ) : (
             <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No agents found. Add an agent or upload transaction data to see agents.</p>
+              <p className="text-muted-foreground">No agents found. Add an agent to get started.</p>
             </div>
           )}
         </CardContent>
       </Card>
     </div>
   );
+
+  async function handleAddAgent() {
+    if (!newAgentName.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter an agent name",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      console.log('Adding new agent:', newAgentName.trim());
+      const { error } = await supabase
+        .from('agents')
+        .insert([{ name: newAgentName.trim(), is_active: true }]);
+
+      if (error) {
+        console.error('Error inserting agent:', error);
+        throw error;
+      }
+
+      toast({
+        title: "Success",
+        description: `Agent "${newAgentName}" has been added successfully`
+      });
+
+      setNewAgentName("");
+      setIsDialogOpen(false);
+      refetch();
+    } catch (error: any) {
+      console.error('Error adding agent:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add agent. Please try again.",
+        variant: "destructive"
+      });
+    }
+  }
 };
 
 export default AgentManagement;
