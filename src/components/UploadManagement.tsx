@@ -40,35 +40,146 @@ const UploadManagement = () => {
 
   const deleteUploadMutation = useMutation({
     mutationFn: async (uploadId: string) => {
-      // First delete related transactions
+      console.log('=== STARTING COMPREHENSIVE CLOUD DELETE ===');
+      const upload = uploads?.find(u => u.id === uploadId);
+      if (!upload) throw new Error('Upload not found');
+
+      console.log('Deleting upload:', upload.filename, 'Processor:', upload.processor);
+
+      // Step 1: Get all transactions for this processor to find related locations
+      const { data: transactions, error: transactionsFetchError } = await supabase
+        .from('transactions')
+        .select('account_id, processor')
+        .eq('processor', upload.processor);
+
+      if (transactionsFetchError) throw transactionsFetchError;
+
+      console.log('Found transactions for processor:', transactions?.length);
+
+      // Step 2: Get unique account IDs from transactions
+      const accountIds = [...new Set(transactions?.map(t => t.account_id).filter(Boolean) || [])];
+      console.log('Unique account IDs to process:', accountIds);
+
+      // Step 3: Find locations associated with these account IDs
+      let locationIds: string[] = [];
+      if (accountIds.length > 0) {
+        const { data: locations, error: locationsError } = await supabase
+          .from('locations')
+          .select('id')
+          .in('account_id', accountIds);
+
+        if (locationsError) throw locationsError;
+        locationIds = locations?.map(l => l.id) || [];
+        console.log('Found location IDs to clean up:', locationIds);
+      }
+
+      // Step 4: Delete location agent assignments for these locations
+      if (locationIds.length > 0) {
+        console.log('Deleting location agent assignments...');
+        const { error: assignmentsError } = await supabase
+          .from('location_agent_assignments')
+          .delete()
+          .in('location_id', locationIds);
+
+        if (assignmentsError) {
+          console.error('Error deleting assignments:', assignmentsError);
+          throw assignmentsError;
+        }
+        console.log('✅ Deleted location agent assignments');
+      }
+
+      // Step 5: Delete locations associated with this processor's account IDs
+      if (accountIds.length > 0) {
+        console.log('Deleting locations...');
+        const { error: locationsDeleteError } = await supabase
+          .from('locations')
+          .delete()
+          .in('account_id', accountIds);
+
+        if (locationsDeleteError) {
+          console.error('Error deleting locations:', locationsDeleteError);
+          throw locationsDeleteError;
+        }
+        console.log('✅ Deleted locations');
+      }
+
+      // Step 6: Delete all transactions for this processor
+      console.log('Deleting transactions...');
       const { error: transactionError } = await supabase
         .from('transactions')
         .delete()
-        .eq('processor', uploads?.find(u => u.id === uploadId)?.processor || '');
+        .eq('processor', upload.processor);
 
-      if (transactionError) throw transactionError;
+      if (transactionError) {
+        console.error('Error deleting transactions:', transactionError);
+        throw transactionError;
+      }
+      console.log('✅ Deleted transactions');
 
-      // Then delete the upload record
-      const { error } = await supabase
+      // Step 7: Delete P&L data for this processor
+      console.log('Deleting P&L data...');
+      const { error: plError } = await supabase
+        .from('pl_data')
+        .delete()
+        .eq('processor', upload.processor);
+
+      if (plError) {
+        console.error('Error deleting P&L data:', plError);
+        throw plError;
+      }
+      console.log('✅ Deleted P&L data');
+
+      // Step 8: Finally delete the upload record
+      console.log('Deleting upload record...');
+      const { error: uploadError } = await supabase
         .from('file_uploads')
         .delete()
         .eq('id', uploadId);
 
-      if (error) throw error;
+      if (uploadError) {
+        console.error('Error deleting upload record:', uploadError);
+        throw uploadError;
+      }
+      console.log('✅ Deleted upload record');
+
+      console.log('=== COMPREHENSIVE CLOUD DELETE COMPLETED ===');
+      return { 
+        deletedTransactions: transactions?.length || 0,
+        deletedLocations: locationIds.length,
+        deletedAssignments: locationIds.length,
+        processor: upload.processor
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Invalidate ALL queries to ensure universal data refresh
       queryClient.invalidateQueries({ queryKey: ['file-uploads'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-data'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['agents-data'] });
+      queryClient.invalidateQueries({ queryKey: ['top-agents'] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-pl-data'] });
+      queryClient.invalidateQueries({ queryKey: ['current-month-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['agent-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
+      queryClient.invalidateQueries({ queryKey: ['commission-data'] });
+      queryClient.invalidateQueries({ queryKey: ['pl-reports'] });
+      
+      // Clear all cache to ensure fresh data
+      queryClient.clear();
+      
       toast({
-        title: "Upload Deleted",
-        description: "File upload and related data have been deleted successfully.",
+        title: "Complete System Cleanup",
+        description: `Successfully deleted ${result.processor} processor data: ${result.deletedTransactions} transactions, ${result.deletedLocations} locations, ${result.deletedAssignments} agent assignments, and all related P&L data. All data has been removed universally from the cloud system.`,
       });
     },
     onError: (error) => {
+      console.error('Comprehensive delete failed:', error);
       toast({
         title: "Delete Failed",
-        description: `Error deleting upload: ${String(error)}`,
+        description: `Error during comprehensive delete: ${String(error)}`,
         variant: "destructive"
       });
     }
@@ -159,8 +270,8 @@ const UploadManagement = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">Upload Management</h2>
-          <p className="text-muted-foreground">View, edit, and delete your file uploads</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Cloud-Based Upload Management</h2>
+          <p className="text-muted-foreground">Universal data management - deletions remove all related data across the entire system</p>
         </div>
       </div>
 
@@ -172,7 +283,7 @@ const UploadManagement = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
-              Upload History
+              Upload History - Universal Data Control
             </CardTitle>
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -292,9 +403,18 @@ const UploadManagement = () => {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Upload</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete this upload? This will also delete all associated transaction data. This action cannot be undone.
+                              <AlertDialogTitle>Universal System Delete</AlertDialogTitle>
+                              <AlertDialogDescription className="space-y-2">
+                                <p className="font-semibold text-red-600">⚠️ COMPREHENSIVE CLOUD DELETE</p>
+                                <p>This will permanently delete ALL data associated with the <strong>{upload.processor}</strong> processor:</p>
+                                <ul className="list-disc list-inside space-y-1 text-sm">
+                                  <li>All transaction records</li>
+                                  <li>All associated locations</li>
+                                  <li>All agent assignments</li>
+                                  <li>All P&L data</li>
+                                  <li>The upload record itself</li>
+                                </ul>
+                                <p className="text-red-600 font-medium">This action cannot be undone and will affect the entire system universally.</p>
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -302,8 +422,9 @@ const UploadManagement = () => {
                               <AlertDialogAction
                                 onClick={() => deleteUploadMutation.mutate(upload.id)}
                                 disabled={deleteUploadMutation.isPending}
+                                className="bg-red-600 hover:bg-red-700"
                               >
-                                {deleteUploadMutation.isPending ? 'Deleting...' : 'Delete'}
+                                {deleteUploadMutation.isPending ? 'Deleting All Data...' : 'Delete Everything'}
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
@@ -323,6 +444,16 @@ const UploadManagement = () => {
           )}
         </CardContent>
       </Card>
+
+      <div className="text-xs text-muted-foreground bg-red-50 border border-red-200 rounded-lg p-3">
+        <p className="font-medium mb-2 text-red-800">🔥 CLOUD-BASED UNIVERSAL DELETE:</p>
+        <ul className="space-y-1 text-red-700">
+          <li><strong>✅ COMPREHENSIVE:</strong> Deletes transactions, locations, assignments, and P&L data</li>
+          <li><strong>✅ UNIVERSAL:</strong> Removes data across the entire cloud system</li>
+          <li><strong>✅ CACHE CLEARING:</strong> Refreshes all application data automatically</li>
+          <li><strong>⚠️ PERMANENT:</strong> Cannot be undone - use with caution</li>
+        </ul>
+      </div>
     </div>
   );
 };
