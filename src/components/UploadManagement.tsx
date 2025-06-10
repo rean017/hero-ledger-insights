@@ -8,7 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Edit, Trash2, Search, Calendar, Upload } from "lucide-react";
+import { FileText, Edit, Trash2, Search, Calendar, Upload, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,27 @@ const UploadManagement = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Get count of all locations
+  const { data: allLocations, isLoading: isLoadingAllLocations } = useQuery({
+    queryKey: ['all-locations-count'],
+    queryFn: async () => {
+      console.log('Fetching all locations for count...');
+      
+      const { data, error } = await supabase
+        .from('locations')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching all locations:', error);
+        throw error;
+      }
+      
+      console.log('Found all locations:', data);
+      return data;
+    }
+  });
+
   const { data: uploads, isLoading } = useQuery({
     queryKey: ['file-uploads'],
     queryFn: async () => {
@@ -35,6 +56,89 @@ const UploadManagement = () => {
 
       if (error) throw error;
       return data;
+    }
+  });
+
+  const deleteAllLocationsMutation = useMutation({
+    mutationFn: async () => {
+      if (!allLocations || allLocations.length === 0) {
+        throw new Error('No locations to delete');
+      }
+
+      const locationIds = allLocations.map(loc => loc.id);
+      console.log('Deleting ALL locations with IDs:', locationIds);
+      
+      // Delete in batches to avoid connection issues
+      const batchSize = 50;
+      const batches = [];
+      for (let i = 0; i < locationIds.length; i += batchSize) {
+        batches.push(locationIds.slice(i, i + batchSize));
+      }
+
+      let totalDeleted = 0;
+
+      for (const batch of batches) {
+        console.log(`Processing batch of ${batch.length} locations...`);
+        
+        try {
+          // Delete agent assignments for this batch
+          const { error: assignmentError } = await supabase
+            .from('location_agent_assignments')
+            .delete()
+            .in('location_id', batch);
+
+          if (assignmentError) {
+            console.error('Error deleting assignments for batch:', assignmentError);
+            // Continue with location deletion even if assignments fail
+          }
+
+          // Delete the locations in this batch
+          const { error: locationError } = await supabase
+            .from('locations')
+            .delete()
+            .in('id', batch);
+
+          if (locationError) {
+            console.error('Error deleting locations for batch:', locationError);
+            throw locationError;
+          }
+
+          totalDeleted += batch.length;
+          console.log(`Successfully deleted batch. Total deleted so far: ${totalDeleted}`);
+
+          // Small delay between batches to avoid overwhelming the database
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+        } catch (error) {
+          console.error(`Failed to delete batch:`, error);
+          throw new Error(`Failed to delete batch after ${totalDeleted} successful deletions: ${error.message}`);
+        }
+      }
+
+      console.log('Successfully deleted all', totalDeleted, 'locations');
+      return totalDeleted;
+    },
+    onSuccess: (deletedCount) => {
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['all-locations-count'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-locations'] });
+      queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
+      queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-data'] });
+      queryClient.invalidateQueries({ queryKey: ['agents-data'] });
+      queryClient.invalidateQueries({ queryKey: ['commission-data'] });
+      toast({
+        title: "All Locations Deleted",
+        description: `Successfully deleted all ${deletedCount} locations and their assignments.`,
+      });
+    },
+    onError: (error) => {
+      console.error('Delete all locations error:', error);
+      toast({
+        title: "Delete Failed",
+        description: `Error deleting all locations: ${error.message || String(error)}`,
+        variant: "destructive"
+      });
     }
   });
 
@@ -252,7 +356,7 @@ const UploadManagement = () => {
     upload.processor.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
-  if (isLoading) {
+  if (isLoading || isLoadingAllLocations) {
     return (
       <div className="space-y-6">
         <div>
@@ -277,6 +381,76 @@ const UploadManagement = () => {
 
       {/* Location Cleanup Section */}
       <LocationCleanup />
+
+      {/* Delete All Locations Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-red-500" />
+            Complete Location Reset
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Total locations in system: {allLocations?.length || 0}
+            </p>
+            
+            {allLocations && allLocations.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                <p className="text-sm font-medium text-red-700">⚠️ ALL locations will be permanently deleted:</p>
+                <div className="max-h-40 overflow-y-auto space-y-1 bg-red-50 p-3 rounded border border-red-200">
+                  {allLocations.slice(0, 20).map((location) => (
+                    <div key={location.id} className="text-xs text-red-700">
+                      • {location.name} ({location.account_id || 'No Account ID'})
+                    </div>
+                  ))}
+                  {allLocations.length > 20 && (
+                    <div className="text-xs text-red-700">
+                      ...and {allLocations.length - 20} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-green-600 mb-4">
+                ✅ No locations found in the system.
+              </p>
+            )}
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive" 
+                  disabled={!allLocations || allLocations.length === 0 || deleteAllLocationsMutation.isPending}
+                  className="gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deleteAllLocationsMutation.isPending ? 'Deleting...' : `Delete ALL ${allLocations?.length || 0} Locations`}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete ALL Locations</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    ⚠️ <strong>COMPLETE SYSTEM RESET</strong> - This will permanently delete ALL {allLocations?.length || 0} locations in your system, regardless of when they were created or their type. This will also remove all associated agent assignments. This action cannot be undone and will give you a completely clean slate.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => deleteAllLocationsMutation.mutate()}
+                    disabled={deleteAllLocationsMutation.isPending}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {deleteAllLocationsMutation.isPending ? 'Deleting All...' : 'Delete ALL Locations'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
