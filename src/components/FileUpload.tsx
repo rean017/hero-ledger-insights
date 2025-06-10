@@ -93,10 +93,10 @@ const FileUpload = () => {
     }
   ];
 
-  // ENHANCED: Ultra-strict DBA business name validation - NEVER allow numeric names
-  const isValidBusinessName = (value: string): boolean => {
+  // SIMPLIFIED: Basic location name validation - only check for empty values
+  const isValidLocationName = (value: string): boolean => {
     if (!value || typeof value !== 'string') {
-      console.log('❌ REJECTED: Invalid business name - not a string or empty');
+      console.log('❌ REJECTED: Invalid location name - not a string or empty');
       return false;
     }
     
@@ -104,53 +104,11 @@ const FileUpload = () => {
     
     // Must not be empty
     if (trimmed.length === 0) {
-      console.log('❌ REJECTED: Invalid business name - empty string');
+      console.log('❌ REJECTED: Invalid location name - empty string');
       return false;
     }
     
-    // STRICT: Must not be purely numeric (these are account IDs, NOT business names)
-    if (/^\d+$/.test(trimmed)) {
-      console.log('❌ REJECTED: Purely numeric value is NOT a business name:', trimmed);
-      return false;
-    }
-    
-    // STRICT: Must not be mostly numeric (like "123456 CORP" where it's clearly an ID)
-    if (/^\d{4,}/.test(trimmed)) {
-      console.log('❌ REJECTED: Starts with 4+ digits, likely an account ID:', trimmed);
-      return false;
-    }
-    
-    // Must not be very short (likely codes or IDs)
-    if (trimmed.length < 3) {
-      console.log('❌ REJECTED: Too short to be a valid business name:', trimmed);
-      return false;
-    }
-    
-    // Must contain at least one letter (business names MUST have letters)
-    if (!/[a-zA-Z]/.test(trimmed)) {
-      console.log('❌ REJECTED: No letters found, not a valid business name:', trimmed);
-      return false;
-    }
-    
-    // STRICT: Must not be common non-business patterns
-    const invalidPatterns = [
-      /^account\s*\d+$/i,
-      /^mid\s*\d+$/i,
-      /^merchant\s*\d+$/i,
-      /^id\s*\d+$/i,
-      /^\d+\s*account$/i,
-      /^loc\s*\d+$/i,
-      /^location\s*\d+$/i
-    ];
-    
-    for (const pattern of invalidPatterns) {
-      if (pattern.test(trimmed)) {
-        console.log('❌ REJECTED: Invalid business name pattern:', trimmed);
-        return false;
-      }
-    }
-    
-    console.log('✅ VALID BUSINESS NAME CONFIRMED:', trimmed);
+    console.log('✅ VALID LOCATION NAME CONFIRMED:', trimmed);
     return true;
   };
 
@@ -217,7 +175,7 @@ const FileUpload = () => {
     return null;
   };
 
-  // FIXED: Enhanced row processing with processor-specific column mapping
+  // SIMPLIFIED: Enhanced row processing with processor-specific column mapping
   const processRow = (row: any, processorConfig: ProcessorConfig, locationColumn: string | null, volumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
     try {
       let processed: ProcessedData = { rawData: row, processor: processorConfig.name };
@@ -234,23 +192,23 @@ const FileUpload = () => {
         const extraData = row.__parsed_extra;
         
         if (extraData.length >= 6) {
-          const businessName = extraData[0] as string;
+          const locationName = extraData[0] as string;
           
-          // CRITICAL: Validate business name for Green Payments format too
-          if (!isValidBusinessName(businessName)) {
-            console.log('❌ REJECTED: Green Payments row has invalid business name:', businessName);
+          // SIMPLIFIED: Basic validation for Green Payments format
+          if (!isValidLocationName(locationName)) {
+            console.log('❌ REJECTED: Green Payments row has invalid location name:', locationName);
             return null;
           }
           
           processed.accountId = merchantId;
-          processed.locationName = businessName;
+          processed.locationName = locationName;
           processed.volume = parseFloat(extraData[2] as string) || 0;
           processed.agentPayout = parseFloat(extraData[5] as string) || 0;
           processed.debitVolume = 0;
           processed.agentName = null;
         }
       } else {
-        // CRITICAL: Location name detection with ZERO tolerance for numeric names
+        // Location name detection with simplified validation
         if (!locationColumn) {
           console.log('❌ FATAL ERROR: No location column detected - cannot process row');
           return null;
@@ -264,15 +222,14 @@ const FileUpload = () => {
         const locationValue = String(row[locationColumn]).trim();
         console.log('Raw location value from column', locationColumn, ':', locationValue);
         
-        // ULTRA-STRICT: Business name validation - NEVER allow numeric names
-        if (!isValidBusinessName(locationValue)) {
-          console.log('❌ CRITICAL REJECTION: Location value failed strict validation:', locationValue);
-          console.log('❌ This row will be SKIPPED to prevent numeric location names');
+        // SIMPLIFIED: Basic location name validation - accept any non-empty value
+        if (!isValidLocationName(locationValue)) {
+          console.log('❌ REJECTION: Location value failed basic validation:', locationValue);
           return null;
         }
 
         processed.locationName = locationValue;
-        console.log('✅ CONFIRMED: Valid business name set:', processed.locationName);
+        console.log('✅ CONFIRMED: Valid location name set:', processed.locationName);
         
         // Volume detection
         if (volumeColumn && row[volumeColumn]) {
@@ -309,13 +266,13 @@ const FileUpload = () => {
       console.log('Commission:', processed.agentPayout);
       console.log('Account ID:', processed.accountId);
 
-      // FINAL MANDATORY VALIDATION: Ensure we have a proper business name
-      if (!processed.locationName || !isValidBusinessName(processed.locationName)) {
-        console.log('❌ FINAL REJECTION: No valid business name found - ROW WILL BE SKIPPED');
+      // FINAL SIMPLIFIED VALIDATION: Ensure we have a location name
+      if (!processed.locationName || !isValidLocationName(processed.locationName)) {
+        console.log('❌ FINAL REJECTION: No valid location name found - ROW WILL BE SKIPPED');
         return null;
       }
 
-      console.log('✅ ROW APPROVED: Valid business name confirmed for processing');
+      console.log('✅ ROW APPROVED: Valid location name confirmed for processing');
       return processed;
     } catch (error) {
       console.error('❌ Error processing row:', error);
@@ -323,10 +280,10 @@ const FileUpload = () => {
     }
   };
 
-  // ENHANCED: Location creation with business name validation
+  // SIMPLIFIED: Location creation with basic validation
   const ensureLocationExists = async (locationName: string, accountId?: string): Promise<string | null> => {
-    if (!locationName || !isValidBusinessName(locationName)) {
-      console.log('❌ CRITICAL: Attempting to create location with invalid business name:', locationName);
+    if (!locationName || !isValidLocationName(locationName)) {
+      console.log('❌ CRITICAL: Attempting to create location with invalid name:', locationName);
       return null;
     }
 
@@ -343,11 +300,11 @@ const FileUpload = () => {
       }
 
       if (existingLocation) {
-        console.log('✅ Found existing location with business name:', locationName);
+        console.log('✅ Found existing location with name:', locationName);
         return existingLocation.id;
       }
 
-      console.log('✅ Creating new location with validated business name:', locationName);
+      console.log('✅ Creating new location with name:', locationName);
       const { data: newLocation, error: insertError } = await supabase
         .from('locations')
         .insert({
@@ -363,7 +320,7 @@ const FileUpload = () => {
         return null;
       }
 
-      console.log('✅ Successfully created location with business name:', newLocation);
+      console.log('✅ Successfully created location:', newLocation);
       return newLocation.id;
     } catch (error) {
       console.error('Error in ensureLocationExists:', error);
@@ -613,7 +570,7 @@ const FileUpload = () => {
         const processedData = processRow(row, detectedProcessor, locationColumn, volumeColumn, commissionColumn);
 
         if (processedData && processedData.locationName) {
-          console.log('✅ APPROVED: Valid business name for row', i + 1, ':', processedData.locationName);
+          console.log('✅ APPROVED: Valid location name for row', i + 1, ':', processedData.locationName);
 
           try {
             let locationId = null;
@@ -652,7 +609,7 @@ const FileUpload = () => {
               raw_data: processedData.rawData
             };
 
-            console.log('Inserting transaction with business name:', processedData.locationName);
+            console.log('Inserting transaction with location name:', processedData.locationName);
 
             const { error } = await supabase
               .from('transactions')
@@ -664,7 +621,7 @@ const FileUpload = () => {
               errors.push({ row: i + 1, error: error.message });
             } else {
               successCount++;
-              console.log(`✅ SUCCESS: Row ${i + 1} processed with business name: ${processedData.locationName}`);
+              console.log(`✅ SUCCESS: Row ${i + 1} processed with location name: ${processedData.locationName}`);
             }
           } catch (error) {
             console.error('❌ Error processing row', i + 1, ':', error);
@@ -672,9 +629,9 @@ const FileUpload = () => {
             errors.push({ row: i + 1, error: String(error) });
           }
         } else {
-          console.log(`❌ REJECTED: Row ${i + 1} - no valid business name found (NUMERIC NAMES ARE STRICTLY FORBIDDEN)`);
+          console.log(`❌ REJECTED: Row ${i + 1} - no valid location name found`);
           errorCount++;
-          errors.push({ row: i + 1, error: 'No valid business name found - numeric names are not allowed' });
+          errors.push({ row: i + 1, error: 'No valid location name found' });
         }
       }
 
@@ -682,7 +639,7 @@ const FileUpload = () => {
       console.log('Processor:', detectedProcessor.name);
       console.log('Success count:', successCount);
       console.log('Error count:', errorCount);
-      console.log('Locations created with business names:', locationsCreated);
+      console.log('Locations created:', locationsCreated);
       console.log('Merchant Hero assignments created/updated:', merchantHeroAssignments);
       console.log('Total rows processed:', rawData.length);
 
@@ -708,7 +665,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
-      const successMessage = `${detectedProcessor.name} upload completed! Processed ${successCount} rows with proper business names for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for having numeric names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using ONLY proper business names.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''}`;
+      const successMessage = `${detectedProcessor.name} upload completed! Processed ${successCount} rows for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for missing location names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -851,16 +808,16 @@ const FileUpload = () => {
           </ul>
         </div>
 
-        <div className="text-xs text-muted-foreground bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="font-medium mb-2 text-red-800">🚫 ZERO TOLERANCE for Numeric Location Names:</p>
-          <ul className="space-y-1 text-red-700">
-            <li><strong>❌ STRICTLY FORBIDDEN:</strong> Numeric values like "100336", "12345"</li>
-            <li><strong>❌ STRICTLY FORBIDDEN:</strong> Account ID patterns</li>
-            <li><strong>❌ STRICTLY FORBIDDEN:</strong> Values with no letters</li>
-            <li><strong>✅ REQUIRED:</strong> Proper business names like "Joe's Restaurant"</li>
+        <div className="text-xs text-muted-foreground bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <p className="font-medium mb-2 text-gray-800">📝 Location Name Requirements:</p>
+          <ul className="space-y-1 text-gray-700">
+            <li><strong>✅ ACCEPTS:</strong> Any non-empty location name or identifier</li>
+            <li><strong>✅ ACCEPTS:</strong> Numeric account IDs like "100336", "12345"</li>
+            <li><strong>✅ ACCEPTS:</strong> Business names like "Joe's Restaurant"</li>
+            <li><strong>❌ REJECTS ONLY:</strong> Empty or null values</li>
           </ul>
-          <p className="mt-2 text-sm font-medium text-red-800">
-            <strong>⚠️ ANY ROW WITH NUMERIC NAMES WILL BE COMPLETELY REJECTED</strong>
+          <p className="mt-2 text-sm font-medium text-gray-800">
+            <strong>✅ ALL VALID LOCATION IDENTIFIERS ARE NOW ACCEPTED</strong>
           </p>
         </div>
       </CardContent>
