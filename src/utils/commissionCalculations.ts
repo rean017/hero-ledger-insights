@@ -27,10 +27,30 @@ interface LocationData {
   transactionCount: number;
 }
 
+interface Transaction {
+  account_id: string;
+  volume: number;
+  debit_volume: number;
+  agent_payout: number;
+}
+
+interface Assignment {
+  location_id: string;
+  agent_name: string;
+  commission_rate: number;
+  is_active: boolean;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  account_id: string;
+}
+
 export const calculateLocationCommissions = (
-  transactions: any[],
-  assignments: any[],
-  locations: any[]
+  transactions: Transaction[],
+  assignments: Assignment[],
+  locations: Location[]
 ): LocationCommission[] => {
   console.log('=== COMMISSION CALCULATION WITH AUTO MERCHANT HERO ===');
   console.log('Total transactions:', transactions.length);
@@ -87,7 +107,7 @@ export const calculateLocationCommissions = (
     }
     acc[assignment.location_id].push(assignment);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, Assignment[]>);
 
   // Calculate commissions for each location
   Object.entries(assignmentsByLocation).forEach(([locationId, locationAssignments]) => {
