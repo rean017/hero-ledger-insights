@@ -27,6 +27,12 @@ export const calculateLocationCommissions = (
   console.log('Total assignments:', assignments.length);
   console.log('Total locations:', locations.length);
   
+  // Debug: Show sample transaction data
+  if (transactions.length > 0) {
+    console.log('Sample transaction data:', transactions.slice(0, 3));
+    console.log('Transaction fields available:', Object.keys(transactions[0]));
+  }
+  
   const commissions: LocationCommission[] = [];
 
   // Group transactions by location (account_id) and calculate totals
@@ -50,10 +56,19 @@ export const calculateLocationCommissions = (
     const agentPayout = Number(transaction.agent_payout) || 0;
     acc[accountId].totalAgentPayout += agentPayout;
     
+    // Debug logging for agent_payout
+    if (agentPayout > 0) {
+      console.log(`Found agent_payout for account ${accountId}:`, agentPayout);
+    }
+    
     return acc;
   }, {} as Record<string, { totalVolume: number; totalAgentPayout: number }>);
 
   console.log('Location data calculated:', locationData);
+
+  // Debug: Check if we have any agent_payout data at all
+  const totalAgentPayouts = Object.values(locationData).reduce((sum, data) => sum + data.totalAgentPayout, 0);
+  console.log('Total agent payouts across all locations:', totalAgentPayouts);
 
   // Calculate commissions for each active assignment
   assignments.forEach(assignment => {
@@ -102,6 +117,10 @@ export const calculateLocationCommissions = (
     console.log(`Processing assignment: ${assignment.agent_name} at ${location.name}`);
 
     if (assignment.agent_name === 'Merchant Hero') {
+      console.log(`DEBUG: Merchant Hero calculation for ${location.name}:`);
+      console.log('  - Location volume:', locationInfo.totalVolume);
+      console.log('  - Agent payout available:', locationInfo.totalAgentPayout);
+      
       // For Merchant Hero, they get the total agent_payout minus commissions paid to other agents
       const otherAgentAssignments = assignments.filter(a => 
         a.is_active && 
@@ -114,16 +133,27 @@ export const calculateLocationCommissions = (
         const decimalRate = convertToDecimalRate(otherAssignment.commission_rate);
         const commission = locationInfo.totalVolume * decimalRate;
         totalCommissionsPaid += commission;
+        console.log(`  - Commission to ${otherAssignment.agent_name}: ${commission}`);
       });
       
-      // Merchant Hero gets the remainder after paying other agents
-      const merchantHeroNet = locationInfo.totalAgentPayout - totalCommissionsPaid;
+      // If no agent_payout data, calculate based on a default rate
+      let merchantHeroNet = 0;
+      if (locationInfo.totalAgentPayout > 0) {
+        // Use actual agent_payout data
+        merchantHeroNet = locationInfo.totalAgentPayout - totalCommissionsPaid;
+        console.log(`  - Using agent_payout data: ${locationInfo.totalAgentPayout} - ${totalCommissionsPaid} = ${merchantHeroNet}`);
+      } else if (locationInfo.totalVolume > 0) {
+        // Fallback: assume a 2% margin for Merchant Hero when no agent_payout data
+        const estimatedPayout = locationInfo.totalVolume * 0.02; // 2% assumption
+        merchantHeroNet = estimatedPayout - totalCommissionsPaid;
+        console.log(`  - No agent_payout data, using 2% estimate: ${estimatedPayout} - ${totalCommissionsPaid} = ${merchantHeroNet}`);
+      }
       
-      console.log(`Merchant Hero calculation for ${location.name}:`, {
+      console.log(`Merchant Hero final calculation for ${location.name}:`, {
         totalAgentPayout: locationInfo.totalAgentPayout,
         totalCommissionsPaid,
         merchantHeroNet,
-        formula: `${locationInfo.totalAgentPayout} - ${totalCommissionsPaid} = ${merchantHeroNet}`
+        locationVolume: locationInfo.totalVolume
       });
 
       commissions.push({
