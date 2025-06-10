@@ -4,6 +4,7 @@ import { DollarSign, TrendingUp, Users, Building2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
+import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
 
 const Dashboard = () => {
   const [timeFrame, setTimeFrame] = useState("current-month");
@@ -64,69 +65,64 @@ const Dashboard = () => {
     queryFn: async () => {
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout')
         .gte('transaction_date', dateRange.start)
         .lt('transaction_date', dateRange.end);
 
       if (error) throw error;
 
-      // Get location assignments for BPS rates
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
         .select(`
           agent_name,
           commission_rate,
           location_id,
-          locations(name, account_id)
+          is_active
         `)
         .eq('is_active', true);
 
       if (assignmentError) throw assignmentError;
 
-      // Get all locations for account mapping
       const { data: locations, error: locationError } = await supabase
         .from('locations')
         .select('id, name, account_id');
 
       if (locationError) throw locationError;
 
+      // Calculate total sales volume from all transactions
       let totalRevenue = 0;
-      let totalAgentPayouts = 0;
-
       transactions?.forEach(t => {
-        totalRevenue += t.volume || 0;
-        
-        if (t.agent_name && t.account_id) {
-          // Find location by account_id
-          const location = locations?.find(loc => loc.account_id === t.account_id);
-          
-          if (location) {
-            // Find assignment for this agent and location
-            const assignment = assignments?.find(a => 
-              a.agent_name === t.agent_name && 
-              a.location_id === location.id
-            );
-            
-            if (assignment) {
-              // Calculate commission: volume × (BPS rate / 10000)
-              const commission = (t.volume || 0) * (assignment.commission_rate / 10000);
-              totalAgentPayouts += commission;
-            }
-          }
-        }
+        const volume = Number(t.volume) || 0;
+        const debitVolume = Number(t.debit_volume) || 0;
+        totalRevenue += volume + debitVolume;
       });
 
-      const netIncome = totalRevenue - totalAgentPayouts;
+      // Use the unified commission calculation logic
+      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
+      
+      // Calculate total agent payouts (what we pay to all agents including Merchant Hero net)
+      const totalAgentPayouts = commissions.reduce((sum, commission) => sum + commission.commission, 0);
+      
+      // Merchant Hero's net income is already calculated correctly in the commission logic
+      const merchantHeroCommission = commissions.find(c => c.agentName === 'Merchant Hero');
+      const merchantHeroNet = merchantHeroCommission ? merchantHeroCommission.commission : 0;
 
       // Get locations count
       const { count: locationsCount } = await supabase
         .from('locations')
         .select('*', { count: 'exact', head: true });
 
+      console.log('Dashboard calculations:', {
+        totalRevenue,
+        totalAgentPayouts,
+        merchantHeroNet,
+        commissionsBreakdown: commissions
+      });
+
       return {
         totalRevenue,
         totalAgentPayouts,
-        netIncome,
+        netIncome: merchantHeroNet, // This is Merchant Hero's actual net income
         locationsCount: locationsCount || 0
       };
     }
@@ -137,65 +133,45 @@ const Dashboard = () => {
     queryFn: async () => {
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('agent_name, volume, account_id')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout')
         .gte('transaction_date', dateRange.start)
-        .lt('transaction_date', dateRange.end)
-        .not('agent_name', 'is', null);
+        .lt('transaction_date', dateRange.end);
 
       if (error) throw error;
 
-      // Get location assignments for BPS rates
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
         .select(`
           agent_name,
           commission_rate,
           location_id,
-          locations(name, account_id)
+          is_active
         `)
         .eq('is_active', true);
 
       if (assignmentError) throw assignmentError;
 
-      // Get all locations for account mapping
       const { data: locations, error: locationError } = await supabase
         .from('locations')
         .select('id, name, account_id');
 
       if (locationError) throw locationError;
 
-      const agentStats: Record<string, { revenue: number; commission: number }> = {};
+      // Use the unified commission calculation logic
+      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
+      const agentSummaries = groupCommissionsByAgent(commissions);
 
-      transactions?.forEach(t => {
-        const name = t.agent_name!;
-        if (!agentStats[name]) {
-          agentStats[name] = { revenue: 0, commission: 0 };
-        }
-        
-        agentStats[name].revenue += t.volume || 0;
-        
-        if (t.account_id) {
-          // Find location by account_id
-          const location = locations?.find(loc => loc.account_id === t.account_id);
-          
-          if (location) {
-            // Find assignment for this agent and location
-            const assignment = assignments?.find(a => 
-              a.agent_name === name && 
-              a.location_id === location.id
-            );
-            
-            if (assignment) {
-              // Calculate commission: volume × (BPS rate / 10000)
-              const commission = (t.volume || 0) * (assignment.commission_rate / 10000);
-              agentStats[name].commission += commission;
-            }
-          }
-        }
+      // Calculate revenue per agent based on their locations
+      const agentStats = agentSummaries.map(summary => {
+        const revenue = summary.locations.reduce((sum, loc) => sum + loc.locationVolume, 0);
+        return {
+          name: summary.agentName,
+          revenue,
+          commission: summary.totalCommission
+        };
       });
 
-      return Object.entries(agentStats)
-        .map(([name, data]) => ({ name, ...data }))
+      return agentStats
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 4);
     }
@@ -242,7 +218,7 @@ const Dashboard = () => {
     },
     {
       title: "Agent Payouts",
-      value: `$${stats?.totalAgentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
+      value: `$${(stats?.totalAgentPayouts - (stats?.netIncome || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
       change: dateRange.label,
       trend: "up",
       icon: Users,
@@ -322,11 +298,11 @@ const Dashboard = () => {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Agent Commissions</span>
-                <span className="font-semibold text-red-600">-${stats?.totalAgentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                <span className="font-semibold text-red-600">-${((stats?.totalAgentPayouts || 0) - (stats?.netIncome || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="border-t pt-2">
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold">Net Income</span>
+                  <span className="font-semibold">Merchant Hero Net Income</span>
                   <span className="font-bold text-emerald-600">${stats?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
                 </div>
               </div>
@@ -349,7 +325,9 @@ const Dashboard = () => {
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-emerald-600">${agent.commission.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-                      <p className="text-sm text-muted-foreground">Commission</p>
+                      <p className="text-sm text-muted-foreground">
+                        {agent.name === 'Merchant Hero' ? 'Net Income' : 'Commission'}
+                      </p>
                     </div>
                   </div>
                 ))}

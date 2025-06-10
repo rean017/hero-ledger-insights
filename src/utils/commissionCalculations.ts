@@ -29,41 +29,31 @@ export const calculateLocationCommissions = (
   
   const commissions: LocationCommission[] = [];
 
-  // Group transactions by location (account_id) and calculate total volume per location
-  const locationVolumes = transactions.reduce((acc, transaction) => {
+  // Group transactions by location (account_id) and calculate totals
+  const locationData = transactions.reduce((acc, transaction) => {
     const accountId = transaction.account_id;
     if (!accountId) return acc;
     
     if (!acc[accountId]) {
-      acc[accountId] = 0;
+      acc[accountId] = {
+        totalVolume: 0,
+        totalAgentPayout: 0 // This is what Merchant Hero receives
+      };
     }
     
     // Add both regular volume and debit volume
-    const volume = parseFloat(transaction.volume) || 0;
-    const debitVolume = parseFloat(transaction.debit_volume) || 0;
-    acc[accountId] += volume + debitVolume;
+    const volume = Number(transaction.volume) || 0;
+    const debitVolume = Number(transaction.debit_volume) || 0;
+    acc[accountId].totalVolume += volume + debitVolume;
+    
+    // agent_payout is what Merchant Hero receives on this transaction
+    const agentPayout = Number(transaction.agent_payout) || 0;
+    acc[accountId].totalAgentPayout += agentPayout;
     
     return acc;
-  }, {} as Record<string, number>);
+  }, {} as Record<string, { totalVolume: number; totalAgentPayout: number }>);
 
-  // Also calculate Merchant Hero commissions directly from transaction data
-  const merchantHeroCommissions = transactions.reduce((acc, transaction) => {
-    const accountId = transaction.account_id;
-    if (!accountId) return acc;
-    
-    if (!acc[accountId]) {
-      acc[accountId] = 0;
-    }
-    
-    // agent_payout represents what Merchant Hero earned on this transaction
-    const agentPayout = parseFloat(transaction.agent_payout) || 0;
-    acc[accountId] += agentPayout;
-    
-    return acc;
-  }, {} as Record<string, number>);
-
-  console.log('Location volumes calculated:', locationVolumes);
-  console.log('Merchant Hero commissions by account:', merchantHeroCommissions);
+  console.log('Location data calculated:', locationData);
 
   // Calculate commissions for each active assignment
   assignments.forEach(assignment => {
@@ -79,70 +69,77 @@ export const calculateLocationCommissions = (
       return;
     }
 
+    const locationInfo = locationData[location.account_id];
+    if (!locationInfo) {
+      console.log(`No transaction data found for location ${location.name} (${location.account_id})`);
+      return;
+    }
+
     console.log(`Processing assignment: ${assignment.agent_name} at ${location.name}`);
 
-    // Get the total volume for this location using account_id
-    const locationVolume = locationVolumes[location.account_id] || 0;
-    
-    console.log(`Location ${location.name} (${location.account_id}) volume: ${locationVolume}`);
-
-    if (locationVolume > 0) {
-      let commission: number;
-      let decimalRate: number;
-      let displayBPS: number;
+    if (assignment.agent_name === 'Merchant Hero') {
+      // For Merchant Hero, calculate net income = total agent_payout - commissions paid to other agents
+      const otherAgentAssignments = assignments.filter(a => 
+        a.is_active && 
+        a.location_id === assignment.location_id && 
+        a.agent_name !== 'Merchant Hero'
+      );
       
-      if (assignment.agent_name === 'Merchant Hero') {
-        // For Merchant Hero, use actual earnings from transaction data
-        commission = merchantHeroCommissions[location.account_id] || 0;
-        
-        // Calculate the effective rate based on actual earnings
-        if (locationVolume > 0 && commission > 0) {
-          decimalRate = commission / locationVolume;
-          displayBPS = Math.round(decimalRate * 10000); // Convert to BPS for display
-        } else {
-          decimalRate = 0;
-          displayBPS = 0;
-        }
-        
-        console.log(`Merchant Hero calculation:`, {
+      let totalCommissionsPaid = 0;
+      otherAgentAssignments.forEach(otherAssignment => {
+        const decimalRate = convertToDecimalRate(otherAssignment.commission_rate);
+        const commission = locationInfo.totalVolume * decimalRate;
+        totalCommissionsPaid += commission;
+      });
+      
+      const merchantHeroNet = locationInfo.totalAgentPayout - totalCommissionsPaid;
+      
+      console.log(`Merchant Hero calculation for ${location.name}:`, {
+        totalAgentPayout: locationInfo.totalAgentPayout,
+        totalCommissionsPaid,
+        merchantHeroNet,
+        formula: `${locationInfo.totalAgentPayout} - ${totalCommissionsPaid} = ${merchantHeroNet}`
+      });
+
+      if (locationInfo.totalAgentPayout > 0) {
+        commissions.push({
+          locationId: assignment.location_id,
           locationName: location.name,
-          locationVolume,
-          actualCommission: commission,
-          calculatedDecimalRate: decimalRate,
-          displayBPS,
-          formula: `${commission} ÷ ${locationVolume} = ${decimalRate}`
-        });
-      } else {
-        // For other agents, use the standard BPS conversion
-        decimalRate = convertToDecimalRate(assignment.commission_rate);
-        displayBPS = Math.round(assignment.commission_rate * 100);
-        commission = locationVolume * decimalRate;
-        
-        console.log(`Standard agent calculation:`, {
           agentName: assignment.agent_name,
-          locationName: location.name,
-          locationVolume,
-          storedRate: assignment.commission_rate,
-          displayBPS,
-          decimalRate,
-          commission,
-          formula: `${locationVolume} × ${decimalRate} = ${commission}`
+          bpsRate: 0, // Merchant Hero doesn't have a fixed BPS rate
+          decimalRate: 0,
+          locationVolume: locationInfo.totalVolume,
+          commission: merchantHeroNet
         });
       }
+    } else {
+      // For other agents, use the standard BPS calculation on volume
+      const decimalRate = convertToDecimalRate(assignment.commission_rate);
+      const displayBPS = Math.round(assignment.commission_rate * 100);
+      const commission = locationInfo.totalVolume * decimalRate;
+      
+      console.log(`Standard agent calculation:`, {
+        agentName: assignment.agent_name,
+        locationName: location.name,
+        locationVolume: locationInfo.totalVolume,
+        storedRate: assignment.commission_rate,
+        displayBPS,
+        decimalRate,
+        commission,
+        formula: `${locationInfo.totalVolume} × ${decimalRate} = ${commission}`
+      });
 
-      if (commission > 0 || assignment.agent_name === 'Merchant Hero') {
+      if (commission > 0) {
         commissions.push({
           locationId: assignment.location_id,
           locationName: location.name,
           agentName: assignment.agent_name,
           bpsRate: displayBPS,
           decimalRate,
-          locationVolume,
+          locationVolume: locationInfo.totalVolume,
           commission
         });
       }
-    } else {
-      console.log(`No volume found for location ${location.name} (${location.account_id})`);
     }
   });
 
