@@ -25,12 +25,49 @@ const UnifiedLocations = () => {
   const { data: locations, isLoading, refetch } = useQuery({
     queryKey: ['unified-locations'],
     queryFn: async () => {
+      // Ensure Merchant Hero exists first
+      const { data: existingMerchantHero } = await supabase
+        .from('agents')
+        .select('id')
+        .eq('name', 'Merchant Hero')
+        .single();
+
+      if (!existingMerchantHero) {
+        console.log('Creating Merchant Hero agent...');
+        await supabase
+          .from('agents')
+          .insert([{ name: 'Merchant Hero', is_active: true }]);
+      }
+
       const { data: locations, error: locationError } = await supabase
         .from('locations')
         .select('*')
         .order('name');
 
       if (locationError) throw locationError;
+
+      // For each location, ensure Merchant Hero is assigned
+      for (const location of locations) {
+        const { data: merchantHeroAssignment } = await supabase
+          .from('location_agent_assignments')
+          .select('id')
+          .eq('location_id', location.id)
+          .eq('agent_name', 'Merchant Hero')
+          .eq('is_active', true)
+          .single();
+
+        if (!merchantHeroAssignment) {
+          console.log(`Assigning Merchant Hero to location: ${location.name}`);
+          await supabase
+            .from('location_agent_assignments')
+            .insert([{
+              location_id: location.id,
+              agent_name: 'Merchant Hero',
+              commission_rate: 0, // 0 BPS since they get the remainder
+              is_active: true
+            }]);
+        }
+      }
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
