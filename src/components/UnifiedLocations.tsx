@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Plus, Search, MapPin, Building2, Users, DollarSign, Edit3, Check, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Plus, Search, MapPin, Building2, Users, DollarSign, Edit3, Check, X, CalendarIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -17,6 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 import LocationAgentInlineEdit from "./LocationAgentInlineEdit";
 import { calculateLocationCommissions } from "@/utils/commissionCalculations";
 import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface LocationWithExtras {
   id: string;
@@ -43,6 +46,8 @@ const UnifiedLocations = () => {
   const [commissionRate, setCommissionRate] = useState("");
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [tempNotes, setTempNotes] = useState("");
+  const [customDateRange, setCustomDateRange] = useState<{ from: Date; to: Date } | null>(null);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   
   // Get dynamic time frames and set default to April (first option) since that's what was uploaded
   const timeFrames = getDynamicTimeFrames();
@@ -50,7 +55,10 @@ const UnifiedLocations = () => {
   
   const { toast } = useToast();
 
-  const dateRange = getDateRangeForTimeFrame(timeFrame);
+  // Get date range - use custom if selected and available, otherwise use timeframe
+  const dateRange = timeFrame === 'custom' && customDateRange 
+    ? customDateRange 
+    : getDateRangeForTimeFrame(timeFrame);
 
   // Debug: Log the timeframe and date range
   console.log('🗓️ UnifiedLocations: Current timeframe selected:', timeFrame);
@@ -245,7 +253,7 @@ const UnifiedLocations = () => {
 
   // Fetch locations with assignment data and commission calculations
   const { data: locations, isLoading, refetch } = useQuery({
-    queryKey: ['unified-locations', timeFrame],
+    queryKey: ['unified-locations', timeFrame, customDateRange],
     queryFn: async () => {
       const { data: locations, error: locationError } = await supabase
         .from('locations')
@@ -403,6 +411,20 @@ const UnifiedLocations = () => {
   const cancelEditingNotes = () => {
     setEditingNotes(null);
     setTempNotes("");
+  };
+
+  const handleTimeFrameChange = (value: string) => {
+    setTimeFrame(value);
+    if (value !== 'custom') {
+      setCustomDateRange(null);
+    }
+  };
+
+  const handleCustomDateSelect = (range: { from: Date; to: Date } | null) => {
+    if (range?.from && range?.to) {
+      setCustomDateRange(range);
+      setIsCalendarOpen(false);
+    }
   };
 
   const AgentAssignmentDisplay = ({ location }: { location: LocationWithExtras }) => {
@@ -622,22 +644,60 @@ const UnifiedLocations = () => {
                   className="pl-10"
                 />
               </div>
-              <ToggleGroup 
-                type="single" 
-                value={timeFrame} 
-                onValueChange={setTimeFrame} 
-                className="grid grid-cols-2 lg:grid-cols-4 bg-muted rounded-lg p-1 w-full sm:w-auto"
-              >
-                {timeFrames.map((frame) => (
-                  <ToggleGroupItem 
-                    key={frame.value}
-                    value={frame.value} 
-                    className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
-                  >
-                    {frame.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+              <div className="flex items-center gap-2">
+                <ToggleGroup 
+                  type="single" 
+                  value={timeFrame} 
+                  onValueChange={handleTimeFrameChange} 
+                  className="grid grid-cols-2 lg:grid-cols-4 bg-muted rounded-lg p-1 w-full sm:w-auto"
+                >
+                  {timeFrames.map((frame) => (
+                    <ToggleGroupItem 
+                      key={frame.value}
+                      value={frame.value} 
+                      className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                    >
+                      {frame.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                
+                {timeFrame === 'custom' && (
+                  <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "justify-start text-left font-normal",
+                          !customDateRange && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {customDateRange ? (
+                          `${format(customDateRange.from, "MMM d")} - ${format(customDateRange.to, "MMM d")}`
+                        ) : (
+                          "Pick dates"
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={customDateRange?.from}
+                        selected={customDateRange ? { from: customDateRange.from, to: customDateRange.to } : undefined}
+                        onSelect={(range) => {
+                          if (range?.from && range?.to) {
+                            handleCustomDateSelect({ from: range.from, to: range.to });
+                          }
+                        }}
+                        numberOfMonths={2}
+                        className="pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
             </div>
           </div>
         </CardHeader>
