@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import LocationAgentInlineEdit from "./LocationAgentInlineEdit";
+import { calculateLocationCommissions } from "@/utils/commissionCalculations";
 
 const UnifiedLocations = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -123,57 +124,6 @@ const UnifiedLocations = () => {
     ensureMerchantHeroSetup();
   }, []);
 
-  // Fetch locations with assignment data
-  const { data: locations, isLoading, refetch } = useQuery({
-    queryKey: ['unified-locations'],
-    queryFn: async () => {
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('*')
-        .order('name');
-
-      if (locationError) throw locationError;
-
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .select('*')
-        .eq('is_active', true);
-
-      if (assignmentError) throw assignmentError;
-
-      const { data: transactions, error: transactionError } = await supabase
-        .from('transactions')
-        .select('account_id, volume, debit_volume, agent_payout');
-
-      if (transactionError) throw transactionError;
-
-      // Calculate stats for each location
-      return locations.map(location => {
-        const locationAssignments = assignments.filter(a => a.location_id === location.id);
-        const locationTransactions = transactions.filter(t => t.account_id === location.account_id);
-        
-        const totalVolume = locationTransactions.reduce((sum, t) => {
-          const volume = Number(t.volume) || 0;
-          const debitVolume = Number(t.debit_volume) || 0;
-          return sum + volume + debitVolume;
-        }, 0);
-        
-        const totalCommission = locationTransactions.reduce((sum, t) => {
-          const agentPayout = Number(t.agent_payout) || 0;
-          return sum + agentPayout;
-        }, 0);
-
-        return {
-          ...location,
-          assignedAgents: locationAssignments.length,
-          totalVolume,
-          totalCommission,
-          agentNames: locationAssignments.map(a => a.agent_name).join(', ')
-        };
-      });
-    }
-  });
-
   // Fetch available agents
   const { data: agents } = useQuery({
     queryKey: ['agents'],
@@ -257,6 +207,111 @@ const UnifiedLocations = () => {
         variant: "destructive"
       });
     }
+  };
+
+  // Fetch locations with assignment data and commission calculations
+  const { data: locations, isLoading, refetch } = useQuery({
+    queryKey: ['unified-locations'],
+    queryFn: async () => {
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('*')
+        .order('name');
+
+      if (locationError) throw locationError;
+
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select('*')
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      const { data: transactions, error: transactionError } = await supabase
+        .from('transactions')
+        .select('account_id, volume, debit_volume, agent_payout');
+
+      if (transactionError) throw transactionError;
+
+      // Calculate commissions for all locations
+      const commissions = calculateLocationCommissions(transactions, assignments, locations);
+
+      // Map locations with their assignment data and commission calculations
+      return locations.map(location => {
+        const locationAssignments = assignments.filter(a => a.location_id === location.id);
+        const locationTransactions = transactions.filter(t => t.account_id === location.account_id);
+        const locationCommissions = commissions.filter(c => c.locationId === location.id);
+        
+        const totalVolume = locationTransactions.reduce((sum, t) => {
+          const volume = Number(t.volume) || 0;
+          const debitVolume = Number(t.debit_volume) || 0;
+          return sum + volume + debitVolume;
+        }, 0);
+        
+        const totalCommission = locationTransactions.reduce((sum, t) => {
+          const agentPayout = Number(t.agent_payout) || 0;
+          return sum + agentPayout;
+        }, 0);
+
+        return {
+          ...location,
+          assignedAgents: locationAssignments.length,
+          totalVolume,
+          totalCommission,
+          agentNames: locationAssignments.map(a => a.agent_name).join(', '),
+          assignments: locationAssignments,
+          commissions: locationCommissions
+        };
+      });
+    }
+  });
+
+  const AgentAssignmentDisplay = ({ location }: { location: any }) => {
+    const { assignments = [], commissions = [], totalCommission = 0 } = location;
+    
+    // Sort assignments to show Merchant Hero first
+    const sortedAssignments = [...assignments].sort((a, b) => {
+      if (a.agent_name === 'Merchant Hero') return -1;
+      if (b.agent_name === 'Merchant Hero') return 1;
+      return a.agent_name.localeCompare(b.agent_name);
+    });
+
+    return (
+      <div className="space-y-2 min-w-[200px]">
+        {sortedAssignments.map((assignment) => {
+          const commission = commissions.find(c => c.agentName === assignment.agent_name);
+          const earnings = assignment.agent_name === 'Merchant Hero' 
+            ? commission?.merchantHeroPayout || 0
+            : commission?.agentPayout || 0;
+          
+          const bpsDisplay = assignment.agent_name === 'Merchant Hero' && assignment.commission_rate === 0
+            ? 'Prime Agent'
+            : `${Math.round(assignment.commission_rate * 100)} BPS`;
+
+          return (
+            <div key={assignment.id} className="bg-muted/30 rounded-md p-2 text-sm">
+              <div className="font-medium text-foreground">
+                {assignment.agent_name} – {bpsDisplay}
+              </div>
+              <div className="text-emerald-600 font-semibold">
+                Earnings: ${earnings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          );
+        })}
+        
+        {assignments.length === 0 && (
+          <div className="text-xs text-muted-foreground">No agents assigned</div>
+        )}
+        
+        <div className="pt-2 border-t border-muted">
+          <div className="text-xs text-muted-foreground">Total Net Payout:</div>
+          <div className="font-semibold text-emerald-600">
+            ${totalCommission.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const filteredLocations = locations?.filter(location =>
@@ -438,7 +493,6 @@ const UnifiedLocations = () => {
                     <th className="text-left p-4 font-medium text-muted-foreground">Account ID</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Assigned Agents</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Total Volume</th>
-                    <th className="text-left p-4 font-medium text-muted-foreground">Commission Earned</th>
                     <th className="text-left p-4 font-medium text-muted-foreground">Account Type</th>
                   </tr>
                 </thead>
@@ -452,17 +506,10 @@ const UnifiedLocations = () => {
                       </td>
                       <td className="p-4 font-mono text-sm">{location.account_id || 'N/A'}</td>
                       <td className="p-4">
-                        <LocationAgentInlineEdit
-                          locationId={location.id}
-                          locationName={location.name}
-                          onUpdate={refetch}
-                        />
+                        <AgentAssignmentDisplay location={location} />
                       </td>
                       <td className="p-4 font-semibold text-emerald-600">
                         ${(location.totalVolume || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4 font-semibold text-emerald-600">
-                        ${(location.totalCommission || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-4">
                         <Badge variant="secondary">
@@ -478,7 +525,7 @@ const UnifiedLocations = () => {
             <div className="flex items-center justify-center h-32">
               <p className="text-muted-foreground">No locations found. Add a location to get started.</p>
             </div>
-          )}
+            )}
         </CardContent>
       </Card>
     </div>
