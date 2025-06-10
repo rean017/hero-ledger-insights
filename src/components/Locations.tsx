@@ -214,27 +214,6 @@ const Locations = () => {
         <p className="text-muted-foreground">Manage locations and assign agents with commission rates</p>
       </div>
 
-      {/* Search Bar */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Search Locations
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by location name or account ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Quick Agent Assignment */}
       <Card>
         <CardHeader>
@@ -291,6 +270,27 @@ const Locations = () => {
               <Plus className="h-4 w-4" />
               Assign Agent
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Search Bar - moved here after Quick Agent Assignment */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="h-5 w-5" />
+            Search Locations
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by location name or account ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
         </CardContent>
       </Card>
