@@ -364,7 +364,7 @@ const UnifiedLocations = () => {
           const volume = Number(t.volume) || 0;
           const debitVolume = Number(t.debit_volume) || 0;
           return sum + volume + debitVolume;
-        }, 0);
+        }, 0);\
         
         const totalCommission = locationTransactions.reduce((sum, t) => {
           const agentPayout = Number(t.agent_payout) || 0;
@@ -383,7 +383,7 @@ const UnifiedLocations = () => {
           assignedAgents: locationAssignments.length,
           totalVolume,
           totalCommission,
-          agentNames: locationAssignments.map(a => a.agent_name).join(', '),
+          agentNames: locationAssignments.map(a => a.agent_name).join(', '),\
           assignments: locationAssignments,
           commissions: locationCommissions
         } as LocationWithExtras;
@@ -826,5 +826,3 @@ const UnifiedLocations = () => {
 };
 
 export default UnifiedLocations;
-
-}
