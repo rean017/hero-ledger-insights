@@ -169,13 +169,12 @@ const UnifiedLocations = () => {
     }
 
     try {
-      // Insert the new location
+      // Insert the new location without notes field to avoid TypeScript error
       const { data: location, error: locationError } = await supabase
         .from('locations')
         .insert([{ 
           name: newLocationName.trim(), 
-          account_id: newAccountId.trim(),
-          notes: ""
+          account_id: newAccountId.trim()
         }])
         .select()
         .single();
