@@ -1,13 +1,21 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { MapPin, DollarSign, TrendingUp, Calculator } from "lucide-react";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
+import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
 
 const LocationCommissionReport = () => {
+  // Get dynamic time frames and set default to current month
+  const timeFrames = getDynamicTimeFrames();
+  const [timeFrame, setTimeFrame] = useState(timeFrames[2].value); // Current month (3rd option)
+
+  const dateRange = getDateRangeForTimeFrame(timeFrame);
+
   // Fetch transactions
   const { data: transactions = [] } = useQuery({
     queryKey: ['transactions'],
@@ -48,19 +56,57 @@ const LocationCommissionReport = () => {
     }
   });
 
+  // Calculate base commissions
   const commissions = calculateLocationCommissions(transactions, assignments, locations);
-  const agentSummaries = groupCommissionsByAgent(commissions);
+  
+  // Apply date filtering if needed
+  const filteredTransactions = dateRange 
+    ? transactions.filter(t => {
+        if (!t.transaction_date) return false;
+        const transactionDate = new Date(t.transaction_date);
+        return transactionDate >= dateRange.from && transactionDate <= dateRange.to;
+      })
+    : transactions;
 
-  const totalCommissions = commissions.reduce((sum, c) => {
+  const filteredCommissions = dateRange 
+    ? calculateLocationCommissions(filteredTransactions, assignments, locations)
+    : commissions;
+
+  const agentSummaries = groupCommissionsByAgent(filteredCommissions);
+
+  const totalCommissions = filteredCommissions.reduce((sum, c) => {
     // Sum both agent payouts and merchant hero payouts
     return sum + c.agentPayout + c.merchantHeroPayout;
   }, 0);
 
-  const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
-  const totalNetPayout = commissions.reduce((sum, c) => sum + c.netAgentPayout, 0);
+  const totalVolume = filteredCommissions.reduce((sum, c) => sum + c.locationVolume, 0);
+  const totalNetPayout = filteredCommissions.reduce((sum, c) => sum + c.netAgentPayout, 0);
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Commission Reports</h2>
+          <p className="text-muted-foreground">Detailed commission breakdown by location and agent</p>
+        </div>
+        <ToggleGroup 
+          type="single" 
+          value={timeFrame} 
+          onValueChange={setTimeFrame} 
+          className="grid grid-cols-2 lg:grid-cols-4 bg-muted rounded-lg p-1 w-full sm:w-auto"
+        >
+          {timeFrames.map((frame) => (
+            <ToggleGroupItem 
+              key={frame.value}
+              value={frame.value} 
+              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+            >
+              {frame.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -232,3 +278,5 @@ const LocationCommissionReport = () => {
 };
 
 export default LocationCommissionReport;
+
+</edits_to_apply>

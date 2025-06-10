@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
-import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
 
 const AgentManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -22,36 +22,14 @@ const AgentManagement = () => {
   const [newAgentName, setNewAgentName] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [agentNotes, setAgentNotes] = useState("");
-  const [timeFrame, setTimeFrame] = useState("all");
+  
+  // Get dynamic time frames and set default to current month
+  const timeFrames = getDynamicTimeFrames();
+  const [timeFrame, setTimeFrame] = useState(timeFrames[2].value); // Current month (3rd option)
+  
   const { toast } = useToast();
 
-  // Calculate date range based on timeFrame
-  const getDateRange = (frame: string) => {
-    const now = new Date();
-    switch (frame) {
-      case 'current':
-        return {
-          from: startOfMonth(now),
-          to: endOfMonth(now)
-        };
-      case 'last':
-        return {
-          from: startOfMonth(subMonths(now, 1)),
-          to: endOfMonth(subMonths(now, 1))
-        };
-      case 'last3':
-        return {
-          from: startOfMonth(subMonths(now, 2)),
-          to: endOfMonth(now)
-        };
-      case 'all':
-        return null; // No date filtering for "all"
-      default:
-        return null;
-    }
-  };
-
-  const dateRange = getDateRange(timeFrame);
+  const dateRange = getDateRangeForTimeFrame(timeFrame);
 
   // Fetch transactions - using the same approach as LocationCommissionReport
   const { data: transactions = [] } = useQuery({
@@ -364,30 +342,15 @@ const AgentManagement = () => {
             onValueChange={setTimeFrame} 
             className="grid grid-cols-2 lg:grid-cols-4 bg-muted rounded-lg p-1 w-full sm:w-auto"
           >
-            <ToggleGroupItem 
-              value="current" 
-              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
-            >
-              Current
-            </ToggleGroupItem>
-            <ToggleGroupItem 
-              value="last" 
-              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
-            >
-              Last
-            </ToggleGroupItem>
-            <ToggleGroupItem 
-              value="last3" 
-              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
-            >
-              3 Months
-            </ToggleGroupItem>
-            <ToggleGroupItem 
-              value="all" 
-              className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
-            >
-              All Time
-            </ToggleGroupItem>
+            {timeFrames.map((frame) => (
+              <ToggleGroupItem 
+                key={frame.value}
+                value={frame.value} 
+                className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              >
+                {frame.label}
+              </ToggleGroupItem>
+            ))}
           </ToggleGroup>
         </div>
       </div>
