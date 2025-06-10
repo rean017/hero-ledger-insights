@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -5,7 +6,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Download, Printer, FileText, User, Building2 } from "lucide-react";
+import { CalendarIcon, Download, Printer, FileText, User, Building2, TrendingUp, Trophy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
@@ -92,6 +93,121 @@ const AgentPLReport = () => {
       if (error) throw error;
       return data;
     }
+  });
+
+  // 12-month trailing history query
+  const { data: trailingHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ['12-month-trailing-history'],
+    queryFn: async () => {
+      const currentDate = new Date();
+      const twelveMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 12, 1);
+      
+      console.log('Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('volume, debit_volume, agent_name, account_id, transaction_date')
+        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+
+      if (error) throw error;
+
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          is_active
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
+
+      // Group transactions by month and calculate monthly totals
+      const monthlyData = transactions?.reduce((acc, transaction) => {
+        const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
+        if (!acc[monthKey]) {
+          acc[monthKey] = [];
+        }
+        acc[monthKey].push(transaction);
+        return acc;
+      }, {} as Record<string, any[]>);
+
+      const history = [];
+      for (let i = 11; i >= 0; i--) {
+        const month = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+        const monthKey = format(month, 'yyyy-MM');
+        const monthTransactions = monthlyData?.[monthKey] || [];
+        
+        const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
+        const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
+        const totalCommissions = commissions.reduce((sum, c) => sum + c.commission, 0);
+        
+        history.push({
+          month: format(month, 'MMM yyyy'),
+          totalVolume,
+          totalCommissions,
+          netIncome: totalVolume - totalCommissions
+        });
+      }
+
+      return history;
+    },
+    refetchOnWindowFocus: false
+  });
+
+  // Top 10 performers query
+  const { data: topPerformers, isLoading: performersLoading } = useQuery({
+    queryKey: ['top-10-performers'],
+    queryFn: async () => {
+      const currentDate = new Date();
+      const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 3, 1);
+      
+      console.log('Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
+
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('volume, debit_volume, agent_name, account_id')
+        .gte('transaction_date', format(threeMonthsAgo, 'yyyy-MM-dd'));
+
+      if (error) throw error;
+
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          is_active
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
+
+      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
+      
+      // Sort by total volume and get top 10
+      return commissions
+        .sort((a, b) => b.locationVolume - a.locationVolume)
+        .slice(0, 10)
+        .map((item, index) => ({
+          rank: index + 1,
+          ...item
+        }));
+    },
+    refetchOnWindowFocus: false
   });
 
   const { data: agentReportData, isLoading: reportLoading } = useQuery({
@@ -247,6 +363,123 @@ const AgentPLReport = () => {
 
   return (
     <div className="space-y-6">
+      {/* 12-Month Trailing History */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            12-Month Trailing History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {historyLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <p className="text-muted-foreground">Loading historical data...</p>
+            </div>
+          ) : trailingHistory && trailingHistory.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b-2">
+                    <th className="text-left p-4 font-semibold">Month</th>
+                    <th className="text-right p-4 font-semibold">Total Volume</th>
+                    <th className="text-right p-4 font-semibold">Total Commissions</th>
+                    <th className="text-right p-4 font-semibold">Net Income</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trailingHistory.map((month, index) => (
+                    <tr key={index} className="border-b hover:bg-muted/50">
+                      <td className="p-4 font-medium">{month.month}</td>
+                      <td className="p-4 text-right font-semibold text-emerald-600">
+                        ${month.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right font-semibold text-red-600">
+                        ${month.totalCommissions.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right font-semibold text-blue-600">
+                        ${month.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32">
+              <p className="text-muted-foreground">No historical data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Top 10 Performers */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trophy className="h-5 w-5" />
+            Top 10 Performers (Last 3 Months by Volume)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {performersLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <p className="text-muted-foreground">Loading top performers...</p>
+            </div>
+          ) : topPerformers && topPerformers.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b-2">
+                    <th className="text-left p-4 font-semibold">Rank</th>
+                    <th className="text-left p-4 font-semibold">Agent</th>
+                    <th className="text-left p-4 font-semibold">Location</th>
+                    <th className="text-right p-4 font-semibold">Total Volume</th>
+                    <th className="text-right p-4 font-semibold">Commission Earned</th>
+                    <th className="text-right p-4 font-semibold">BPS Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topPerformers.map((performer) => (
+                    <tr key={`${performer.agentName}-${performer.locationId}`} className="border-b hover:bg-muted/50">
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          {performer.rank <= 3 && (
+                            <Trophy className={`h-4 w-4 ${
+                              performer.rank === 1 ? 'text-yellow-500' :
+                              performer.rank === 2 ? 'text-gray-400' :
+                              'text-amber-600'
+                            }`} />
+                          )}
+                          <span className="font-bold">#{performer.rank}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <Badge variant="secondary">{performer.agentName}</Badge>
+                      </td>
+                      <td className="p-4 font-medium">{performer.locationName}</td>
+                      <td className="p-4 text-right font-semibold text-emerald-600">
+                        ${performer.locationVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right font-semibold text-blue-600">
+                        ${performer.commission.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right">
+                        <Badge variant="outline">{performer.bpsRate} BPS</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32">
+              <p className="text-muted-foreground">No performance data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
