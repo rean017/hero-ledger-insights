@@ -114,10 +114,49 @@ const FileUpload = () => {
     return true;
   };
 
+  // ENHANCED: Detect Green Payments format with __parsed_extra
+  const detectGreenPaymentsFormat = (rawData: any[]): boolean => {
+    if (!rawData || rawData.length === 0) return false;
+    
+    // Check if we have the Green Payments format with __parsed_extra
+    const firstRow = rawData[0];
+    if (firstRow && firstRow.__parsed_extra && Array.isArray(firstRow.__parsed_extra)) {
+      console.log('🎯 DETECTED: Green Payments format with __parsed_extra structure');
+      
+      // Look for the header row pattern
+      const extraData = firstRow.__parsed_extra;
+      if (extraData.length >= 6) {
+        const possibleHeaders = extraData.map(h => String(h).toLowerCase());
+        console.log('Green Payments headers in __parsed_extra:', possibleHeaders);
+        
+        // Check for Green Payments specific headers
+        const hasGreenPaymentsHeaders = possibleHeaders.some(h => 
+          h.includes('merchant') || h.includes('sales amount') || h.includes('agent net')
+        );
+        
+        if (hasGreenPaymentsHeaders) {
+          console.log('✅ Confirmed Green Payments format');
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  };
+
   // Enhanced processor detection using specific configurations
-  const detectProcessor = (headers: string[]): { processor: ProcessorConfig | null; confidence: number } => {
+  const detectProcessor = (headers: string[], rawData: any[]): { processor: ProcessorConfig | null; confidence: number } => {
     console.log('=== ENHANCED PROCESSOR DETECTION ===');
     console.log('Available headers:', headers);
+    
+    // FIRST: Check for Green Payments special format
+    if (detectGreenPaymentsFormat(rawData)) {
+      const greenPaymentsConfig = processorConfigs.find(c => c.name === 'Green Payments');
+      if (greenPaymentsConfig) {
+        console.log('🎯 DETECTED: Green Payments with special __parsed_extra format');
+        return { processor: greenPaymentsConfig, confidence: 1.0 };
+      }
+    }
     
     const headerLower = headers.map(h => h.toLowerCase().trim());
     
@@ -200,17 +239,21 @@ const FileUpload = () => {
     try {
       let processed: ProcessedData = { rawData: row, processor: processorConfig.name };
 
-      console.log('\n=== PROCESSING ROW WITH ENHANCED TRNXN SUPPORT ===');
+      console.log('\n=== PROCESSING ROW WITH ENHANCED GREEN PAYMENTS SUPPORT ===');
       console.log('Processor:', processorConfig.name);
       console.log('Location column:', locationColumn);
       console.log('Volume column:', volumeColumn);
       console.log('Debit volume column:', debitVolumeColumn);
       console.log('Commission column:', commissionColumn);
 
-      // Handle the specific Green Payments CSV format with __parsed_extra
-      if (row.__parsed_extra && Array.isArray(row.__parsed_extra)) {
+      // ENHANCED: Handle the specific Green Payments CSV format with __parsed_extra
+      if (row.__parsed_extra && Array.isArray(row.__parsed_extra) && processorConfig.name === 'Green Payments') {
         const merchantId = Object.values(row)[0] as string;
         const extraData = row.__parsed_extra;
+        
+        console.log('🎯 Processing Green Payments __parsed_extra format');
+        console.log('Merchant ID:', merchantId);
+        console.log('Extra data:', extraData);
         
         if (extraData.length >= 6) {
           const locationName = extraData[0] as string;
@@ -226,9 +269,18 @@ const FileUpload = () => {
           processed.agentPayout = parseFloat(extraData[5] as string) || 0;
           processed.debitVolume = 0;
           processed.agentName = null;
+          
+          console.log('✅ Green Payments row processed successfully:', {
+            locationName: processed.locationName,
+            volume: processed.volume,
+            agentPayout: processed.agentPayout
+          });
+        } else {
+          console.log('❌ REJECTED: Green Payments row has insufficient data');
+          return null;
         }
       } else {
-        // Location name detection with validation
+        // Handle other processor formats
         if (!locationColumn) {
           console.log('❌ FATAL ERROR: No location column detected - cannot process row');
           return null;
@@ -291,7 +343,7 @@ const FileUpload = () => {
         }
       }
 
-      console.log('=== ENHANCED VALIDATION WITH TRNXN SUPPORT ===');
+      console.log('=== ENHANCED VALIDATION ===');
       console.log('Location Name:', processed.locationName);
       console.log('Bank Card Volume:', processed.volume);
       console.log('Debit Card Volume:', processed.debitVolume);
@@ -513,10 +565,10 @@ const FileUpload = () => {
     }
 
     setUploading(true);
-    setUploadStatus({ status: 'processing', message: 'Processing file with enhanced TRNXN support for separate Bank Card and Debit Card volumes...', filename: file.name });
+    setUploadStatus({ status: 'processing', message: 'Processing file with enhanced Green Payments support for __parsed_extra format...', filename: file.name });
 
     try {
-      console.log('=== STARTING ENHANCED TRNXN UPLOAD WITH SEPARATE VOLUME COLUMNS ===');
+      console.log('=== STARTING ENHANCED UPLOAD WITH GREEN PAYMENTS __PARSED_EXTRA SUPPORT ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
@@ -531,7 +583,7 @@ const FileUpload = () => {
       const headers = Object.keys(rawData[0]);
       console.log('All headers found:', headers);
       
-      const { processor: detectedProcessor, confidence } = detectProcessor(headers);
+      const { processor: detectedProcessor, confidence } = detectProcessor(headers, rawData);
       
       if (!detectedProcessor) {
         throw new Error('Could not detect processor type. Please ensure your file matches one of the supported formats: Maverick, Green Payments, TRNXN, or SignaPay.');
@@ -539,51 +591,33 @@ const FileUpload = () => {
 
       console.log(`=== PROCESSOR DETECTED: ${detectedProcessor.name} (${(confidence * 100).toFixed(1)}% confidence) ===`);
       
-      // Enhanced column mapping with detailed TRNXN debugging
-      const locationColumn = findColumn(headers, detectedProcessor.locationColumn);
-      const volumeColumn = findColumn(headers, detectedProcessor.volumeColumn);
-      const debitVolumeColumn = detectedProcessor.debitVolumeColumn ? findColumn(headers, detectedProcessor.debitVolumeColumn) : null;
-      const commissionColumn = findColumn(headers, detectedProcessor.commissionColumn);
+      // Enhanced column mapping with Green Payments special handling
+      let locationColumn = null;
+      let volumeColumn = null;
+      let debitVolumeColumn = null;
+      let commissionColumn = null;
       
-      console.log('=== ENHANCED COLUMN MAPPING WITH DETAILED TRNXN DEBUG ===');
-      console.log('- Location column found:', locationColumn);
-      console.log('- Bank Card Volume column (H) found:', volumeColumn);
-      console.log('- Debit Card Volume column (I) found:', debitVolumeColumn);
-      console.log('- Commission column found:', commissionColumn);
-
-      if (!locationColumn) {
-        throw new Error(`CRITICAL ERROR: No location column found for ${detectedProcessor.name}! Expected columns: ${detectedProcessor.locationColumn.join(', ')}`);
-      }
-
-      if (!volumeColumn) {
-        throw new Error(`Could not detect volume column for ${detectedProcessor.name}. Expected columns: ${detectedProcessor.volumeColumn.join(', ')}`);
-      }
-
-      // ENHANCED TRNXN VALIDATION: Check if we found both volume columns for TRNXN
-      if (detectedProcessor.name === 'TRNXN') {
-        console.log('=== TRNXN COLUMN VALIDATION ===');
-        console.log('Bank Card Volume column (H):', volumeColumn);
-        console.log('Debit Card Volume column (I):', debitVolumeColumn);
+      if (detectedProcessor.name === 'Green Payments' && detectGreenPaymentsFormat(rawData)) {
+        console.log('✅ Using Green Payments __parsed_extra format - skipping column mapping');
+        // For Green Payments __parsed_extra format, we don't need to map columns
+      } else {
+        locationColumn = findColumn(headers, detectedProcessor.locationColumn);
+        volumeColumn = findColumn(headers, detectedProcessor.volumeColumn);
+        debitVolumeColumn = detectedProcessor.debitVolumeColumn ? findColumn(headers, detectedProcessor.debitVolumeColumn) : null;
+        commissionColumn = findColumn(headers, detectedProcessor.commissionColumn);
         
-        if (!debitVolumeColumn) {
-          console.log('⚠️ CRITICAL WARNING: TRNXN processor detected but no Debit Card Volume column found!');
-          console.log('Available headers:', headers);
-          console.log('Searching for debit volume with patterns:', detectedProcessor.debitVolumeColumn);
-          
-          // Try a more aggressive search for debit volume
-          const debitHeaders = headers.filter(h => 
-            h.toLowerCase().includes('debit') || 
-            h.toLowerCase().includes('db') ||
-            (h.toLowerCase().includes('card') && h.toLowerCase().includes('vol'))
-          );
-          console.log('Headers that might contain debit volume:', debitHeaders);
-          
-          // If we still can't find it, prompt user
-          if (debitHeaders.length === 0) {
-            throw new Error(`TRNXN file detected but could not find Debit Card Volume column. Please ensure your file has a column with "debit" in the name. Found headers: ${headers.join(', ')}`);
-          }
-        } else {
-          console.log('✅ TRNXN: Both Bank Card and Debit Card volume columns detected successfully!');
+        console.log('=== COLUMN MAPPING ===');
+        console.log('- Location column found:', locationColumn);
+        console.log('- Volume column found:', volumeColumn);
+        console.log('- Debit volume column found:', debitVolumeColumn);
+        console.log('- Commission column found:', commissionColumn);
+
+        if (!locationColumn && detectedProcessor.name !== 'Green Payments') {
+          throw new Error(`CRITICAL ERROR: No location column found for ${detectedProcessor.name}! Expected columns: ${detectedProcessor.locationColumn.join(', ')}`);
+        }
+
+        if (!volumeColumn && detectedProcessor.name !== 'Green Payments') {
+          throw new Error(`Could not detect volume column for ${detectedProcessor.name}. Expected columns: ${detectedProcessor.volumeColumn.join(', ')}`);
         }
       }
 
@@ -631,7 +665,7 @@ const FileUpload = () => {
       let merchantHeroAssignments = 0;
       const errors: any[] = [];
 
-      console.log('=== PROCESSING ROWS WITH ENHANCED TRNXN VOLUME HANDLING (H + I) ===');
+      console.log('=== PROCESSING ROWS WITH ENHANCED GREEN PAYMENTS SUPPORT ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         console.log(`\n--- Processing row ${i + 1} with ${detectedProcessor.name} format ---`);
@@ -746,7 +780,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
       const monthName = monthOptions.find(m => m.value === selectedMonth)?.label;
-      const successMessage = `${detectedProcessor.name} upload completed with enhanced volume handling! Processed ${successCount} rows for ${monthName}. ${errorCount} rows rejected for missing location names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} ${detectedProcessor.name === 'TRNXN' ? ' ✅ Bank Card (H) + Debit Card (I) volumes processed and summed correctly!' : ''} All data is tagged for ${monthName} and will appear when you filter by this month.`;
+      const successMessage = `${detectedProcessor.name} upload completed with enhanced Green Payments support! Processed ${successCount} rows for ${monthName}. ${errorCount} rows rejected for missing location names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} ${detectedProcessor.name === 'Green Payments' ? ' ✅ Green Payments __parsed_extra format processed successfully!' : ''} All data is tagged for ${monthName} and will appear when you filter by this month.`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -870,7 +904,7 @@ const FileUpload = () => {
           <p className="font-medium mb-2 text-green-800">✅ Supported Upload Formats:</p>
           <ul className="space-y-1 text-green-700">
             <li><strong>Maverick:</strong> DBA Name, Sales Amount, Agent Net Revenue</li>
-            <li><strong>Green Payments:</strong> Merchant, Sales Amount, Agent Net</li>
+            <li><strong>Green Payments:</strong> Merchant, Sales Amount, Agent Net (including __parsed_extra format)</li>
             <li><strong>TRNXN:</strong> DBA, Bank Card Volume + Debit Card Volume, Net Commission</li>
             <li><strong>SignaPay:</strong> DBA, Volume, Net</li>
           </ul>
@@ -878,7 +912,7 @@ const FileUpload = () => {
             <strong>🔍 AUTOMATIC DETECTION:</strong> System will detect your processor type automatically
           </p>
           <p className="mt-1 text-sm font-medium text-blue-800">
-            <strong>🚀 TRNXN ENHANCED:</strong> Now processes Bank Card Volume AND Debit Card Volume separately!
+            <strong>🚀 GREEN PAYMENTS ENHANCED:</strong> Now handles special __parsed_extra CSV format!
           </p>
         </div>
 
