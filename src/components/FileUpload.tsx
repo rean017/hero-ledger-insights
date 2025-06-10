@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,14 @@ interface ProcessedData {
   transactionDate?: string;
   rawData: any;
   processor?: string;
+}
+
+interface ProcessorConfig {
+  name: string;
+  locationColumn: string[];
+  volumeColumn: string[];
+  commissionColumn: string[];
+  detection: string[];
 }
 
 const FileUpload = () => {
@@ -52,6 +61,38 @@ const FileUpload = () => {
   };
 
   const monthOptions = generateMonthOptions();
+
+  // Processor configurations with specific column mappings
+  const processorConfigs: ProcessorConfig[] = [
+    {
+      name: 'Maverick',
+      locationColumn: ['dba name', 'dba_name', 'dba'],
+      volumeColumn: ['sales amount', 'sales_amount', 'total sales'],
+      commissionColumn: ['agent net revenue', 'agent_net_revenue', 'agent net', 'net revenue'],
+      detection: ['dba name', 'sales amount', 'agent net revenue']
+    },
+    {
+      name: 'Green Payments',
+      locationColumn: ['merchant', 'merchant name', 'merchant_name'],
+      volumeColumn: ['sales amount', 'sales_amount', 'total sales'],
+      commissionColumn: ['agent net', 'agent_net', 'net'],
+      detection: ['merchant', 'sales amount', 'agent net']
+    },
+    {
+      name: 'TRNXN',
+      locationColumn: ['dba', 'dba name', 'dba_name'],
+      volumeColumn: ['bankcard volume', 'bankcard_volume', 'bank card volume'],
+      commissionColumn: ['net commission', 'net_commission', 'commission'],
+      detection: ['dba', 'bankcard volume', 'net commission']
+    },
+    {
+      name: 'SignaPay',
+      locationColumn: ['dba', 'dba name', 'dba_name'],
+      volumeColumn: ['volume', 'total volume', 'sales volume'],
+      commissionColumn: ['net', 'net commission', 'commission'],
+      detection: ['dba', 'volume', 'net']
+    }
+  ];
 
   // ENHANCED: Ultra-strict DBA business name validation - NEVER allow numeric names
   const isValidBusinessName = (value: string): boolean => {
@@ -114,196 +155,79 @@ const FileUpload = () => {
     return true;
   };
 
-  // ENHANCED: Mandatory DBA column detection - MUST find actual business names
-  const detectDBAColumn = (headers: string[]): string | null => {
-    console.log('=== MANDATORY DBA BUSINESS NAME DETECTION ===');
+  // Enhanced processor detection using specific configurations
+  const detectProcessor = (headers: string[]): { processor: ProcessorConfig | null; confidence: number } => {
+    console.log('=== ENHANCED PROCESSOR DETECTION ===');
     console.log('Available headers:', headers);
     
-    // PRIORITY 1: Look for exact "DBA Name" match (case insensitive)
-    const exactDBANameColumn = headers.find(header => 
-      header.toLowerCase().trim() === 'dba name'
-    );
-    if (exactDBANameColumn) {
-      console.log('🎯 FOUND: Exact "DBA Name" column:', exactDBANameColumn);
-      return exactDBANameColumn;
-    }
+    const headerLower = headers.map(h => h.toLowerCase().trim());
     
-    // PRIORITY 2: Look for "DBA Name" variations
-    const dbaNameVariations = ['dba name', 'dba_name', 'dbaname', 'dba-name', 'doing business as'];
-    for (const header of headers) {
-      const headerLower = header.toLowerCase().trim().replace(/[\s_-]/g, '');
-      for (const variation of dbaNameVariations) {
-        const variationClean = variation.replace(/[\s_-]/g, '');
-        if (headerLower === variationClean) {
-          console.log('🎯 FOUND: DBA Name variation:', header);
-          return header;
-        }
-      }
-    }
+    let bestMatch: { processor: ProcessorConfig | null; confidence: number } = { processor: null, confidence: 0 };
     
-    // PRIORITY 3: Look for exact "DBA" match
-    const exactDbaColumn = headers.find(header => 
-      header.toLowerCase().trim() === 'dba'
-    );
-    if (exactDbaColumn) {
-      console.log('🎯 FOUND: Exact "DBA" column:', exactDbaColumn);
-      return exactDbaColumn;
-    }
-    
-    // PRIORITY 4: Look for business name patterns
-    const businessNamePatterns = ['business name', 'merchant name', 'company name', 'store name'];
-    for (const header of headers) {
-      const headerLower = header.toLowerCase().trim();
-      for (const pattern of businessNamePatterns) {
-        if (headerLower.includes(pattern)) {
-          console.log('🎯 FOUND: Business name pattern:', header, 'contains', pattern);
-          return header;
-        }
-      }
-    }
-    
-    console.log('❌ CRITICAL ERROR: No DBA/Business Name column found!');
-    return null;
-  };
-
-  // Enhanced volume detection - prioritizes Sales Amount
-  const detectVolumeColumn = (headers: string[]): string | null => {
-    console.log('=== SALES AMOUNT DETECTION ===');
-    console.log('Available headers:', headers);
-    
-    // HIGHEST PRIORITY: Look for exact "Sales Amount" match
-    const exactSalesAmountColumn = headers.find(header => 
-      header.toLowerCase().trim() === 'sales amount'
-    );
-    if (exactSalesAmountColumn) {
-      console.log('💰 Found exact "Sales Amount" column:', exactSalesAmountColumn);
-      return exactSalesAmountColumn;
-    }
-    
-    // SECOND PRIORITY: Look for Sales Amount variations
-    const salesAmountVariations = ['sales_amount', 'salesamount', 'total sales', 'sales total'];
-    for (const header of headers) {
-      const headerLower = header.toLowerCase().trim().replace(/[\s_-]/g, '');
-      for (const variation of salesAmountVariations) {
-        const variationClean = variation.replace(/[\s_-]/g, '');
-        if (headerLower === variationClean) {
-          console.log('💰 Found Sales Amount variation:', header);
-          return header;
-        }
-      }
-    }
-    
-    // THIRD PRIORITY: Look for other volume keywords (excluding count columns)
-    const volumeKeywords = ['volume', 'sales', 'revenue', 'income', 'gross', 'processing', 'amount'];
-    const countKeywords = ['count', 'number', 'qty', 'quantity', 'transactions', 'items'];
-    
-    for (const header of headers) {
-      const headerLower = header.toLowerCase().trim();
+    for (const config of processorConfigs) {
+      let matchScore = 0;
+      let totalDetectionColumns = config.detection.length;
       
-      // Skip if this looks like a count column
-      const isCountColumn = countKeywords.some(keyword => headerLower.includes(keyword));
-      if (isCountColumn) {
-        console.log('❌ Skipping count column:', header);
-        continue;
+      console.log(`\n--- Testing ${config.name} processor ---`);
+      
+      for (const detectionColumn of config.detection) {
+        const found = headerLower.some(header => header.includes(detectionColumn.toLowerCase()));
+        if (found) {
+          matchScore++;
+          console.log(`✅ Found detection column for ${config.name}: ${detectionColumn}`);
+        } else {
+          console.log(`❌ Missing detection column for ${config.name}: ${detectionColumn}`);
+        }
       }
       
-      for (const keyword of volumeKeywords) {
-        if (headerLower.includes(keyword) && 
-            !headerLower.includes('debit') && 
-            !headerLower.includes('refund') && 
-            !headerLower.includes('chargeback') &&
-            !headerLower.includes('commission') &&
-            !headerLower.includes('payout')) {
-          console.log('💰 Found volume column:', header);
-          return header;
-        }
+      const confidence = matchScore / totalDetectionColumns;
+      console.log(`${config.name} confidence: ${confidence} (${matchScore}/${totalDetectionColumns})`);
+      
+      if (confidence > bestMatch.confidence) {
+        bestMatch = { processor: config, confidence };
       }
     }
     
-    console.log('❌ No Sales Amount column detected');
-    return null;
+    if (bestMatch.processor && bestMatch.confidence >= 0.6) {
+      console.log(`🎯 DETECTED: ${bestMatch.processor.name} with ${(bestMatch.confidence * 100).toFixed(1)}% confidence`);
+      return bestMatch;
+    }
+    
+    console.log('⚠️ Could not detect processor with sufficient confidence');
+    return { processor: null, confidence: 0 };
   };
 
-  // Smart column detection for commission/payout amounts
-  const detectCommissionColumn = (headers: string[]): string | null => {
-    const commissionKeywords = [
-      'commission', 'payout', 'agent', 'residual', 'fee', 'earnings', 'profit'
-    ];
+  // Find column by possible names
+  const findColumn = (headers: string[], possibleNames: string[]): string | null => {
+    const headerLower = headers.map(h => h.toLowerCase().trim());
     
-    console.log('=== COMMISSION DETECTION ===');
-    
-    for (const header of headers) {
-      const headerLower = header.toLowerCase().trim();
-      for (const keyword of commissionKeywords) {
-        if (headerLower.includes(keyword)) {
-          console.log('💵 Found commission column:', header);
-          return header;
-        }
+    for (const name of possibleNames) {
+      const index = headerLower.findIndex(header => 
+        header === name.toLowerCase() || 
+        header.includes(name.toLowerCase()) ||
+        header.replace(/[\s_-]/g, '') === name.replace(/[\s_-]/g, '').toLowerCase()
+      );
+      
+      if (index !== -1) {
+        console.log(`Found column "${headers[index]}" for "${name}"`);
+        return headers[index];
       }
     }
     
-    console.log('❌ No commission column detected');
+    console.log(`Column not found for any of: ${possibleNames.join(', ')}`);
     return null;
   };
 
-  const detectProcessor = (headers: string[], firstDataRow?: any): string => {
-    const headerStr = headers.join('|').toLowerCase();
-    
-    console.log('=== PROCESSOR DETECTION ===');
-    console.log('Headers for detection:', headers);
-    
-    // Check for DBA + Sales Amount pattern (likely a specific format)
-    if (headerStr.includes('dba') && headerStr.includes('sales amount')) {
-      console.log('✅ Detected DBA + Sales Amount format, using Maverick processor');
-      return 'Maverick';
-    }
-    
-    // Check for known processor patterns
-    if (headerStr.includes('bank card volume') || headerStr.includes('bankcard volume') || headerStr.includes('salescode')) {
-      console.log('✅ Detected TRNXN processor');
-      return 'TRNXN';
-    }
-    
-    if (headerStr.includes('total amount') && headerStr.includes('sales rep')) {
-      console.log('✅ Detected Maverick processor');
-      return 'Maverick';
-    }
-    
-    if (headerStr.includes('gross sales') && headerStr.includes('residual')) {
-      console.log('✅ Detected SignaPay processor');
-      return 'SignaPay';
-    }
-    
-    if (headerStr.includes('processing volume') && headerStr.includes('agent revenue')) {
-      console.log('✅ Detected Green Payments processor');
-      return 'Green Payments';
-    }
-
-    if (headerStr.includes('fiserv') || headerStr.includes('residuals')) {
-      console.log('✅ Detected Green Payments processor (Fiserv format)');
-      return 'Green Payments';
-    }
-    
-    // Check for common agent-related patterns that might indicate Maverick
-    if (headerStr.includes('agent') && (headerStr.includes('payout') || headerStr.includes('commission'))) {
-      console.log('✅ Detected Maverick processor (agent pattern)');
-      return 'Maverick';
-    }
-    
-    // Default to Maverick (as it seems to be a common format)
-    console.log('⚠️ Could not detect specific processor, defaulting to Maverick');
-    return 'Maverick';
-  };
-
-  // FIXED: Enhanced row processing with MANDATORY business name validation
-  const processRow = (row: any, processor: string, dbaColumn: string | null, volumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
+  // FIXED: Enhanced row processing with processor-specific column mapping
+  const processRow = (row: any, processorConfig: ProcessorConfig, locationColumn: string | null, volumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
     try {
-      let processed: ProcessedData = { rawData: row, processor };
+      let processed: ProcessedData = { rawData: row, processor: processorConfig.name };
 
-      console.log('\n=== PROCESSING ROW WITH MANDATORY BUSINESS NAME ===');
-      console.log('Processor:', processor);
-      console.log('DBA column:', dbaColumn);
+      console.log('\n=== PROCESSING ROW WITH PROCESSOR-SPECIFIC MAPPING ===');
+      console.log('Processor:', processorConfig.name);
+      console.log('Location column:', locationColumn);
       console.log('Volume column:', volumeColumn);
+      console.log('Commission column:', commissionColumn);
 
       // Handle the specific Green Payments CSV format with __parsed_extra
       if (row.__parsed_extra && Array.isArray(row.__parsed_extra)) {
@@ -327,28 +251,28 @@ const FileUpload = () => {
           processed.agentName = null;
         }
       } else {
-        // CRITICAL: DBA business name detection with ZERO tolerance for numeric names
-        if (!dbaColumn) {
-          console.log('❌ FATAL ERROR: No DBA column detected - cannot process row');
+        // CRITICAL: Location name detection with ZERO tolerance for numeric names
+        if (!locationColumn) {
+          console.log('❌ FATAL ERROR: No location column detected - cannot process row');
           return null;
         }
 
-        if (!row[dbaColumn]) {
-          console.log('❌ REJECTED: DBA column is empty for this row');
+        if (!row[locationColumn]) {
+          console.log('❌ REJECTED: Location column is empty for this row');
           return null;
         }
 
-        const dbaValue = String(row[dbaColumn]).trim();
-        console.log('Raw DBA value from column', dbaColumn, ':', dbaValue);
+        const locationValue = String(row[locationColumn]).trim();
+        console.log('Raw location value from column', locationColumn, ':', locationValue);
         
         // ULTRA-STRICT: Business name validation - NEVER allow numeric names
-        if (!isValidBusinessName(dbaValue)) {
-          console.log('❌ CRITICAL REJECTION: DBA value failed strict validation:', dbaValue);
+        if (!isValidBusinessName(locationValue)) {
+          console.log('❌ CRITICAL REJECTION: Location value failed strict validation:', locationValue);
           console.log('❌ This row will be SKIPPED to prevent numeric location names');
           return null;
         }
 
-        processed.locationName = dbaValue;
+        processed.locationName = locationValue;
         console.log('✅ CONFIRMED: Valid business name set:', processed.locationName);
         
         // Volume detection
@@ -362,6 +286,7 @@ const FileUpload = () => {
         if (commissionColumn && row[commissionColumn]) {
           const commissionValue = String(row[commissionColumn]).replace(/[,$]/g, '');
           processed.agentPayout = parseFloat(commissionValue) || 0;
+          console.log('✅ Set commission to:', processed.agentPayout);
         }
 
         // Set default values
@@ -382,6 +307,7 @@ const FileUpload = () => {
       console.log('=== FINAL VALIDATION ===');
       console.log('Location Name:', processed.locationName);
       console.log('Volume:', processed.volume);
+      console.log('Commission:', processed.agentPayout);
       console.log('Account ID:', processed.accountId);
 
       // FINAL MANDATORY VALIDATION: Ensure we have a proper business name
@@ -445,8 +371,6 @@ const FileUpload = () => {
       return null;
     }
   };
-
-  // ... keep existing code (ensureAgentExists function)
 
   const ensureAgentExists = async (agentName: string): Promise<string | null> => {
     if (!agentName) return null;
@@ -537,10 +461,10 @@ const FileUpload = () => {
     }
 
     setUploading(true);
-    setUploadStatus({ status: 'processing', message: 'Processing file with ZERO TOLERANCE for numeric location names...', filename: file.name });
+    setUploadStatus({ status: 'processing', message: 'Processing file with enhanced processor detection...', filename: file.name });
 
     try {
-      console.log('=== STARTING ZERO-TOLERANCE BUSINESS NAME UPLOAD ===');
+      console.log('=== STARTING ENHANCED PROCESSOR-SPECIFIC UPLOAD ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
@@ -555,36 +479,42 @@ const FileUpload = () => {
       const headers = Object.keys(rawData[0]);
       console.log('All headers found:', headers);
       
-      const detectedProcessor = detectProcessor(headers, rawData[1]);
+      // Enhanced processor detection
+      const { processor: detectedProcessor, confidence } = detectProcessor(headers);
       
-      // MANDATORY column detection - MUST have DBA business names
-      const dbaColumn = detectDBAColumn(headers);
-      const volumeColumn = detectVolumeColumn(headers);
-      const commissionColumn = detectCommissionColumn(headers);
-      
-      console.log('=== MANDATORY BUSINESS NAME VALIDATION ===');
-      console.log('- DBA Business Name column:', dbaColumn);
-      console.log('- Sales Amount volume column:', volumeColumn);
-      console.log('- Commission column:', commissionColumn);
-      console.log('- Detected processor:', detectedProcessor);
+      if (!detectedProcessor) {
+        throw new Error('Could not detect processor type. Please ensure your file matches one of the supported formats: Maverick, Green Payments, TRNXN, or SignaPay.');
+      }
 
-      if (!dbaColumn) {
-        throw new Error('CRITICAL ERROR: No DBA/Business Name column found! Your file MUST contain a column with actual business names (like "Joe\'s Restaurant") not numeric account IDs. Please ensure your file has a "DBA Name", "Business Name", or similar column with proper business names.');
+      console.log(`=== PROCESSOR DETECTED: ${detectedProcessor.name} (${(confidence * 100).toFixed(1)}% confidence) ===`);
+      
+      // Find columns using processor-specific mappings
+      const locationColumn = findColumn(headers, detectedProcessor.locationColumn);
+      const volumeColumn = findColumn(headers, detectedProcessor.volumeColumn);
+      const commissionColumn = findColumn(headers, detectedProcessor.commissionColumn);
+      
+      console.log('=== COLUMN MAPPING ===');
+      console.log('- Location column:', locationColumn);
+      console.log('- Volume column:', volumeColumn);
+      console.log('- Commission column:', commissionColumn);
+
+      if (!locationColumn) {
+        throw new Error(`CRITICAL ERROR: No location column found for ${detectedProcessor.name}! Expected columns: ${detectedProcessor.locationColumn.join(', ')}`);
       }
 
       if (!volumeColumn) {
-        throw new Error('Could not detect Sales Amount column in the file. Please ensure your file contains a "Sales Amount" column with volume data.');
+        throw new Error(`Could not detect volume column for ${detectedProcessor.name}. Expected columns: ${detectedProcessor.volumeColumn.join(', ')}`);
       }
 
       const [year, month] = selectedMonth.split('-');
       const lastDayOfMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
       const endDate = `${selectedMonth}-${lastDayOfMonth}`;
 
-      console.log('Deleting existing transactions for processor:', detectedProcessor, 'and month:', selectedMonth);
+      console.log('Deleting existing transactions for processor:', detectedProcessor.name, 'and month:', selectedMonth);
       const { error: deleteError } = await supabase
         .from('transactions')
         .delete()
-        .eq('processor', detectedProcessor)
+        .eq('processor', detectedProcessor.name)
         .gte('transaction_date', `${selectedMonth}-01`)
         .lte('transaction_date', endDate);
 
@@ -598,7 +528,7 @@ const FileUpload = () => {
         .from('file_uploads')
         .insert({
           filename: file.name,
-          processor: detectedProcessor,
+          processor: detectedProcessor.name,
           status: 'processing'
         })
         .select()
@@ -612,11 +542,11 @@ const FileUpload = () => {
       let locationsCreated = 0;
       const errors: any[] = [];
 
-      console.log('=== PROCESSING ROWS WITH ZERO-TOLERANCE VALIDATION ===');
+      console.log('=== PROCESSING ROWS WITH PROCESSOR-SPECIFIC VALIDATION ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
-        console.log(`\n--- Processing row ${i + 1} with mandatory business name validation ---`);
-        const processedData = processRow(row, detectedProcessor, dbaColumn, volumeColumn, commissionColumn);
+        console.log(`\n--- Processing row ${i + 1} with ${detectedProcessor.name} format ---`);
+        const processedData = processRow(row, detectedProcessor, locationColumn, volumeColumn, commissionColumn);
 
         if (processedData && processedData.locationName) {
           console.log('✅ APPROVED: Valid business name for row', i + 1, ':', processedData.locationName);
@@ -642,7 +572,7 @@ const FileUpload = () => {
             const transactionDate = `${selectedMonth}-01`;
 
             const transactionData = {
-              processor: detectedProcessor,
+              processor: detectedProcessor.name,
               volume: processedData.volume || 0,
               debit_volume: processedData.debitVolume || 0,
               agent_payout: processedData.agentPayout || 0,
@@ -678,7 +608,8 @@ const FileUpload = () => {
         }
       }
 
-      console.log('=== UPLOAD SUMMARY - BUSINESS NAMES ONLY ===');
+      console.log('=== UPLOAD SUMMARY ===');
+      console.log('Processor:', detectedProcessor.name);
       console.log('Success count:', successCount);
       console.log('Error count:', errorCount);
       console.log('Locations created with business names:', locationsCreated);
@@ -706,7 +637,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
-      const successMessage = `BUSINESS NAMES ONLY upload completed! Processed ${successCount} rows with proper business names from ${detectedProcessor} for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for having numeric names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using ONLY proper business names.` : ''}`;
+      const successMessage = `${detectedProcessor.name} upload completed! Processed ${successCount} rows with proper business names for ${monthOptions.find(m => m.value === selectedMonth)?.label}. ${errorCount} rows rejected for having numeric names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations using ONLY proper business names.` : ''}`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -716,7 +647,7 @@ const FileUpload = () => {
       });
 
       toast({
-        title: "Business Names Only Upload Complete",
+        title: `${detectedProcessor.name} Upload Complete`,
         description: successMessage,
       });
 
@@ -746,7 +677,7 @@ const FileUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5" />
-          Business Names Only Upload (Zero Tolerance for Numeric Names)
+          Smart Processor Detection Upload
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -783,8 +714,8 @@ const FileUpload = () => {
                   <p className="text-xs text-primary mt-1">
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
-                  <p className="text-xs text-red-600 mt-1 font-medium">
-                    <strong>MANDATORY:</strong> DBA Name column with business names (NO NUMERIC NAMES ALLOWED)
+                  <p className="text-xs text-green-600 mt-1 font-medium">
+                    <strong>AUTO-DETECT:</strong> Maverick, Green Payments, TRNXN, or SignaPay formats
                   </p>
                 </div>
                 <input
@@ -823,6 +754,19 @@ const FileUpload = () => {
           </div>
         )}
 
+        <div className="text-xs text-muted-foreground bg-green-50 border border-green-200 rounded-lg p-3">
+          <p className="font-medium mb-2 text-green-800">✅ Supported Upload Formats:</p>
+          <ul className="space-y-1 text-green-700">
+            <li><strong>Maverick:</strong> DBA Name, Sales Amount, Agent Net Revenue</li>
+            <li><strong>Green Payments:</strong> Merchant, Sales Amount, Agent Net</li>
+            <li><strong>TRNXN:</strong> DBA, Bankcard Volume, Net Commission</li>
+            <li><strong>SignaPay:</strong> DBA, Volume, Net</li>
+          </ul>
+          <p className="mt-2 text-sm font-medium text-green-800">
+            <strong>🔍 AUTOMATIC DETECTION:</strong> System will detect your processor type automatically
+          </p>
+        </div>
+
         <div className="text-xs text-muted-foreground bg-red-50 border border-red-200 rounded-lg p-3">
           <p className="font-medium mb-2 text-red-800">🚫 ZERO TOLERANCE for Numeric Location Names:</p>
           <ul className="space-y-1 text-red-700">
@@ -830,7 +774,6 @@ const FileUpload = () => {
             <li><strong>❌ STRICTLY FORBIDDEN:</strong> Account ID patterns</li>
             <li><strong>❌ STRICTLY FORBIDDEN:</strong> Values with no letters</li>
             <li><strong>✅ REQUIRED:</strong> Proper business names like "Joe's Restaurant"</li>
-            <li><strong>✅ REQUIRED:</strong> "DBA Name" or "Business Name" column</li>
           </ul>
           <p className="mt-2 text-sm font-medium text-red-800">
             <strong>⚠️ ANY ROW WITH NUMERIC NAMES WILL BE COMPLETELY REJECTED</strong>
