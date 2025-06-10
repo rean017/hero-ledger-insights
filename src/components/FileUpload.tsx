@@ -191,8 +191,15 @@ const FileUpload = () => {
       return 'Green Payments';
     }
     
-    console.log('Could not detect specific processor, using Generic');
-    return 'Generic';
+    // Check for common agent-related patterns that might indicate Maverick
+    if (headerStr.includes('agent') && (headerStr.includes('payout') || headerStr.includes('commission'))) {
+      console.log('Detected Maverick processor (agent pattern)');
+      return 'Maverick';
+    }
+    
+    // Default to Maverick instead of Generic (as it seems to be a common format)
+    console.log('Could not detect specific processor, defaulting to Maverick');
+    return 'Maverick';
   };
 
   const processRow = (row: any, processor: string, locationColumn: string | null, volumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
