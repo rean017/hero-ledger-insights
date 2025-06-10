@@ -1,5 +1,5 @@
 
-import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay } from "date-fns";
 
 export interface TimeFrameOption {
   value: string;
@@ -30,24 +30,27 @@ export const getDynamicTimeFrames = (): TimeFrameOption[] => {
       value: format(twoMonthsAgo, 'MMM').toLowerCase(),
       label: format(twoMonthsAgo, 'MMM'),
       dateRange: {
-        from: startOfMonth(twoMonthsAgo),
-        to: endOfMonth(twoMonthsAgo)
+        // FIXED: Use UTC dates to match transaction date parsing
+        from: new Date(Date.UTC(twoMonthsAgo.getFullYear(), twoMonthsAgo.getMonth(), 1)),
+        to: new Date(Date.UTC(twoMonthsAgo.getFullYear(), twoMonthsAgo.getMonth() + 1, 0, 23, 59, 59, 999))
       }
     },
     {
       value: format(lastMonth, 'MMM').toLowerCase(),
       label: format(lastMonth, 'MMM'),
       dateRange: {
-        from: startOfMonth(lastMonth),
-        to: endOfMonth(lastMonth)
+        // FIXED: Use UTC dates to match transaction date parsing
+        from: new Date(Date.UTC(lastMonth.getFullYear(), lastMonth.getMonth(), 1)),
+        to: new Date(Date.UTC(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0, 23, 59, 59, 999))
       }
     },
     {
       value: format(currentMonth, 'MMM').toLowerCase(),
       label: format(currentMonth, 'MMM'),
       dateRange: {
-        from: startOfMonth(currentMonth),
-        to: endOfMonth(currentMonth)
+        // FIXED: Use UTC dates to match transaction date parsing
+        from: new Date(Date.UTC(currentMonth.getFullYear(), currentMonth.getMonth(), 1)),
+        to: new Date(Date.UTC(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999))
       }
     },
     {
