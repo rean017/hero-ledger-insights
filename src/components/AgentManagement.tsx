@@ -482,5 +482,3 @@ const AgentManagement = () => {
 };
 
 export default AgentManagement;
-
-</edits_to_apply>
