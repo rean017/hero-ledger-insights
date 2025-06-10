@@ -98,8 +98,33 @@ const AgentManagement = () => {
   const filteredTransactions = dateRange 
     ? transactions.filter(t => {
         if (!t.transaction_date) return false;
+        
+        // Create date object and ensure we're comparing properly
         const transactionDate = new Date(t.transaction_date);
-        return transactionDate >= dateRange.from && transactionDate <= dateRange.to;
+        
+        // Ensure the transaction date is valid
+        if (isNaN(transactionDate.getTime())) {
+          console.log('⚠️ Invalid transaction date:', t.transaction_date);
+          return false;
+        }
+        
+        // Convert to start of day for comparison to avoid timezone issues
+        const transactionDateStart = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
+        const fromDateStart = new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), dateRange.from.getDate());
+        const toDateStart = new Date(dateRange.to.getFullYear(), dateRange.to.getMonth(), dateRange.to.getDate());
+        
+        const isInRange = transactionDateStart >= fromDateStart && transactionDateStart <= toDateStart;
+        
+        if (isInRange) {
+          console.log('✅ Transaction date in range:', {
+            transactionDate: transactionDate.toISOString(),
+            fromDate: dateRange.from.toISOString(),
+            toDate: dateRange.to.toISOString(),
+            accountId: t.account_id
+          });
+        }
+        
+        return isInRange;
       })
     : transactions;
 
@@ -107,6 +132,15 @@ const AgentManagement = () => {
   console.log('📅 Date range:', dateRange);
   console.log('📅 Original transactions:', transactions.length);
   console.log('📅 Filtered transactions:', filteredTransactions.length);
+  
+  // Sample a few transaction dates for debugging
+  if (transactions.length > 0) {
+    console.log('📊 Sample transaction dates:', transactions.slice(0, 5).map(t => ({
+      account_id: t.account_id,
+      transaction_date: t.transaction_date,
+      parsedDate: t.transaction_date ? new Date(t.transaction_date).toISOString() : 'No date'
+    })));
+  }
   
   // Calculate commissions using filtered transactions
   const filteredCommissions = calculateLocationCommissions(filteredTransactions, assignments, locations);
@@ -482,3 +516,5 @@ const AgentManagement = () => {
 };
 
 export default AgentManagement;
+
+}
