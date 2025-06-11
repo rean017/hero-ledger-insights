@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { format } from "date-fns";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
+import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
 import AgentPLReport from "./AgentPLReport";
 
 const PLReports = () => {
@@ -65,21 +66,30 @@ const PLReports = () => {
 
   const dateRange = getDateRange(selectedPeriod);
 
-  // 12-month trailing history query
+  // 12-month trailing history query - FIXED to only show months with actual data
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview'],
     queryFn: async () => {
-      const currentDate = new Date();
-      const twelveMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 12, 1);
-      
-      console.log('Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+      console.log('🔍 Fetching all available transaction data for trailing history...');
 
-      const { data: transactions, error } = await supabase
+      // First, get ALL transactions to see what months actually have data
+      const { data: allTransactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id, transaction_date, agent_payout')
-        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+        .order('transaction_date', { ascending: true });
 
       if (error) throw error;
+
+      console.log('📊 Total transactions found:', allTransactions?.length || 0);
+      
+      if (!allTransactions || allTransactions.length === 0) {
+        console.log('⚠️ No transaction data found');
+        return [];
+      }
+
+      // Get unique months that actually have data
+      const monthsWithData = [...new Set(allTransactions.map(t => format(new Date(t.transaction_date), 'yyyy-MM')))];
+      console.log('📅 Months with actual data:', monthsWithData);
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -99,8 +109,8 @@ const PLReports = () => {
 
       if (locationError) throw locationError;
 
-      // Group transactions by month and calculate monthly totals
-      const monthlyData = transactions?.reduce((acc, transaction) => {
+      // Group transactions by month
+      const monthlyData = allTransactions.reduce((acc, transaction) => {
         const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
         if (!acc[monthKey]) {
           acc[monthKey] = [];
@@ -109,44 +119,48 @@ const PLReports = () => {
         return acc;
       }, {} as Record<string, any[]>);
 
-      const history = [];
-      for (let i = 11; i >= 0; i--) {
-        const month = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-        const monthKey = format(month, 'yyyy-MM');
-        const monthTransactions = monthlyData?.[monthKey] || [];
+      // Only process months that actually have data
+      const history = monthsWithData.map(monthKey => {
+        const monthTransactions = monthlyData[monthKey] || [];
+        const month = new Date(monthKey + '-01');
         
         const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
         const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
         const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
         
-        history.push({
+        return {
           month: format(month, 'MMM yyyy'),
           totalVolume,
           totalCommissions,
           netIncome: totalVolume - totalCommissions
-        });
-      }
+        };
+      }).sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime());
 
+      console.log('📈 Processed history for months:', history.map(h => h.month));
       return history;
     },
     refetchOnWindowFocus: false
   });
 
-  // Top 10 performers query
+  // Top 10 performers query - FIXED to use available data timeframe
   const { data: topPerformers, isLoading: performersLoading } = useQuery({
     queryKey: ['top-10-performers-overview'],
     queryFn: async () => {
-      const currentDate = new Date();
-      const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 3, 1);
-      
-      console.log('Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
+      console.log('🏆 Fetching top performers data...');
 
+      // Get all available transaction data instead of assuming a 3-month range
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', format(threeMonthsAgo, 'yyyy-MM-dd'));
+        .order('transaction_date', { ascending: false });
 
       if (error) throw error;
+
+      console.log('📊 Total transactions for top performers:', transactions?.length || 0);
+
+      if (!transactions || transactions.length === 0) {
+        return [];
+      }
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -184,7 +198,7 @@ const PLReports = () => {
   const { data: periodSummary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
     queryKey: ['period-summary', selectedPeriod],
     queryFn: async () => {
-      console.log(`Fetching period summary for ${selectedPeriod} (${dateRange.start} to ${dateRange.end})`);
+      console.log(`📊 Fetching period summary for ${selectedPeriod} (${dateRange.start} to ${dateRange.end})`);
       
       const { data: transactions, error } = await supabase
         .from('transactions')
@@ -194,7 +208,7 @@ const PLReports = () => {
 
       if (error) throw error;
 
-      console.log('Period summary - Total transactions:', transactions?.length);
+      console.log('📈 Period summary - Total transactions:', transactions?.length);
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -234,7 +248,7 @@ const PLReports = () => {
         transactionCount: transactions?.length || 0
       };
 
-      console.log('Period summary - Final calculations:', result);
+      console.log('✅ Period summary - Final calculations:', result);
       return result;
     },
     refetchOnWindowFocus: false
@@ -337,7 +351,7 @@ const PLReports = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                12-Month Trailing History
+                Historical Data (Available Months Only)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -376,7 +390,7 @@ const PLReports = () => {
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-32">
-                  <p className="text-muted-foreground">No historical data available</p>
+                  <p className="text-muted-foreground">No transaction data available. Please upload transaction data to see historical reports.</p>
                 </div>
               )}
             </CardContent>
@@ -387,7 +401,7 @@ const PLReports = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Trophy className="h-5 w-5" />
-                Top 10 Performers (Last 3 Months by Volume)
+                Top 10 Performers (All Available Data)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -443,7 +457,7 @@ const PLReports = () => {
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-32">
-                  <p className="text-muted-foreground">No performance data available</p>
+                  <p className="text-muted-foreground">No performance data available. Please upload transaction data and assign agents to locations.</p>
                 </div>
               )}
             </CardContent>
@@ -650,3 +664,5 @@ const PLReports = () => {
 };
 
 export default PLReports;
+
+</edits_to_apply>
