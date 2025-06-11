@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +10,7 @@ import UnifiedLocations from "./components/UnifiedLocations";
 import PLReports from "./components/PLReports";
 import UploadManagement from "./components/UploadManagement";
 import LocationCommissionReport from "./components/LocationCommissionReport";
+import Settings from "./components/Settings";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,8 @@ function App() {
         return <LocationCommissionReport />;
       case "pl-reports":
         return <PLReports />;
+      case "settings":
+        return <Settings />;
       default:
         return <Dashboard />;
     }
