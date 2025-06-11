@@ -132,7 +132,7 @@ const PLReports = () => {
     refetchOnWindowFocus: false
   });
 
-  // Top 10 performers query
+  // Top 10 performers query with unique locations
   const { data: topPerformers, isLoading: performersLoading } = useQuery({
     queryKey: ['top-10-performers-overview'],
     queryFn: async () => {
@@ -168,14 +168,36 @@ const PLReports = () => {
 
       const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
       
-      // Sort by total volume and get top 10
-      return commissions
+      // Group by location to avoid duplicates
+      const locationMap = new Map();
+      
+      commissions.forEach(commission => {
+        const locationKey = commission.locationId;
+        
+        if (!locationMap.has(locationKey)) {
+          locationMap.set(locationKey, {
+            locationId: commission.locationId,
+            locationName: commission.locationName,
+            locationVolume: commission.locationVolume,
+            agents: []
+          });
+        }
+        
+        const location = locationMap.get(locationKey);
+        location.agents.push({
+          agentName: commission.agentName,
+          bpsRate: commission.bpsRate,
+          commission: commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout
+        });
+      });
+      
+      // Convert to array and sort by volume, then take top 10
+      return Array.from(locationMap.values())
         .sort((a, b) => b.locationVolume - a.locationVolume)
         .slice(0, 10)
         .map((item, index) => ({
           rank: index + 1,
-          ...item,
-          commission: item.agentName === 'Merchant Hero' ? item.merchantHeroPayout : item.agentPayout
+          ...item
         }));
     },
     refetchOnWindowFocus: false
@@ -319,19 +341,93 @@ const PLReports = () => {
         <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs defaultValue="agent-reports" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="overview" className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            Overview Reports
-          </TabsTrigger>
           <TabsTrigger value="agent-reports" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Agent P&L Reports
           </TabsTrigger>
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Overview Reports
+          </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="agent-reports">
+          <AgentPLReport />
+        </TabsContent>
+
         <TabsContent value="overview" className="space-y-6">
+          {/* Top 10 Performers with unique locations */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5" />
+                Top 10 Performing Locations (Last 3 Months by Volume)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {performersLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <p className="text-muted-foreground">Loading top performers...</p>
+                </div>
+              ) : topPerformers && topPerformers.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b-2">
+                        <th className="text-left p-4 font-semibold">Rank</th>
+                        <th className="text-left p-4 font-semibold">Location</th>
+                        <th className="text-left p-4 font-semibold">Agents & BPS Rate</th>
+                        <th className="text-right p-4 font-semibold">Total Volume</th>
+                        <th className="text-right p-4 font-semibold">Total Commission</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topPerformers.map((performer) => (
+                        <tr key={performer.locationId} className="border-b hover:bg-muted/50">
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              {performer.rank <= 3 && (
+                                <Trophy className={`h-4 w-4 ${
+                                  performer.rank === 1 ? 'text-yellow-500' :
+                                  performer.rank === 2 ? 'text-gray-400' :
+                                  'text-amber-600'
+                                }`} />
+                              )}
+                              <span className="font-bold">#{performer.rank}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 font-medium">{performer.locationName}</td>
+                          <td className="p-4">
+                            <div className="space-y-1">
+                              {performer.agents.map((agent, agentIndex) => (
+                                <div key={agentIndex} className="flex items-center gap-2">
+                                  <Badge variant="secondary">{agent.agentName}</Badge>
+                                  <Badge variant="outline">{agent.bpsRate} BPS</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-4 text-right font-semibold text-emerald-600">
+                            ${performer.locationVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 text-right font-semibold text-blue-600">
+                            ${performer.agents.reduce((sum, agent) => sum + agent.commission, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-32">
+                  <p className="text-muted-foreground">No performance data available</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* 12-Month Trailing History */}
           <Card>
             <CardHeader>
@@ -377,73 +473,6 @@ const PLReports = () => {
               ) : (
                 <div className="flex items-center justify-center h-32">
                   <p className="text-muted-foreground">No historical data available</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Top 10 Performers */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="h-5 w-5" />
-                Top 10 Performers (Last 3 Months by Volume)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {performersLoading ? (
-                <div className="flex items-center justify-center h-32">
-                  <p className="text-muted-foreground">Loading top performers...</p>
-                </div>
-              ) : topPerformers && topPerformers.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="border-b-2">
-                        <th className="text-left p-4 font-semibold">Rank</th>
-                        <th className="text-left p-4 font-semibold">Agent</th>
-                        <th className="text-left p-4 font-semibold">Location</th>
-                        <th className="text-right p-4 font-semibold">Total Volume</th>
-                        <th className="text-right p-4 font-semibold">Commission Earned</th>
-                        <th className="text-right p-4 font-semibold">BPS Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {topPerformers.map((performer) => (
-                        <tr key={`${performer.agentName}-${performer.locationId}`} className="border-b hover:bg-muted/50">
-                          <td className="p-4">
-                            <div className="flex items-center gap-2">
-                              {performer.rank <= 3 && (
-                                <Trophy className={`h-4 w-4 ${
-                                  performer.rank === 1 ? 'text-yellow-500' :
-                                  performer.rank === 2 ? 'text-gray-400' :
-                                  'text-amber-600'
-                                }`} />
-                              )}
-                              <span className="font-bold">#{performer.rank}</span>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <Badge variant="secondary">{performer.agentName}</Badge>
-                          </td>
-                          <td className="p-4 font-medium">{performer.locationName}</td>
-                          <td className="p-4 text-right font-semibold text-emerald-600">
-                            ${performer.locationVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-4 text-right font-semibold text-blue-600">
-                            ${performer.commission.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-4 text-right">
-                            <Badge variant="outline">{performer.bpsRate} BPS</Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-32">
-                  <p className="text-muted-foreground">No performance data available</p>
                 </div>
               )}
             </CardContent>
@@ -640,13 +669,11 @@ const PLReports = () => {
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="agent-reports">
-          <AgentPLReport />
-        </TabsContent>
       </Tabs>
     </div>
   );
 };
 
 export default PLReports;
+
+</initial_code>
