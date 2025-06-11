@@ -116,16 +116,27 @@ const PLReports = () => {
         const monthKey = format(month, 'yyyy-MM');
         const monthTransactions = monthlyData?.[monthKey] || [];
         
-        const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
-        const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
-        const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
-        
-        history.push({
-          month: format(month, 'MMM yyyy'),
-          totalVolume,
-          totalCommissions,
-          netIncome: totalVolume - totalCommissions
-        });
+        // Only calculate commissions if there are actual transactions
+        if (monthTransactions.length > 0) {
+          const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
+          const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
+          const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
+          
+          history.push({
+            month: format(month, 'MMM yyyy'),
+            totalVolume,
+            totalCommissions,
+            netIncome: totalVolume - totalCommissions
+          });
+        } else {
+          // No transactions for this month, show zeros
+          history.push({
+            month: format(month, 'MMM yyyy'),
+            totalVolume: 0,
+            totalCommissions: 0,
+            netIncome: 0
+          });
+        }
       }
 
       return history;

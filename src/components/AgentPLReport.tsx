@@ -94,122 +94,7 @@ const AgentPLReport = () => {
     }
   });
 
-  // 12-month trailing history query
-  const { data: trailingHistory, isLoading: historyLoading } = useQuery({
-    queryKey: ['12-month-trailing-history'],
-    queryFn: async () => {
-      const currentDate = new Date();
-      const twelveMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 12, 1);
-      
-      console.log('Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
-
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout, transaction_date')
-        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
-
-      if (error) throw error;
-
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          is_active
-        `)
-        .eq('is_active', true);
-
-      if (assignmentError) throw assignmentError;
-
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
-
-      if (locationError) throw locationError;
-
-      // Group transactions by month and calculate monthly totals
-      const monthlyData = transactions?.reduce((acc, transaction) => {
-        const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
-        if (!acc[monthKey]) {
-          acc[monthKey] = [];
-        }
-        acc[monthKey].push(transaction);
-        return acc;
-      }, {} as Record<string, any[]>);
-
-      const history = [];
-      for (let i = 11; i >= 0; i--) {
-        const month = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-        const monthKey = format(month, 'yyyy-MM');
-        const monthTransactions = monthlyData?.[monthKey] || [];
-        
-        const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
-        const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
-        const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
-        
-        history.push({
-          month: format(month, 'MMM yyyy'),
-          totalVolume,
-          totalCommissions,
-          netIncome: totalVolume - totalCommissions
-        });
-      }
-
-      return history;
-    },
-    refetchOnWindowFocus: false
-  });
-
-  // Top 10 performers query
-  const { data: topPerformers, isLoading: performersLoading } = useQuery({
-    queryKey: ['top-10-performers'],
-    queryFn: async () => {
-      const currentDate = new Date();
-      const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 3, 1);
-      
-      console.log('Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
-
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', format(threeMonthsAgo, 'yyyy-MM-dd'));
-
-      if (error) throw error;
-
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          is_active
-        `)
-        .eq('is_active', true);
-
-      if (assignmentError) throw assignmentError;
-
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
-
-      if (locationError) throw locationError;
-
-      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-      
-      // Sort by total volume and get top 10
-      return commissions
-        .sort((a, b) => b.locationVolume - a.locationVolume)
-        .slice(0, 10)
-        .map((item, index) => ({
-          rank: index + 1,
-          ...item,
-          commission: item.agentName === 'Merchant Hero' ? item.merchantHeroPayout : item.agentPayout
-        }));
-    },
-    refetchOnWindowFocus: false
-  });
-
+  // Agent P&L Report Generator
   const { data: agentReportData, isLoading: reportLoading } = useQuery({
     queryKey: ['agent-pl-report', selectedAgent, selectedPeriod, customStartDate, customEndDate],
     queryFn: async () => {
@@ -266,6 +151,133 @@ const AgentPLReport = () => {
       };
     },
     enabled: !!selectedAgent && !!dateRange.start && !!dateRange.end,
+    refetchOnWindowFocus: false
+  });
+
+  // 12-month trailing history query
+  const { data: trailingHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ['12-month-trailing-history'],
+    queryFn: async () => {
+      const currentDate = new Date();
+      const twelveMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 12, 1);
+      
+      console.log('Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout, transaction_date')
+        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+
+      if (error) throw error;
+
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          is_active
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
+
+      // Group transactions by month and calculate monthly totals
+      const monthlyData = transactions?.reduce((acc, transaction) => {
+        const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
+        if (!acc[monthKey]) {
+          acc[monthKey] = [];
+        }
+        acc[monthKey].push(transaction);
+        return acc;
+      }, {} as Record<string, any[]>);
+
+      const history = [];
+      for (let i = 11; i >= 0; i--) {
+        const month = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+        const monthKey = format(month, 'yyyy-MM');
+        const monthTransactions = monthlyData?.[monthKey] || [];
+        
+        // Only calculate commissions if there are actual transactions
+        if (monthTransactions.length > 0) {
+          const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
+          const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
+          const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
+          
+          history.push({
+            month: format(month, 'MMM yyyy'),
+            totalVolume,
+            totalCommissions,
+            netIncome: totalVolume - totalCommissions
+          });
+        } else {
+          // No transactions for this month, show zeros
+          history.push({
+            month: format(month, 'MMM yyyy'),
+            totalVolume: 0,
+            totalCommissions: 0,
+            netIncome: 0
+          });
+        }
+      }
+
+      return history;
+    },
+    refetchOnWindowFocus: false
+  });
+
+  // Top 10 performers query
+  const { data: topPerformers, isLoading: performersLoading } = useQuery({
+    queryKey: ['top-10-performers'],
+    queryFn: async () => {
+      const currentDate = new Date();
+      const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 3, 1);
+      
+      console.log('Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
+
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('volume, debit_volume, agent_name, account_id, agent_payout')
+        .gte('transaction_date', format(threeMonthsAgo, 'yyyy-MM-dd'));
+
+      if (error) throw error;
+
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .select(`
+          agent_name,
+          commission_rate,
+          location_id,
+          is_active
+        `)
+        .eq('is_active', true);
+
+      if (assignmentError) throw assignmentError;
+
+      const { data: locations, error: locationError } = await supabase
+        .from('locations')
+        .select('id, name, account_id');
+
+      if (locationError) throw locationError;
+
+      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
+      
+      // Sort by total volume and get top 10
+      return commissions
+        .sort((a, b) => b.locationVolume - a.locationVolume)
+        .slice(0, 10)
+        .map((item, index) => ({
+          rank: index + 1,
+          ...item,
+          commission: item.agentName === 'Merchant Hero' ? item.merchantHeroPayout : item.agentPayout
+        }));
+    },
     refetchOnWindowFocus: false
   });
 
@@ -366,7 +378,7 @@ const AgentPLReport = () => {
 
   return (
     <div className="space-y-6">
-      {/* Agent P&L Report Generator - moved to the top */}
+      {/* Agent P&L Report Generator */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -574,7 +586,7 @@ const AgentPLReport = () => {
         </Card>
       )}
 
-      {/* 12-Month Trailing History - moved below the generator */}
+      {/* 12-Month Trailing History */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -695,3 +707,5 @@ const AgentPLReport = () => {
 };
 
 export default AgentPLReport;
+
+}
