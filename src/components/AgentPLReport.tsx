@@ -366,123 +366,7 @@ const AgentPLReport = () => {
 
   return (
     <div className="space-y-6">
-      {/* 12-Month Trailing History */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            12-Month Trailing History
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {historyLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">Loading historical data...</p>
-            </div>
-          ) : trailingHistory && trailingHistory.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b-2">
-                    <th className="text-left p-4 font-semibold">Month</th>
-                    <th className="text-right p-4 font-semibold">Total Volume</th>
-                    <th className="text-right p-4 font-semibold">Total Commissions</th>
-                    <th className="text-right p-4 font-semibold">Net Income</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trailingHistory.map((month, index) => (
-                    <tr key={index} className="border-b hover:bg-muted/50">
-                      <td className="p-4 font-medium">{month.month}</td>
-                      <td className="p-4 text-right font-semibold text-emerald-600">
-                        ${month.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4 text-right font-semibold text-red-600">
-                        ${month.totalCommissions.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4 text-right font-semibold text-blue-600">
-                        ${month.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No historical data available</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Top 10 Performers */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5" />
-            Top 10 Performers (Last 3 Months by Volume)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {performersLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">Loading top performers...</p>
-            </div>
-          ) : topPerformers && topPerformers.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b-2">
-                    <th className="text-left p-4 font-semibold">Rank</th>
-                    <th className="text-left p-4 font-semibold">Agent</th>
-                    <th className="text-left p-4 font-semibold">Location</th>
-                    <th className="text-right p-4 font-semibold">Total Volume</th>
-                    <th className="text-right p-4 font-semibold">Commission Earned</th>
-                    <th className="text-right p-4 font-semibold">BPS Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topPerformers.map((performer) => (
-                    <tr key={`${performer.agentName}-${performer.locationId}`} className="border-b hover:bg-muted/50">
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          {performer.rank <= 3 && (
-                            <Trophy className={`h-4 w-4 ${
-                              performer.rank === 1 ? 'text-yellow-500' :
-                              performer.rank === 2 ? 'text-gray-400' :
-                              'text-amber-600'
-                            }`} />
-                          )}
-                          <span className="font-bold">#{performer.rank}</span>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <Badge variant="secondary">{performer.agentName}</Badge>
-                      </td>
-                      <td className="p-4 font-medium">{performer.locationName}</td>
-                      <td className="p-4 text-right font-semibold text-emerald-600">
-                        ${performer.locationVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4 text-right font-semibold text-blue-600">
-                        ${performer.commission.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4 text-right">
-                        <Badge variant="outline">{performer.bpsRate} BPS</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No performance data available</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
+      {/* Agent P&L Report Generator - moved to the top */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -689,6 +573,123 @@ const AgentPLReport = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* 12-Month Trailing History - moved below the generator */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            12-Month Trailing History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {historyLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <p className="text-muted-foreground">Loading historical data...</p>
+            </div>
+          ) : trailingHistory && trailingHistory.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b-2">
+                    <th className="text-left p-4 font-semibold">Month</th>
+                    <th className="text-right p-4 font-semibold">Total Volume</th>
+                    <th className="text-right p-4 font-semibold">Total Commissions</th>
+                    <th className="text-right p-4 font-semibold">Net Income</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trailingHistory.map((month, index) => (
+                    <tr key={index} className="border-b hover:bg-muted/50">
+                      <td className="p-4 font-medium">{month.month}</td>
+                      <td className="p-4 text-right font-semibold text-emerald-600">
+                        ${month.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right font-semibold text-red-600">
+                        ${month.totalCommissions.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right font-semibold text-blue-600">
+                        ${month.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32">
+              <p className="text-muted-foreground">No historical data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Top 10 Performers */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trophy className="h-5 w-5" />
+            Top 10 Performers (Last 3 Months by Volume)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {performersLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <p className="text-muted-foreground">Loading top performers...</p>
+            </div>
+          ) : topPerformers && topPerformers.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b-2">
+                    <th className="text-left p-4 font-semibold">Rank</th>
+                    <th className="text-left p-4 font-semibold">Agent</th>
+                    <th className="text-left p-4 font-semibold">Location</th>
+                    <th className="text-right p-4 font-semibold">Total Volume</th>
+                    <th className="text-right p-4 font-semibold">Commission Earned</th>
+                    <th className="text-right p-4 font-semibold">BPS Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topPerformers.map((performer) => (
+                    <tr key={`${performer.agentName}-${performer.locationId}`} className="border-b hover:bg-muted/50">
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          {performer.rank <= 3 && (
+                            <Trophy className={`h-4 w-4 ${
+                              performer.rank === 1 ? 'text-yellow-500' :
+                              performer.rank === 2 ? 'text-gray-400' :
+                              'text-amber-600'
+                            }`} />
+                          )}
+                          <span className="font-bold">#{performer.rank}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <Badge variant="secondary">{performer.agentName}</Badge>
+                      </td>
+                      <td className="p-4 font-medium">{performer.locationName}</td>
+                      <td className="p-4 text-right font-semibold text-emerald-600">
+                        ${performer.locationVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right font-semibold text-blue-600">
+                        ${performer.commission.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right">
+                        <Badge variant="outline">{performer.bpsRate} BPS</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32">
+              <p className="text-muted-foreground">No performance data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
