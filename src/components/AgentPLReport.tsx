@@ -289,7 +289,7 @@ const AgentPLReport = () => {
     // Create a downloadable version
     const reportContent = generateReportHTML();
     const blob = new Blob([reportContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);\
     const a = document.createElement('a');
     a.href = url;
     a.download = `${selectedAgent}_PL_Report_${dateRange.label.replace(/\s+/g, '_')}.html`;
@@ -707,5 +707,3 @@ const AgentPLReport = () => {
 };
 
 export default AgentPLReport;
-
-}
