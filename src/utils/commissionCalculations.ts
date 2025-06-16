@@ -31,6 +31,7 @@ interface Transaction {
   volume: number;
   debit_volume: number;
   agent_payout: number;
+  transaction_date?: string;
 }
 
 interface Assignment {
@@ -77,44 +78,59 @@ export const calculateLocationCommissions = (
   );
 
   console.log('🎯 GREENLIGHT TRANSACTIONS FOUND:', allGreenlightTransactions.length);
-  allGreenlightTransactions.forEach((t, index) => {
-    const bankVolume = Number(t.volume) || 0;
-    const debitVolume = Number(t.debit_volume) || 0;
-    const totalVolume = bankVolume + debitVolume;
-    console.log(`  ${index + 1}. Account: ${t.account_id}, Bank: $${bankVolume}, Debit: $${debitVolume}, Total: $${totalVolume}, Agent Payout: $${t.agent_payout}`);
-  });
-
-  // STEP 3: Check for non-zero Greenlight transactions specifically
-  const nonZeroGreenlightTransactions = allGreenlightTransactions.filter(t => {
-    const bankVolume = Number(t.volume) || 0;
-    const debitVolume = Number(t.debit_volume) || 0;
-    const totalVolume = bankVolume + debitVolume;
-    return totalVolume > 0;
-  });
-
-  console.log('🎯 STEP 3 - NON-ZERO GREENLIGHT TRANSACTIONS:', nonZeroGreenlightTransactions.length);
-  if (nonZeroGreenlightTransactions.length > 0) {
-    const totalGreenlightVolume = nonZeroGreenlightTransactions.reduce((sum, t) => {
+  
+  // CRITICAL: Show ALL transaction dates in the system
+  console.log('📅 ALL TRANSACTION DATES IN SYSTEM:');
+  const allUniqueDates = [...new Set(transactions.map(t => t.transaction_date))].filter(Boolean).sort();
+  console.log('Unique transaction dates found:', allUniqueDates);
+  
+  // Show what years we have data for
+  const years = [...new Set(allUniqueDates.map(date => date ? new Date(date).getFullYear() : null))].filter(Boolean);
+  console.log('Years with transaction data:', years);
+  
+  // DETAILED Greenlight transaction analysis
+  if (allGreenlightTransactions.length > 0) {
+    console.log('🎯 GREENLIGHT TRANSACTION DETAILS:');
+    allGreenlightTransactions.forEach((t, index) => {
+      const bankVolume = Number(t.volume) || 0;
+      const debitVolume = Number(t.debit_volume) || 0;
+      const totalVolume = bankVolume + debitVolume;
+      console.log(`  ${index + 1}. Account: ${t.account_id}, Date: ${t.transaction_date}, Bank: $${bankVolume}, Debit: $${debitVolume}, Total: $${totalVolume}, Agent Payout: $${t.agent_payout}`);
+    });
+    
+    const totalGreenlightVolume = allGreenlightTransactions.reduce((sum, t) => {
       const bankVolume = Number(t.volume) || 0;
       const debitVolume = Number(t.debit_volume) || 0;
       return sum + bankVolume + debitVolume;
     }, 0);
-    console.log('🎯 TOTAL GREENLIGHT VOLUME FROM TRANSACTIONS: $', totalGreenlightVolume);
+    console.log('🎯 TOTAL GREENLIGHT VOLUME FROM ALL TRANSACTIONS: $', totalGreenlightVolume);
   } else {
-    console.log('🚨 NO NON-ZERO TRANSACTIONS FOUND FOR GREENLIGHT!');
+    console.log('🚨 NO GREENLIGHT TRANSACTIONS FOUND AT ALL!');
+    
+    // Debug why no transactions found
+    console.log('🔍 DEBUGGING NO GREENLIGHT TRANSACTIONS:');
+    console.log('All account IDs in transactions:', [...new Set(transactions.map(t => t.account_id))]);
+    console.log('Greenlight account IDs we are looking for:', greenlightAccountIds);
+    
+    // Check if any account IDs are similar to Greenlight account IDs
+    const allAccountIds = [...new Set(transactions.map(t => t.account_id))];
+    greenlightAccountIds.forEach(greenlightId => {
+      console.log(`Looking for Greenlight account ${greenlightId} in transaction data...`);
+      const found = allAccountIds.find(id => id === greenlightId);
+      if (!found) {
+        console.log(`❌ Account ${greenlightId} NOT found in transaction data`);
+        // Look for similar account IDs
+        const similar = allAccountIds.filter(id => id && id.includes(greenlightId.slice(-6)));
+        if (similar.length > 0) {
+          console.log(`🔍 Similar account IDs found:`, similar);
+        }
+      } else {
+        console.log(`✅ Account ${greenlightId} found in transaction data`);
+      }
+    });
   }
 
-  // STEP 4: Check Greenlight assignments
-  console.log('🎯 STEP 4 - GREENLIGHT ASSIGNMENTS CHECK...');
-  greenlightLocations.forEach(loc => {
-    const locationAssignments = assignments.filter(a => a.location_id === loc.id && a.is_active);
-    console.log(`Location "${loc.name}" (${loc.id}) has ${locationAssignments.length} active assignments:`);
-    locationAssignments.forEach(assignment => {
-      console.log(`  - Agent: ${assignment.agent_name}, Rate: ${assignment.commission_rate}`);
-    });
-  });
-
-  // ENHANCED: Pre-filter zero-volume transactions at the transaction level
+  // Enhanced: Pre-filter zero-volume transactions at the transaction level
   const nonZeroTransactions = transactions.filter(transaction => {
     const bankCardVolume = Number(transaction.volume) || 0;
     const debitCardVolume = Number(transaction.debit_volume) || 0;
@@ -189,11 +205,11 @@ export const calculateLocationCommissions = (
       
       if (accountTransactions.length > 0) {
         console.log(`   First few transactions for account ${loc.account_id}:`);
-        accountTransactions.slice(0, 3).forEach((t, i) => {
+        accountTransactions.slice(0, 5).forEach((t, i) => {
           const bankVol = Number(t.volume) || 0;
           const debitVol = Number(t.debit_volume) || 0;
           const totalVol = bankVol + debitVol;
-          console.log(`     ${i + 1}. Bank: $${bankVol}, Debit: $${debitVol}, Total: $${totalVol}`);
+          console.log(`     ${i + 1}. Date: ${t.transaction_date}, Bank: $${bankVol}, Debit: $${debitVol}, Total: $${totalVol}`);
         });
       }
     }
@@ -229,7 +245,7 @@ export const calculateLocationCommissions = (
       return;
     }
 
-    // ENHANCED: Double-check that we're not processing zero-volume locations
+    // Enhanced: Double-check that we're not processing zero-volume locations
     if (locationInfo.totalVolume === 0) {
       console.log(`🚫 SKIPPING ZERO VOLUME LOCATION: ${location.name} (Account: ${location.account_id})`);
       return;
@@ -325,9 +341,20 @@ export const calculateLocationCommissions = (
     console.log('🔍 FINAL DIAGNOSTIC:');
     console.log('1. Greenlight locations found:', greenlightLocations.length);
     console.log('2. Greenlight transactions found:', allGreenlightTransactions.length);
-    console.log('3. Non-zero Greenlight transactions:', nonZeroGreenlightTransactions.length);
-    console.log('4. Greenlight in locationData:', greenlightLocations.some(loc => locationData[loc.account_id]));
-    console.log('5. Greenlight assignments exist:', greenlightLocations.some(loc => assignmentsByLocation[loc.id]));
+    console.log('3. Greenlight in locationData:', greenlightLocations.some(loc => locationData[loc.account_id]));
+    console.log('4. Greenlight assignments exist:', greenlightLocations.some(loc => assignmentsByLocation[loc.id]));
+    
+    // Show the exact mismatch
+    if (greenlightLocations.length > 0) {
+      const greenlightLoc = greenlightLocations[0];
+      console.log('🔍 DEBUGGING FIRST GREENLIGHT LOCATION:');
+      console.log('- Location ID:', greenlightLoc.id);
+      console.log('- Account ID:', greenlightLoc.account_id);
+      console.log('- Has location data:', !!locationData[greenlightLoc.account_id]);
+      console.log('- Has assignments:', !!assignmentsByLocation[greenlightLoc.id]);
+      console.log('- Location data keys:', Object.keys(locationData));
+      console.log('- Assignment keys:', Object.keys(assignmentsByLocation));
+    }
   }
 
   console.log('🚨 === GREENLIGHT DEBUGGING SESSION END ===');
