@@ -1,4 +1,3 @@
-
 import { convertToDecimalRate } from './bpsCalculations';
 
 export interface LocationCommission {
@@ -52,7 +51,7 @@ export const calculateLocationCommissions = (
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('=== ENHANCED COMMISSION CALCULATION WITH DUPLICATE DETECTION ===');
+  console.log('=== ENHANCED COMMISSION CALCULATION WITH BETTER VOLUME HANDLING ===');
   console.log('Total transactions:', transactions.length);
   console.log('Total assignments:', assignments.length);
   console.log('Total locations:', locations.length);
@@ -77,8 +76,23 @@ export const calculateLocationCommissions = (
     }
   });
 
-  // Group transactions by location (account_id) and calculate totals
-  const locationData = transactions.reduce((acc, transaction) => {
+  // ENHANCED: Filter out zero-volume transactions at the transaction level first
+  const nonZeroTransactions = transactions.filter(transaction => {
+    const bankCardVolume = Number(transaction.volume) || 0;
+    const debitCardVolume = Number(transaction.debit_volume) || 0;
+    const totalVolume = bankCardVolume + debitCardVolume;
+    
+    if (totalVolume === 0) {
+      console.log(`🚫 FILTERING OUT ZERO VOLUME TRANSACTION: Account ${transaction.account_id}, Bank: ${bankCardVolume}, Debit: ${debitCardVolume}`);
+      return false;
+    }
+    return true;
+  });
+
+  console.log(`📊 VOLUME FILTERING RESULTS: ${transactions.length} total transactions, ${nonZeroTransactions.length} with volume > 0, ${transactions.length - nonZeroTransactions.length} filtered out`);
+
+  // Group transactions by location (account_id) and calculate totals - ONLY use non-zero transactions
+  const locationData = nonZeroTransactions.reduce((acc, transaction) => {
     const accountId = transaction.account_id;
     if (!accountId) {
       console.log('⚠️ Skipping transaction with no account_id:', transaction);
@@ -114,7 +128,7 @@ export const calculateLocationCommissions = (
     return acc;
   }, {} as Record<string, LocationData>);
 
-  console.log('📊 ENHANCED LOCATION DATA SUMMARY:');
+  console.log('📊 ENHANCED LOCATION DATA SUMMARY (AFTER ZERO-VOLUME FILTERING):');
   Object.entries(locationData).forEach(([accountId, data]) => {
     const location = locations.find(loc => loc.account_id === accountId);
     const locationName = location ? location.name : 'UNKNOWN';
@@ -122,7 +136,7 @@ export const calculateLocationCommissions = (
     
     // Special check for Greenlight & Company
     if (locationName.toLowerCase().includes('greenlight')) {
-      console.log(`🎯 GREENLIGHT DETECTED: Account ID: ${accountId}, Name: "${locationName}", Volume: $${data.totalVolume.toLocaleString()}`);
+      console.log(`🎯 GREENLIGHT FOUND WITH VOLUME: Account ID: ${accountId}, Name: "${locationName}", Volume: $${data.totalVolume.toLocaleString()}`);
     }
   });
 
@@ -147,25 +161,18 @@ export const calculateLocationCommissions = (
 
     const locationInfo = locationData[location.account_id];
     if (!locationInfo) {
-      console.log(`No transaction data found for location ${location.name} (${location.account_id})`);
-      // Create zero-value entries for display
-      locationAssignments.forEach(assignment => {
-        commissions.push({
-          locationId: assignment.location_id,
-          locationName: location.name,
-          agentName: assignment.agent_name,
-          bpsRate: assignment.agent_name === 'Merchant Hero' ? 0 : Math.round(assignment.commission_rate * 100),
-          decimalRate: convertToDecimalRate(assignment.commission_rate),
-          locationVolume: 0,
-          netAgentPayout: 0,
-          agentPayout: 0,
-          merchantHeroPayout: 0
-        });
-      });
+      console.log(`⚠️ No transaction data found for location ${location.name} (${location.account_id}) - this location had ZERO volume and was filtered out`);
+      // CHANGED: Don't create zero-value entries anymore - completely skip locations with no volume
       return;
     }
 
-    console.log(`💼 Processing location: ${location.name}`);
+    // ENHANCED: Double-check that we're not processing zero-volume locations
+    if (locationInfo.totalVolume === 0) {
+      console.log(`🚫 SKIPPING ZERO VOLUME LOCATION: ${location.name} (Account: ${location.account_id})`);
+      return;
+    }
+
+    console.log(`💼 Processing location: ${location.name} with volume: $${locationInfo.totalVolume.toLocaleString()}`);
     console.log(`📈 Location data:`, {
       totalVolume: locationInfo.totalVolume,
       netAgentPayout: locationInfo.totalAgentPayout
@@ -173,7 +180,7 @@ export const calculateLocationCommissions = (
 
     // Special logging for Greenlight & Company
     if (location.name.toLowerCase().includes('greenlight')) {
-      console.log(`🎯 PROCESSING GREENLIGHT: ${location.name}, Account ID: ${location.account_id}, Volume: $${locationInfo.totalVolume.toLocaleString()}`);
+      console.log(`🎯 PROCESSING GREENLIGHT WITH ACTUAL VOLUME: ${location.name}, Account ID: ${location.account_id}, Volume: $${locationInfo.totalVolume.toLocaleString()}`);
     }
 
     // First, calculate all non-Merchant Hero agent payouts
@@ -243,8 +250,8 @@ export const calculateLocationCommissions = (
     }
   });
 
-  // ENHANCED: Final summary with duplicate detection
-  console.log('🎉 FINAL COMMISSION SUMMARY:');
+  // ENHANCED: Final summary with volume verification
+  console.log('🎉 FINAL COMMISSION SUMMARY (ZERO-VOLUME FILTERED):');
   const locationVolumeSummary = commissions.reduce((acc, commission) => {
     const name = commission.locationName;
     if (!acc[name]) {
@@ -260,19 +267,24 @@ export const calculateLocationCommissions = (
   }, {} as Record<string, { volume: number; count: number; locations: Array<{id: string; volume: number}> }>);
 
   Object.entries(locationVolumeSummary).forEach(([name, summary]) => {
-    if (summary.count > 1) {
-      console.log(`⚠️ MULTIPLE COMMISSION ENTRIES FOR: "${name}"`);
-      console.log(`  Total Volume: $${summary.volume.toLocaleString()}`);
-      console.log(`  Entry Count: ${summary.count}`);
-      summary.locations.forEach((loc, index) => {
-        console.log(`  Entry ${index + 1}: ID ${loc.id}, Volume: $${loc.volume.toLocaleString()}`);
-      });
+    if (summary.volume === 0) {
+      console.log(`⚠️ WARNING: Location "${name}" has commission entries but ZERO total volume - this should not happen!`);
     } else if (name.toLowerCase().includes('greenlight')) {
-      console.log(`✅ GREENLIGHT FINAL: "${name}", Volume: $${summary.volume.toLocaleString()}`);
+      console.log(`✅ GREENLIGHT FINAL VERIFIED: "${name}", Total Volume: $${summary.volume.toLocaleString()}, Entries: ${summary.count}`);
     }
   });
 
+  // ENHANCED: Verify no zero-volume entries made it through
+  const zeroVolumeCommissions = commissions.filter(c => c.locationVolume === 0);
+  if (zeroVolumeCommissions.length > 0) {
+    console.log(`🚨 ERROR: Found ${zeroVolumeCommissions.length} commission entries with zero volume - this indicates a bug!`);
+    zeroVolumeCommissions.forEach(c => {
+      console.log(`  - ${c.locationName} (${c.locationId}): $${c.locationVolume}`);
+    });
+  }
+
   console.log('🎉 Final commissions calculated:', commissions.length);
+  console.log('🎉 All entries have volume > $0:', commissions.every(c => c.locationVolume > 0));
   return commissions;
 };
 
