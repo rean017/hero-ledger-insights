@@ -1,5 +1,3 @@
-
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -420,7 +418,7 @@ const FileUpload = () => {
       const { data: existingLocations, error: selectError } = await supabase
         .from('locations')
         .select('id, name, account_id')
-        .ilike('name', locationName) as { data: Array<{id: string, name: string, account_id: string | null}> | null, error: any };
+        .ilike('name', locationName);
 
       if (selectError && selectError.code !== 'PGRST116') {
         console.error('Error checking existing locations:', selectError);
@@ -1040,4 +1038,3 @@ const FileUpload = () => {
 };
 
 export default FileUpload;
-
