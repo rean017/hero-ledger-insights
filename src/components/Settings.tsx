@@ -14,7 +14,7 @@ interface SettingsState {
   overwriteExistingData: boolean;
   currencyFormat: string;
   nightMode: boolean;
-  partyMode: boolean;
+  heroMode: boolean;
 }
 
 const Settings = () => {
@@ -25,7 +25,7 @@ const Settings = () => {
     overwriteExistingData: false,
     currencyFormat: "usd",
     nightMode: false,
-    partyMode: false,
+    heroMode: false,
   });
 
   // Load settings from localStorage on component mount
@@ -39,8 +39,8 @@ const Settings = () => {
       if (parsed.nightMode) {
         document.documentElement.classList.add("dark");
       }
-      if (parsed.partyMode) {
-        document.documentElement.classList.add("party-mode");
+      if (parsed.heroMode) {
+        document.documentElement.classList.add("hero-mode");
       }
     }
   }, []);
@@ -65,36 +65,52 @@ const Settings = () => {
       }
     }
 
-    if (key === "partyMode") {
+    if (key === "heroMode") {
       if (value) {
-        document.documentElement.classList.add("party-mode");
-        // Add party mode styles
+        document.documentElement.classList.add("hero-mode");
+        // Add hero mode styles
         const style = document.createElement("style");
-        style.id = "party-mode-styles";
+        style.id = "hero-mode-styles";
         style.textContent = `
-          .party-mode {
-            --primary: 330 81% 60%;
-            --primary-foreground: 0 0% 100%;
-            --secondary: 84 81% 60%;
-            --secondary-foreground: 0 0% 0%;
-            --accent: 330 81% 60%;
-            --accent-foreground: 0 0% 100%;
-            --card: 84 81% 95%;
-            --card-foreground: 0 0% 0%;
-            --background: linear-gradient(45deg, hsl(330 81% 90%), hsl(84 81% 90%));
+          .hero-mode {
+            --primary: 84 100% 40%;
+            --primary-foreground: 0 0% 0%;
+            --secondary: 0 0% 5%;
+            --secondary-foreground: 84 100% 40%;
+            --accent: 84 100% 40%;
+            --accent-foreground: 0 0% 0%;
+            --card: 0 0% 0%;
+            --card-foreground: 84 100% 40%;
+            --background: 0 0% 5%;
+            --foreground: 84 100% 40%;
+            --border: 84 100% 40%;
+            --input: 0 0% 10%;
+            --muted: 0 0% 10%;
+            --muted-foreground: 84 80% 60%;
           }
-          .party-mode .bg-background {
-            background: linear-gradient(45deg, hsl(330 81% 90%), hsl(84 81% 90%));
+          .hero-mode .bg-background {
+            background: hsl(0 0% 5%);
           }
-          .party-mode .bg-card {
-            background: hsl(0 0% 100%);
-            border: 2px solid hsl(330 81% 60%);
+          .hero-mode .bg-card {
+            background: hsl(0 0% 0%);
+            border: 2px solid hsl(84 100% 40%);
+          }
+          .hero-mode .text-foreground {
+            color: hsl(84 100% 40%);
+          }
+          .hero-mode .bg-primary {
+            background: hsl(84 100% 40%);
+            color: hsl(0 0% 0%);
+          }
+          .hero-mode .bg-secondary {
+            background: hsl(0 0% 5%);
+            color: hsl(84 100% 40%);
           }
         `;
         document.head.appendChild(style);
       } else {
-        document.documentElement.classList.remove("party-mode");
-        const existingStyle = document.getElementById("party-mode-styles");
+        document.documentElement.classList.remove("hero-mode");
+        const existingStyle = document.getElementById("hero-mode-styles");
         if (existingStyle) {
           existingStyle.remove();
         }
@@ -237,16 +253,16 @@ const Settings = () => {
           </div>
 
           <div className="space-y-2">
-            <Label>Party Mode</Label>
+            <Label>Hero Mode</Label>
             <div className="text-sm text-muted-foreground mb-2">
-              Transform the UI with vibrant pink and lime green colors
+              Transform the UI with vibrant lime green and black colors
             </div>
             <Button
-              variant={settings.partyMode ? "default" : "outline"}
-              onClick={() => handleSettingChange("partyMode", !settings.partyMode)}
+              variant={settings.heroMode ? "default" : "outline"}
+              onClick={() => handleSettingChange("heroMode", !settings.heroMode)}
               className="w-full sm:w-auto"
             >
-              {settings.partyMode ? "Disable Party Mode" : "Enable Party Mode"}
+              {settings.heroMode ? "Disable Hero Mode" : "Enable Hero Mode"}
             </Button>
           </div>
         </CardContent>
