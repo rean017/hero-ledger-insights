@@ -52,12 +52,30 @@ export const calculateLocationCommissions = (
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('=== COMMISSION CALCULATION WITH AUTO MERCHANT HERO ===');
+  console.log('=== ENHANCED COMMISSION CALCULATION WITH DUPLICATE DETECTION ===');
   console.log('Total transactions:', transactions.length);
   console.log('Total assignments:', assignments.length);
   console.log('Total locations:', locations.length);
   
   const commissions: LocationCommission[] = [];
+
+  // ENHANCED: Debug location name duplicates
+  const locationNameCounts = locations.reduce((acc, location) => {
+    const name = location.name;
+    acc[name] = (acc[name] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  console.log('🔍 LOCATION NAME ANALYSIS:');
+  Object.entries(locationNameCounts).forEach(([name, count]) => {
+    if (count > 1) {
+      console.log(`⚠️ DUPLICATE LOCATION NAME DETECTED: "${name}" appears ${count} times`);
+      const duplicateLocations = locations.filter(loc => loc.name === name);
+      duplicateLocations.forEach(loc => {
+        console.log(`  - ID: ${loc.id}, Account ID: ${loc.account_id}, Name: "${loc.name}"`);
+      });
+    }
+  });
 
   // Group transactions by location (account_id) and calculate totals
   const locationData = transactions.reduce((acc, transaction) => {
@@ -96,7 +114,17 @@ export const calculateLocationCommissions = (
     return acc;
   }, {} as Record<string, LocationData>);
 
-  console.log('📊 LOCATION DATA SUMMARY:', locationData);
+  console.log('📊 ENHANCED LOCATION DATA SUMMARY:');
+  Object.entries(locationData).forEach(([accountId, data]) => {
+    const location = locations.find(loc => loc.account_id === accountId);
+    const locationName = location ? location.name : 'UNKNOWN';
+    console.log(`📍 Account ID: ${accountId}, Name: "${locationName}", Volume: $${data.totalVolume.toLocaleString()}, Transactions: ${data.transactionCount}`);
+    
+    // Special check for Greenlight & Company
+    if (locationName.toLowerCase().includes('greenlight')) {
+      console.log(`🎯 GREENLIGHT DETECTED: Account ID: ${accountId}, Name: "${locationName}", Volume: $${data.totalVolume.toLocaleString()}`);
+    }
+  });
 
   // Group assignments by location to calculate Merchant Hero automatically
   const assignmentsByLocation = assignments.reduce((acc, assignment) => {
@@ -142,6 +170,11 @@ export const calculateLocationCommissions = (
       totalVolume: locationInfo.totalVolume,
       netAgentPayout: locationInfo.totalAgentPayout
     });
+
+    // Special logging for Greenlight & Company
+    if (location.name.toLowerCase().includes('greenlight')) {
+      console.log(`🎯 PROCESSING GREENLIGHT: ${location.name}, Account ID: ${location.account_id}, Volume: $${locationInfo.totalVolume.toLocaleString()}`);
+    }
 
     // First, calculate all non-Merchant Hero agent payouts
     const otherAgents = locationAssignments.filter(a => a.agent_name !== 'Merchant Hero');
@@ -210,7 +243,36 @@ export const calculateLocationCommissions = (
     }
   });
 
-  console.log('🎉 Final commissions calculated:', commissions);
+  // ENHANCED: Final summary with duplicate detection
+  console.log('🎉 FINAL COMMISSION SUMMARY:');
+  const locationVolumeSummary = commissions.reduce((acc, commission) => {
+    const name = commission.locationName;
+    if (!acc[name]) {
+      acc[name] = { volume: 0, count: 0, locations: [] };
+    }
+    acc[name].volume += commission.locationVolume;
+    acc[name].count += 1;
+    acc[name].locations.push({
+      id: commission.locationId,
+      volume: commission.locationVolume
+    });
+    return acc;
+  }, {} as Record<string, { volume: number; count: number; locations: Array<{id: string; volume: number}> }>);
+
+  Object.entries(locationVolumeSummary).forEach(([name, summary]) => {
+    if (summary.count > 1) {
+      console.log(`⚠️ MULTIPLE COMMISSION ENTRIES FOR: "${name}"`);
+      console.log(`  Total Volume: $${summary.volume.toLocaleString()}`);
+      console.log(`  Entry Count: ${summary.count}`);
+      summary.locations.forEach((loc, index) => {
+        console.log(`  Entry ${index + 1}: ID ${loc.id}, Volume: $${loc.volume.toLocaleString()}`);
+      });
+    } else if (name.toLowerCase().includes('greenlight')) {
+      console.log(`✅ GREENLIGHT FINAL: "${name}", Volume: $${summary.volume.toLocaleString()}`);
+    }
+  });
+
+  console.log('🎉 Final commissions calculated:', commissions.length);
   return commissions;
 };
 

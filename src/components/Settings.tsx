@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -7,6 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Settings as SettingsIcon, Palette, Database, Wrench, Bug } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import DataCleanupUtility from "./DataCleanupUtility";
+import LocationDataDebugger from "./LocationDataDebugger";
 
 interface SettingsState {
   defaultTimeFrame: string;
@@ -149,124 +154,188 @@ const Settings = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground">Manage your application preferences and defaults.</p>
+        <h2 className="text-2xl font-bold text-foreground mb-2">Settings & Tools</h2>
+        <p className="text-muted-foreground">Configure application settings and access debugging tools</p>
       </div>
 
-      {/* Dashboard Defaults Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Dashboard Defaults</CardTitle>
-          <CardDescription>Configure default settings for your dashboard and data uploads.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="default-timeframe">Default Time Frame</Label>
-            <Select
-              value={settings.defaultTimeFrame}
-              onValueChange={(value) => handleSettingChange("defaultTimeFrame", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select default time frame" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="current-month">Current Month</SelectItem>
-                <SelectItem value="last-month">Last Month</SelectItem>
-                <SelectItem value="all-time">All Time</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="general" className="flex items-center gap-2">
+            <SettingsIcon className="h-4 w-4" />
+            General
+          </TabsTrigger>
+          <TabsTrigger value="theme" className="flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            Theme
+          </TabsTrigger>
+          <TabsTrigger value="cleanup" className="flex items-center gap-2">
+            <Wrench className="h-4 w-4" />
+            Data Cleanup
+          </TabsTrigger>
+          <TabsTrigger value="debug" className="flex items-center gap-2">
+            <Bug className="h-4 w-4" />
+            Debug Tools
+          </TabsTrigger>
+        </TabsList>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="auto-assign">Auto-assign 'Merchant Hero' as agent on upload</Label>
-              <div className="text-sm text-muted-foreground">
-                Automatically assign Merchant Hero as the agent for new uploads
+        <TabsContent value="general" className="space-y-4">
+          {/* Dashboard Defaults Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Dashboard Defaults</CardTitle>
+              <CardDescription>Configure default settings for your dashboard and data uploads.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="default-timeframe">Default Time Frame</Label>
+                <Select
+                  value={settings.defaultTimeFrame}
+                  onValueChange={(value) => handleSettingChange("defaultTimeFrame", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select default time frame" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="current-month">Current Month</SelectItem>
+                    <SelectItem value="last-month">Last Month</SelectItem>
+                    <SelectItem value="all-time">All Time</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-            <Switch
-              id="auto-assign"
-              checked={settings.autoAssignMerchantHero}
-              onCheckedChange={(checked) => handleSettingChange("autoAssignMerchantHero", checked)}
-            />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="overwrite-data">Overwrite existing data on re-upload</Label>
-              <div className="text-sm text-muted-foreground">
-                Replace existing data when uploading files with duplicate records
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="auto-assign">Auto-assign 'Merchant Hero' as agent on upload</Label>
+                  <div className="text-sm text-muted-foreground">
+                    Automatically assign Merchant Hero as the agent for new uploads
+                  </div>
+                </div>
+                <Switch
+                  id="auto-assign"
+                  checked={settings.autoAssignMerchantHero}
+                  onCheckedChange={(checked) => handleSettingChange("autoAssignMerchantHero", checked)}
+                />
               </div>
-            </div>
-            <Switch
-              id="overwrite-data"
-              checked={settings.overwriteExistingData}
-              onCheckedChange={(checked) => handleSettingChange("overwriteExistingData", checked)}
-            />
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="currency-format">Currency Format</Label>
-            <Select
-              value={settings.currencyFormat}
-              onValueChange={(value) => handleSettingChange("currencyFormat", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select currency format" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="usd">$ USD</SelectItem>
-                <SelectItem value="eur">€ EUR</SelectItem>
-                <SelectItem value="gbp">£ GBP</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Button onClick={downloadCommissionData} className="w-full sm:w-auto">
-              <Download className="h-4 w-4 mr-2" />
-              Download All Commission Data as CSV
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Display Settings Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Display Settings</CardTitle>
-          <CardDescription>Customize the appearance and theme of your application.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="night-mode">Night Mode</Label>
-              <div className="text-sm text-muted-foreground">
-                Switch to dark theme with light text
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="overwrite-data">Overwrite existing data on re-upload</Label>
+                  <div className="text-sm text-muted-foreground">
+                    Replace existing data when uploading files with duplicate records
+                  </div>
+                </div>
+                <Switch
+                  id="overwrite-data"
+                  checked={settings.overwriteExistingData}
+                  onCheckedChange={(checked) => handleSettingChange("overwriteExistingData", checked)}
+                />
               </div>
-            </div>
-            <Switch
-              id="night-mode"
-              checked={settings.nightMode}
-              onCheckedChange={(checked) => handleSettingChange("nightMode", checked)}
-            />
-          </div>
 
-          <div className="space-y-2">
-            <Label>Hero Mode</Label>
-            <div className="text-sm text-muted-foreground mb-2">
-              Transform the UI with vibrant lime green and black colors
-            </div>
-            <Button
-              variant={settings.heroMode ? "default" : "outline"}
-              onClick={() => handleSettingChange("heroMode", !settings.heroMode)}
-              className="w-full sm:w-auto"
-            >
-              {settings.heroMode ? "Disable Hero Mode" : "Enable Hero Mode"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+              <div className="space-y-2">
+                <Label htmlFor="currency-format">Currency Format</Label>
+                <Select
+                  value={settings.currencyFormat}
+                  onValueChange={(value) => handleSettingChange("currencyFormat", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select currency format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="usd">$ USD</SelectItem>
+                    <SelectItem value="eur">€ EUR</SelectItem>
+                    <SelectItem value="gbp">£ GBP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Button onClick={downloadCommissionData} className="w-full sm:w-auto">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download All Commission Data as CSV
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Display Settings Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Display Settings</CardTitle>
+              <CardDescription>Customize the appearance and theme of your application.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="night-mode">Night Mode</Label>
+                  <div className="text-sm text-muted-foreground">
+                    Switch to dark theme with light text
+                  </div>
+                </div>
+                <Switch
+                  id="night-mode"
+                  checked={settings.nightMode}
+                  onCheckedChange={(checked) => handleSettingChange("nightMode", checked)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Hero Mode</Label>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Transform the UI with vibrant lime green and black colors
+                </div>
+                <Button
+                  variant={settings.heroMode ? "default" : "outline"}
+                  onClick={() => handleSettingChange("heroMode", !settings.heroMode)}
+                  className="w-full sm:w-auto"
+                >
+                  {settings.heroMode ? "Disable Hero Mode" : "Enable Hero Mode"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="theme" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5" />
+                Theme Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium">Hero Mode</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Enable lime green and black theme for maximum power
+                  </p>
+                </div>
+                <Switch
+                  checked={heroMode}
+                  onCheckedChange={handleHeroModeToggle}
+                />
+              </div>
+              
+              {heroMode && (
+                <div className="p-4 rounded-lg bg-lime-500/10 border border-lime-500/20">
+                  <p className="text-sm text-lime-600 dark:text-lime-400 font-medium">
+                    🚀 Hero Mode Active! You're now running with lime green power and black aesthetics.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cleanup" className="space-y-4">
+          <DataCleanupUtility />
+        </TabsContent>
+
+        <TabsContent value="debug" className="space-y-4">
+          <LocationDataDebugger />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
