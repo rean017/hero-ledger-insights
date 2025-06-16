@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +16,7 @@ interface Location {
   name: string;
   account_id: string | null;
   account_type: string | null;
+  is_franchise: boolean | null;
 }
 
 interface Agent {
@@ -208,11 +208,14 @@ const Locations = () => {
     (location.account_id && location.account_id.toLowerCase().includes(searchTerm.toLowerCase()))
   ) || [];
 
+  // Calculate franchise statistics
+  const franchiseLocations = locations?.filter(location => location.is_franchise) || [];
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground mb-2">Location Management</h2>
-        <p className="text-muted-foreground">Manage locations and assign agents with commission rates. Upload process now ensures only proper business names are used.</p>
+        <p className="text-muted-foreground">Manage locations and assign agents with commission rates. Use franchise tags to organize your franchise locations.</p>
       </div>
 
       {/* Quick Agent Assignment */}
@@ -245,7 +248,10 @@ const Locations = () => {
               <SelectContent>
                 {filteredLocations?.map((location) => (
                   <SelectItem key={location.id} value={location.id}>
-                    {location.name}
+                    <div className="flex items-center gap-2">
+                      {location.is_franchise && <Building2 className="h-3 w-3 text-blue-600" />}
+                      {location.name}
+                    </div>
                   </SelectItem>
                 )) || []}
               </SelectContent>
@@ -297,12 +303,24 @@ const Locations = () => {
       </Card>
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Total Locations</span>
               <span className="font-semibold">{locations?.length || 0}</span>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground flex items-center gap-1">
+                <Building2 className="h-3 w-3 text-blue-600" />
+                Franchises
+              </span>
+              <span className="font-semibold">{franchiseLocations.length}</span>
             </div>
           </CardContent>
         </Card>
@@ -355,6 +373,12 @@ const Locations = () => {
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <Building2 className="h-5 w-5" />
                       {location.name}
+                      {location.is_franchise && (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
+                          <Building2 className="h-3 w-3 mr-1" />
+                          Franchise
+                        </Badge>
+                      )}
                     </CardTitle>
                     {location.account_id && (
                       <p className="text-sm text-muted-foreground flex items-center gap-1">

@@ -110,6 +110,7 @@ export type Database = {
           account_type: string | null
           created_at: string
           id: string
+          is_franchise: boolean | null
           name: string
           notes: string | null
           updated_at: string
@@ -119,6 +120,7 @@ export type Database = {
           account_type?: string | null
           created_at?: string
           id?: string
+          is_franchise?: boolean | null
           name: string
           notes?: string | null
           updated_at?: string
@@ -128,6 +130,7 @@ export type Database = {
           account_type?: string | null
           created_at?: string
           id?: string
+          is_franchise?: boolean | null
           name?: string
           notes?: string | null
           updated_at?: string

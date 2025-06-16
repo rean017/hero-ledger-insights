@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Plus } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Trash2, Plus, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,6 +17,7 @@ interface Location {
   name: string;
   account_id: string | null;
   account_type: string | null;
+  is_franchise: boolean | null;
 }
 
 interface LocationAssignment {
@@ -42,6 +44,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
   const [locationName, setLocationName] = useState("");
   const [accountId, setAccountId] = useState("");
   const [accountType, setAccountType] = useState("");
+  const [isFranchise, setIsFranchise] = useState(false);
   const [assignments, setAssignments] = useState<LocationAssignment[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [newAgent, setNewAgent] = useState("");
@@ -59,6 +62,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
         setLocationName(location.name);
         setAccountId(location.account_id || "");
         setAccountType(location.account_type || "");
+        setIsFranchise(location.is_franchise || false);
         fetchAssignments();
       }
     } else {
@@ -66,6 +70,7 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
       setLocationName("");
       setAccountId("");
       setAccountType("");
+      setIsFranchise(false);
       setAssignments([]);
       setNewAgent("");
       setNewRate("");
@@ -279,7 +284,8 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
         .update({
           name: locationName.trim(),
           account_id: accountId.trim() || null,
-          account_type: accountType.trim() || null
+          account_type: accountType.trim() || null,
+          is_franchise: isFranchise
         })
         .eq('id', location.id);
 
@@ -313,7 +319,15 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Location</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5" />
+            Edit Location
+            {isFranchise && (
+              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                Franchise
+              </Badge>
+            )}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
@@ -343,14 +357,33 @@ const LocationEditDialog = ({ open, onOpenChange, location, onLocationUpdated }:
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="account-type">Account Type</Label>
-              <Input
-                id="account-type"
-                value={accountType}
-                onChange={(e) => setAccountType(e.target.value)}
-                placeholder="Enter account type"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="account-type">Account Type</Label>
+                <Input
+                  id="account-type"
+                  value={accountType}
+                  onChange={(e) => setAccountType(e.target.value)}
+                  placeholder="Enter account type"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="franchise-toggle" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Franchise Location
+                </Label>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="franchise-toggle"
+                    checked={isFranchise}
+                    onCheckedChange={setIsFranchise}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {isFranchise ? "This is a franchise location" : "This is not a franchise location"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
