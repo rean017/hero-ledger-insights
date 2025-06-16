@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -235,25 +234,31 @@ const FileUpload = () => {
     return null;
   };
 
-  // ENHANCED: Row processing with detailed Greenlight debugging
+  // ENHANCED: Row processing with INTENSIVE Greenlight debugging for volume issues
   const processRow = (row: any, processorConfig: ProcessorConfig, locationColumn: string | null, volumeColumn: string | null, debitVolumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
     try {
       let processed: ProcessedData = { rawData: row, processor: processorConfig.name };
 
-      console.log('\n=== PROCESSING ROW WITH GREENLIGHT DEBUGGING ===');
+      console.log('\n=== PROCESSING ROW WITH INTENSIVE GREENLIGHT VOLUME DEBUGGING ===');
       console.log('Processor:', processorConfig.name);
-      console.log('Raw row data:', JSON.stringify(row, null, 2));
       
       // Check if this is a Greenlight row
       const rowString = JSON.stringify(row).toLowerCase();
       const isGreenlight = rowString.includes('greenlight');
       
       if (isGreenlight) {
-        console.log('🟢 GREENLIGHT ROW DETECTED!');
-        console.log('Full row content:', row);
-        console.log('Location column:', locationColumn);
-        console.log('Volume column:', volumeColumn);
-        console.log('Commission column:', commissionColumn);
+        console.log('🟢🟢🟢 GREENLIGHT ROW DETECTED! 🟢🟢🟢');
+        console.log('🟢 COMPLETE ROW DATA:', JSON.stringify(row, null, 2));
+        console.log('🟢 ALL OBJECT KEYS:', Object.keys(row));
+        console.log('🟢 ALL OBJECT VALUES:', Object.values(row));
+        console.log('🟢 Volume column mapping:', volumeColumn);
+        console.log('🟢 Commission column mapping:', commissionColumn);
+        console.log('🟢 Location column mapping:', locationColumn);
+        
+        // Log every single property in the row
+        Object.entries(row).forEach(([key, value]) => {
+          console.log(`🟢 ROW PROPERTY: "${key}" = "${value}" (type: ${typeof value})`);
+        });
       }
 
       // ENHANCED: Handle the specific Green Payments CSV format with __parsed_extra
@@ -312,16 +317,33 @@ const FileUpload = () => {
         processed.locationName = locationValue;
         console.log('✅ CONFIRMED: Valid location name set:', processed.locationName);
         
-        // ENHANCED: Volume detection with Greenlight debugging
-        if (volumeColumn && row[volumeColumn]) {
+        // INTENSIVE GREENLIGHT VOLUME DEBUGGING
+        if (volumeColumn && row[volumeColumn] !== undefined) {
           const rawVolumeValue = row[volumeColumn];
-          console.log(`📊 RAW VOLUME VALUE from column "${volumeColumn}":`, rawVolumeValue, typeof rawVolumeValue);
+          
+          if (isGreenlight) {
+            console.log('🟢🟢🟢 GREENLIGHT VOLUME PROCESSING INTENSIVE DEBUG 🟢🟢🟢');
+            console.log(`🟢 Volume column name: "${volumeColumn}"`);
+            console.log(`🟢 Raw volume value: "${rawVolumeValue}"`);
+            console.log(`🟢 Raw volume type: ${typeof rawVolumeValue}`);
+            console.log(`🟢 Raw volume is null: ${rawVolumeValue === null}`);
+            console.log(`🟢 Raw volume is undefined: ${rawVolumeValue === undefined}`);
+            console.log(`🟢 Raw volume stringified: ${JSON.stringify(rawVolumeValue)}`);
+          }
           
           // Handle different volume formats
           let volumeValue = String(rawVolumeValue);
           
+          if (isGreenlight) {
+            console.log(`🟢 Volume after String conversion: "${volumeValue}"`);
+          }
+          
           // Remove currency symbols, commas, and parentheses
           volumeValue = volumeValue.replace(/[\$,()]/g, '');
+          
+          if (isGreenlight) {
+            console.log(`🟢 Volume after cleaning: "${volumeValue}"`);
+          }
           
           // Handle negative values in parentheses format
           const isNegative = String(rawVolumeValue).includes('(') && String(rawVolumeValue).includes(')');
@@ -330,20 +352,28 @@ const FileUpload = () => {
           processed.volume = isNegative ? -parsedVolume : parsedVolume;
           
           if (isGreenlight) {
-            console.log('🟢 GREENLIGHT VOLUME PROCESSING:');
-            console.log('  Raw value:', rawVolumeValue);
-            console.log('  Cleaned value:', volumeValue);
-            console.log('  Is negative:', isNegative);
-            console.log('  Final volume:', processed.volume);
+            console.log('🟢 GREENLIGHT FINAL VOLUME CALCULATION:');
+            console.log('  🟢 Original value:', rawVolumeValue);
+            console.log('  🟢 Cleaned value:', volumeValue);
+            console.log('  🟢 Parsed float:', parsedVolume);
+            console.log('  🟢 Is negative:', isNegative);
+            console.log('  🟢 FINAL VOLUME SET TO:', processed.volume);
+            
+            if (processed.volume === 0) {
+              console.log('🟢🚨 WARNING: GREENLIGHT VOLUME IS ZERO! 🚨🟢');
+              console.log('🟢 This suggests the volume parsing failed');
+              console.log('🟢 Check if the volume column contains the expected data');
+            }
           }
           
           console.log('✅ Set volume to:', processed.volume);
         } else {
           processed.volume = 0;
           if (isGreenlight) {
-            console.log('🟢 GREENLIGHT WARNING: No volume column found or value is empty');
-            console.log('  Volume column:', volumeColumn);
-            console.log('  Value in volume column:', row[volumeColumn]);
+            console.log('🟢🚨 GREENLIGHT CRITICAL: NO VOLUME COLUMN OR VALUE! 🚨🟢');
+            console.log('  🟢 Volume column:', volumeColumn);
+            console.log('  🟢 Row has this property:', volumeColumn ? (volumeColumn in row) : 'N/A');
+            console.log('  🟢 Value in volume column:', volumeColumn ? row[volumeColumn] : 'N/A');
           }
         }
         
@@ -359,10 +389,17 @@ const FileUpload = () => {
           }
         }
         
-        // ENHANCED: Commission detection with Greenlight debugging
-        if (commissionColumn && row[commissionColumn]) {
+        // INTENSIVE GREENLIGHT COMMISSION DEBUGGING
+        if (commissionColumn && row[commissionColumn] !== undefined) {
           const rawCommissionValue = row[commissionColumn];
-          console.log(`💰 RAW COMMISSION VALUE from column "${commissionColumn}":`, rawCommissionValue, typeof rawCommissionValue);
+          
+          if (isGreenlight) {
+            console.log('🟢🟢🟢 GREENLIGHT COMMISSION PROCESSING INTENSIVE DEBUG 🟢🟢🟢');
+            console.log(`🟢 Commission column name: "${commissionColumn}"`);
+            console.log(`🟢 Raw commission value: "${rawCommissionValue}"`);
+            console.log(`🟢 Raw commission type: ${typeof rawCommissionValue}`);
+            console.log(`🟢 Raw commission stringified: ${JSON.stringify(rawCommissionValue)}`);
+          }
           
           let commissionValue = String(rawCommissionValue);
           commissionValue = commissionValue.replace(/[\$,()]/g, '');
@@ -372,20 +409,22 @@ const FileUpload = () => {
           processed.agentPayout = isNegative ? -parsedCommission : parsedCommission;
           
           if (isGreenlight) {
-            console.log('🟢 GREENLIGHT COMMISSION PROCESSING:');
-            console.log('  Raw value:', rawCommissionValue);
-            console.log('  Cleaned value:', commissionValue);
-            console.log('  Is negative:', isNegative);
-            console.log('  Final commission:', processed.agentPayout);
+            console.log('🟢 GREENLIGHT FINAL COMMISSION CALCULATION:');
+            console.log('  🟢 Original value:', rawCommissionValue);
+            console.log('  🟢 Cleaned value:', commissionValue);
+            console.log('  🟢 Parsed float:', parsedCommission);
+            console.log('  🟢 Is negative:', isNegative);
+            console.log('  🟢 FINAL COMMISSION SET TO:', processed.agentPayout);
           }
           
           console.log('✅ Set commission to:', processed.agentPayout);
         } else {
           processed.agentPayout = 0;
           if (isGreenlight) {
-            console.log('🟢 GREENLIGHT WARNING: No commission column found or value is empty');
-            console.log('  Commission column:', commissionColumn);
-            console.log('  Value in commission column:', row[commissionColumn]);
+            console.log('🟢🚨 GREENLIGHT CRITICAL: NO COMMISSION COLUMN OR VALUE! 🚨🟢');
+            console.log('  🟢 Commission column:', commissionColumn);
+            console.log('  🟢 Row has this property:', commissionColumn ? (commissionColumn in row) : 'N/A');
+            console.log('  🟢 Value in commission column:', commissionColumn ? row[commissionColumn] : 'N/A');
           }
         }
 
@@ -402,25 +441,18 @@ const FileUpload = () => {
         }
         
         if (isGreenlight && processed.accountId) {
-          console.log('🟢 GREENLIGHT ACCOUNT ID:', processed.accountId);
+          console.log('🟢 GREENLIGHT ACCOUNT ID FOUND:', processed.accountId);
         }
       }
 
-      console.log('=== ENHANCED VALIDATION ===');
-      console.log('Location Name:', processed.locationName);
-      console.log('Bank Card Volume:', processed.volume);
-      console.log('Debit Card Volume:', processed.debitVolume);
-      console.log('Total Volume (H + I):', (processed.volume || 0) + (processed.debitVolume || 0));
-      console.log('Commission:', processed.agentPayout);
-      console.log('Account ID:', processed.accountId);
-
       if (isGreenlight) {
-        console.log('🟢 GREENLIGHT FINAL PROCESSING RESULT:');
-        console.log('  Location:', processed.locationName);
-        console.log('  Volume:', processed.volume);
-        console.log('  Commission:', processed.agentPayout);
-        console.log('  Account ID:', processed.accountId);
-        console.log('  Will be processed:', !!processed.locationName);
+        console.log('🟢🟢🟢 GREENLIGHT FINAL PROCESSING RESULT 🟢🟢🟢');
+        console.log('  🟢 Location Name:', processed.locationName);
+        console.log('  🟢 Volume:', processed.volume);
+        console.log('  🟢 Commission:', processed.agentPayout);
+        console.log('  🟢 Account ID:', processed.accountId);
+        console.log('  🟢 Will be processed:', !!processed.locationName);
+        console.log('🟢🟢🟢 END GREENLIGHT PROCESSING 🟢🟢🟢');
       }
 
       if (!processed.locationName || !isValidLocationName(processed.locationName)) {
@@ -637,10 +669,10 @@ const FileUpload = () => {
     }
 
     setUploading(true);
-    setUploadStatus({ status: 'processing', message: 'Processing file with ENHANCED GREENLIGHT DEBUGGING...', filename: file.name });
+    setUploadStatus({ status: 'processing', message: 'Processing file with INTENSIVE GREENLIGHT VOLUME DEBUGGING...', filename: file.name });
 
     try {
-      console.log('=== STARTING ENHANCED UPLOAD WITH GREENLIGHT DEBUGGING ===');
+      console.log('=== STARTING INTENSIVE GREENLIGHT VOLUME DEBUG UPLOAD ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
@@ -654,9 +686,12 @@ const FileUpload = () => {
         return rowString.includes('greenlight');
       });
       
-      console.log('🟢 GREENLIGHT ROWS FOUND:', greenlightRows.length);
+      console.log('🟢 GREENLIGHT ROWS FOUND IN FILE:', greenlightRows.length);
       if (greenlightRows.length > 0) {
-        console.log('🟢 GREENLIGHT RAW DATA:', greenlightRows);
+        console.log('🟢 ALL GREENLIGHT RAW DATA:');
+        greenlightRows.forEach((row, index) => {
+          console.log(`🟢 Greenlight Row ${index + 1}:`, JSON.stringify(row, null, 2));
+        });
       }
 
       if (rawData.length === 0) {
@@ -674,7 +709,7 @@ const FileUpload = () => {
 
       console.log(`=== PROCESSOR DETECTED: ${detectedProcessor.name} (${(confidence * 100).toFixed(1)}% confidence) ===`);
       
-      // Enhanced column mapping with Greenlight debugging
+      // Enhanced column mapping with intensive Greenlight debugging
       let locationColumn = null;
       let volumeColumn = null;
       let debitVolumeColumn = null;
@@ -689,11 +724,21 @@ const FileUpload = () => {
         debitVolumeColumn = detectedProcessor.debitVolumeColumn ? findColumn(headers, detectedProcessor.debitVolumeColumn) : null;
         commissionColumn = findColumn(headers, detectedProcessor.commissionColumn);
         
-        console.log('=== COLUMN MAPPING ===');
+        console.log('=== COLUMN MAPPING FOR GREENLIGHT DEBUG ===');
         console.log('- Location column found:', locationColumn);
         console.log('- Volume column found:', volumeColumn);
         console.log('- Debit volume column found:', debitVolumeColumn);
         console.log('- Commission column found:', commissionColumn);
+        
+        if (greenlightRows.length > 0) {
+          console.log('🟢 GREENLIGHT COLUMN VALUE SAMPLES:');
+          greenlightRows.forEach((row, index) => {
+            console.log(`🟢 Greenlight Row ${index + 1} column values:`);
+            if (locationColumn) console.log(`  🟢 Location (${locationColumn}):`, row[locationColumn]);
+            if (volumeColumn) console.log(`  🟢 Volume (${volumeColumn}):`, row[volumeColumn]);
+            if (commissionColumn) console.log(`  🟢 Commission (${commissionColumn}):`, row[commissionColumn]);
+          });
+        }
 
         if (!locationColumn && detectedProcessor.name !== 'Green Payments') {
           throw new Error(`CRITICAL ERROR: No location column found for ${detectedProcessor.name}! Expected columns: ${detectedProcessor.locationColumn.join(', ')}`);
@@ -749,14 +794,14 @@ const FileUpload = () => {
       let greenlightProcessed = 0;
       const errors: any[] = [];
 
-      console.log('=== PROCESSING ROWS WITH ENHANCED GREENLIGHT DEBUGGING ===');
+      console.log('=== PROCESSING ROWS WITH INTENSIVE GREENLIGHT VOLUME DEBUGGING ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         const rowString = JSON.stringify(row).toLowerCase();
         const isGreenlight = rowString.includes('greenlight');
         
         if (isGreenlight) {
-          console.log(`\n🟢 PROCESSING GREENLIGHT ROW ${i + 1} of ${rawData.length}`);
+          console.log(`\n🟢🟢🟢 PROCESSING GREENLIGHT ROW ${i + 1} of ${rawData.length} 🟢🟢🟢`);
         } else {
           console.log(`\n--- Processing row ${i + 1} with ${detectedProcessor.name} format ---`);
         }
@@ -765,7 +810,8 @@ const FileUpload = () => {
 
         if (processedData && processedData.locationName) {
           if (isGreenlight) {
-            console.log('🟢 GREENLIGHT ROW APPROVED FOR PROCESSING:', processedData.locationName);
+            console.log('🟢🟢🟢 GREENLIGHT ROW APPROVED FOR PROCESSING:', processedData.locationName);
+            console.log('🟢 FINAL GREENLIGHT DATA TO PROCESS:', JSON.stringify(processedData, null, 2));
             greenlightProcessed++;
           } else {
             console.log('✅ APPROVED: Valid location name for row', i + 1, ':', processedData.locationName);
@@ -792,11 +838,11 @@ const FileUpload = () => {
                 const totalVolume = bankCardVolume + debitCardVolume;
                 
                 if (isGreenlight) {
-                  console.log('🟢 GREENLIGHT VOLUME CALCULATION:');
-                  console.log(`  Bank Card Volume: ${bankCardVolume}`);
-                  console.log(`  Debit Card Volume: ${debitCardVolume}`);
-                  console.log(`  TOTAL VOLUME: ${totalVolume}`);
-                  console.log(`  Commission: ${processedData.agentPayout}`);
+                  console.log('🟢🟢🟢 GREENLIGHT VOLUME CALCULATION FOR DB:');
+                  console.log(`  🟢 Bank Card Volume: ${bankCardVolume}`);
+                  console.log(`  🟢 Debit Card Volume: ${debitCardVolume}`);
+                  console.log(`  🟢 TOTAL VOLUME: ${totalVolume}`);
+                  console.log(`  🟢 Commission: ${processedData.agentPayout}`);
                 }
                 
                 if (totalVolume > 0 && processedData.agentPayout) {
@@ -818,7 +864,7 @@ const FileUpload = () => {
             };
 
             if (isGreenlight) {
-              console.log('🟢 GREENLIGHT TRANSACTION DATA TO INSERT:');
+              console.log('🟢🟢🟢 GREENLIGHT TRANSACTION DATA TO INSERT INTO DATABASE:');
               console.log(JSON.stringify(transactionData, null, 2));
             }
 
@@ -829,14 +875,15 @@ const FileUpload = () => {
             if (error) {
               console.error('❌ Database insertion error for row', i + 1, ':', error);
               if (isGreenlight) {
-                console.log('🟢 GREENLIGHT DATABASE ERROR:', error);
+                console.log('🟢🚨 GREENLIGHT DATABASE ERROR:', error);
               }
               errorCount++;
               errors.push({ row: i + 1, error: error.message });
             } else {
               successCount++;
               if (isGreenlight) {
-                console.log(`🟢 GREENLIGHT SUCCESS: Row ${i + 1} processed successfully!`);
+                console.log(`🟢🟢🟢 GREENLIGHT SUCCESS: Row ${i + 1} processed successfully! 🟢🟢🟢`);
+                console.log(`🟢 Greenlight transaction inserted with volume: ${transactionData.volume}`);
               } else {
                 console.log(`✅ SUCCESS: Row ${i + 1} processed with location name: ${processedData.locationName} for month: ${selectedMonth}`);
               }
@@ -844,14 +891,14 @@ const FileUpload = () => {
           } catch (error) {
             console.error('❌ Error processing row', i + 1, ':', error);
             if (isGreenlight) {
-              console.log('🟢 GREENLIGHT PROCESSING ERROR:', error);
+              console.log('🟢🚨 GREENLIGHT PROCESSING ERROR:', error);
             }
             errorCount++;
             errors.push({ row: i + 1, error: String(error) });
           }
         } else {
           if (isGreenlight) {
-            console.log(`🟢 GREENLIGHT ROW ${i + 1} REJECTED - no valid location name found`);
+            console.log(`🟢🚨 GREENLIGHT ROW ${i + 1} REJECTED - no valid location name found`);
           } else {
             console.log(`❌ REJECTED: Row ${i + 1} - no valid location name found`);
           }
@@ -860,7 +907,7 @@ const FileUpload = () => {
         }
       }
 
-      console.log('=== ENHANCED UPLOAD SUMMARY WITH GREENLIGHT TRACKING ===');
+      console.log('=== INTENSIVE GREENLIGHT VOLUME DEBUG UPLOAD SUMMARY ===');
       console.log('Processor:', detectedProcessor.name);
       console.log('Greenlight rows found in file:', greenlightRows.length);
       console.log('Greenlight rows processed successfully:', greenlightProcessed);
@@ -895,7 +942,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
       const monthName = monthOptions.find(m => m.value === selectedMonth)?.label;
-      const successMessage = `${detectedProcessor.name} upload completed with enhanced Greenlight debugging! Found ${greenlightRows.length} Greenlight rows in file, processed ${greenlightProcessed} successfully. Total: ${successCount} rows processed for ${monthName}. ${errorCount} rows had issues. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} All data is tagged for ${monthName}.`;
+      const successMessage = `${detectedProcessor.name} upload completed with intensive Greenlight volume debugging! Found ${greenlightRows.length} Greenlight rows in file, processed ${greenlightProcessed} successfully. Total: ${successCount} rows processed for ${monthName}. ${errorCount} rows had issues. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} All data is tagged for ${monthName}.`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -935,7 +982,7 @@ const FileUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5" />
-          Smart Processor Detection Upload (Enhanced Greenlight Debugging)
+          Smart Processor Detection Upload (Intensive Greenlight Volume Debugging)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -973,7 +1020,7 @@ const FileUpload = () => {
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
                   <p className="text-xs text-green-600 mt-1 font-medium">
-                    <strong>🟢 GREENLIGHT DEBUGGING:</strong> Enhanced logging for Greenlight & Company data
+                    <strong>🟢 INTENSIVE VOLUME DEBUG:</strong> Enhanced Greenlight & Company volume tracking
                   </p>
                   <p className="text-xs text-blue-600 mt-1 font-medium">
                     <strong>AUTO-ASSIGN:</strong> Merchant Hero with calculated BPS rates
@@ -1016,12 +1063,14 @@ const FileUpload = () => {
         )}
 
         <div className="text-xs text-muted-foreground bg-green-50 border border-green-200 rounded-lg p-3">
-          <p className="font-medium mb-2 text-green-800">🟢 GREENLIGHT DEBUGGING ACTIVE:</p>
+          <p className="font-medium mb-2 text-green-800">🟢 INTENSIVE GREENLIGHT VOLUME DEBUGGING:</p>
           <ul className="space-y-1 text-green-700">
-            <li><strong>🔍 Detection:</strong> Automatically finds Greenlight & Company rows</li>
-            <li><strong>📊 Volume Tracking:</strong> Enhanced logging for volume extraction</li>
-            <li><strong>💰 Commission Tracking:</strong> Detailed commission processing logs</li>
-            <li><strong>📋 Account ID Mapping:</strong> Tracks account ID assignments</li>
+            <li><strong>🔍 Detection:</strong> Finds all Greenlight & Company rows in uploaded file</li>
+            <li><strong>📊 Volume Analysis:</strong> Intensive logging of volume column parsing and calculation</li>
+            <li><strong>💰 Commission Analysis:</strong> Detailed commission processing with step-by-step logging</li>
+            <li><strong>🗂️ Raw Data Inspection:</strong> Logs complete row data for Greenlight entries</li>
+            <li><strong>📋 Column Mapping:</strong> Shows exact column names and values being processed</li>
+            <li><strong>🎯 Zero Volume Detection:</strong> Alerts if Greenlight volume calculates to zero</li>
           </ul>
         </div>
 
