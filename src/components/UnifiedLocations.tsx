@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Plus, Search, MapPin, Building2, Users, DollarSign, Edit3, Check, X, CalendarIcon } from "lucide-react";
+import { Plus, Search, MapPin, Building2, Users, DollarSign, Edit3, Check, X, CalendarIcon, Edit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +30,7 @@ interface LocationWithExtras {
   notes?: string;
   created_at: string;
   updated_at: string;
+  is_franchise?: boolean;
   assignedAgents: number;
   totalVolume: number;
   totalCommission: number;
@@ -49,6 +50,9 @@ const UnifiedLocations = () => {
   const [tempNotes, setTempNotes] = useState("");
   const [customDateRange, setCustomDateRange] = useState<{ from: Date; to: Date } | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<string | null>(null);
+  const [tempLocationName, setTempLocationName] = useState("");
+  const [tempAccountId, setTempAccountId] = useState("");
   
   // Get dynamic time frames and set default to April (first option) since that's what was uploaded
   const timeFrames = getDynamicTimeFrames();
@@ -196,6 +200,76 @@ const UnifiedLocations = () => {
       return data;
     }
   });
+
+  const handleToggleFranchise = async (location: LocationWithExtras) => {
+    try {
+      const newFranchiseStatus = !location.is_franchise;
+      
+      const { error } = await supabase
+        .from('locations')
+        .update({ is_franchise: newFranchiseStatus })
+        .eq('id', location.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Location ${newFranchiseStatus ? 'marked as' : 'unmarked as'} franchise`,
+      });
+
+      refetch();
+    } catch (error: any) {
+      console.error('Error toggling franchise status:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update franchise status",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleEditLocation = async (locationId: string, name: string, accountId: string) => {
+    try {
+      const { error } = await supabase
+        .from('locations')
+        .update({ 
+          name: name.trim(),
+          account_id: accountId.trim()
+        })
+        .eq('id', locationId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Location updated successfully"
+      });
+
+      setEditingLocation(null);
+      setTempLocationName("");
+      setTempAccountId("");
+      refetch();
+    } catch (error: any) {
+      console.error('Error updating location:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update location",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const startEditingLocation = (location: LocationWithExtras) => {
+    setEditingLocation(location.id);
+    setTempLocationName(location.name);
+    setTempAccountId(location.account_id || "");
+  };
+
+  const cancelEditingLocation = () => {
+    setEditingLocation(null);
+    setTempLocationName("");
+    setTempAccountId("");
+  };
 
   const handleAddLocation = async () => {
     if (!newLocationName.trim() || !newAccountId.trim()) {
@@ -721,19 +795,81 @@ const UnifiedLocations = () => {
                   <CardHeader className="pb-4">
                     <div className="space-y-2">
                       <div className="flex items-start justify-between">
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <Building2 className="h-5 w-5" />
-                          {location.name}
-                        </CardTitle>
+                        {editingLocation === location.id ? (
+                          <div className="flex-1 space-y-2 pr-2">
+                            <Input
+                              value={tempLocationName}
+                              onChange={(e) => setTempLocationName(e.target.value)}
+                              placeholder="Location name"
+                              className="font-semibold"
+                            />
+                            <Input
+                              value={tempAccountId}
+                              onChange={(e) => setTempAccountId(e.target.value)}
+                              placeholder="Account ID"
+                              className="text-sm font-mono"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => handleEditLocation(location.id, tempLocationName, tempAccountId)}
+                              >
+                                <Check className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={cancelEditingLocation}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="space-y-1 flex-1">
+                              <CardTitle className="flex items-center gap-2 text-lg">
+                                <Building2 className="h-5 w-5" />
+                                {location.name}
+                                {location.is_franchise && (
+                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
+                                    <Building2 className="h-3 w-3 mr-1" />
+                                    Franchise
+                                  </Badge>
+                                )}
+                              </CardTitle>
+                              {location.account_id && (
+                                <p className="text-sm text-muted-foreground font-mono">
+                                  Account: {location.account_id}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant={location.is_franchise ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => handleToggleFranchise(location)}
+                                className={`flex-shrink-0 ${location.is_franchise ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                                title="Toggle franchise status"
+                              >
+                                <Building2 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => startEditingLocation(location)}
+                                className="flex-shrink-0"
+                                title="Edit location"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </>
+                        )}
                         <Badge variant="secondary">
                           {location.account_type || 'Unknown'}
                         </Badge>
                       </div>
-                      {location.account_id && (
-                        <p className="text-sm text-muted-foreground font-mono">
-                          Account: {location.account_id}
-                        </p>
-                      )}
                     </div>
                   </CardHeader>
                   
