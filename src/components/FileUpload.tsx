@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -414,7 +415,7 @@ const FileUpload = () => {
     try {
       console.log('🔍 LOCATION MERGER: Checking for existing location with name:', locationName);
       
-      // First, check for exact name match (case-insensitive)
+      // First, check for exact name match (case-insensitive) - FIXED: Added 'name' to select
       const { data: existingLocations, error: selectError } = await supabase
         .from('locations')
         .select('id, name, account_id')
