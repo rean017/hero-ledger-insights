@@ -51,11 +51,34 @@ export const calculateLocationCommissions = (
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('=== ENHANCED COMMISSION CALCULATION WITH BETTER VOLUME HANDLING ===');
+  console.log('=== ENHANCED GREENLIGHT DEBUGGING ===');
   console.log('Total transactions:', transactions.length);
   console.log('Total assignments:', assignments.length);
   console.log('Total locations:', locations.length);
   
+  // ENHANCED: Special tracking for Greenlight & Company
+  const greenlightLocations = locations.filter(loc => 
+    loc.name.toLowerCase().includes('greenlight')
+  );
+  
+  console.log('🎯 GREENLIGHT LOCATIONS FOUND:', greenlightLocations.length);
+  greenlightLocations.forEach(loc => {
+    console.log(`  - ID: ${loc.id}, Account: ${loc.account_id}, Name: "${loc.name}"`);
+  });
+
+  const greenlightTransactions = transactions.filter(t => {
+    const matchingLocation = locations.find(loc => loc.account_id === t.account_id);
+    return matchingLocation && matchingLocation.name.toLowerCase().includes('greenlight');
+  });
+
+  console.log('🎯 GREENLIGHT TRANSACTIONS FOUND:', greenlightTransactions.length);
+  greenlightTransactions.forEach(t => {
+    const bankVolume = Number(t.volume) || 0;
+    const debitVolume = Number(t.debit_volume) || 0;
+    const totalVolume = bankVolume + debitVolume;
+    console.log(`  - Account: ${t.account_id}, Bank: ${bankVolume}, Debit: ${debitVolume}, Total: ${totalVolume}, Agent Payout: ${t.agent_payout}`);
+  });
+
   const commissions: LocationCommission[] = [];
 
   // ENHANCED: Debug location name duplicates
@@ -72,6 +95,13 @@ export const calculateLocationCommissions = (
       const duplicateLocations = locations.filter(loc => loc.name === name);
       duplicateLocations.forEach(loc => {
         console.log(`  - ID: ${loc.id}, Account ID: ${loc.account_id}, Name: "${loc.name}"`);
+        
+        // Check if this duplicate has any transactions
+        const accountTransactions = transactions.filter(t => t.account_id === loc.account_id);
+        const totalVol = accountTransactions.reduce((sum, t) => {
+          return sum + (Number(t.volume) || 0) + (Number(t.debit_volume) || 0);
+        }, 0);
+        console.log(`    Transactions for this account: ${accountTransactions.length}, Total Volume: ${totalVol}`);
       });
     }
   });
@@ -83,7 +113,11 @@ export const calculateLocationCommissions = (
     const totalVolume = bankCardVolume + debitCardVolume;
     
     if (totalVolume === 0) {
-      console.log(`🚫 FILTERING OUT ZERO VOLUME TRANSACTION: Account ${transaction.account_id}, Bank: ${bankCardVolume}, Debit: ${debitCardVolume}`);
+      // Special logging for Greenlight zero-volume transactions
+      const matchingLocation = locations.find(loc => loc.account_id === transaction.account_id);
+      if (matchingLocation && matchingLocation.name.toLowerCase().includes('greenlight')) {
+        console.log(`🚫 FILTERING OUT GREENLIGHT ZERO VOLUME: Account ${transaction.account_id}, Name: "${matchingLocation.name}"`);
+      }
       return false;
     }
     return true;
@@ -123,7 +157,11 @@ export const calculateLocationCommissions = (
     const agentPayout = Number(transaction.agent_payout) || 0;
     acc[accountId].totalAgentPayout += agentPayout;
     
-    console.log(`💰 Location ${accountId} - Volume: ${totalTransactionVolume}, Net Payout: ${agentPayout}`);
+    // Special logging for Greenlight
+    const matchingLocation = locations.find(loc => loc.account_id === accountId);
+    if (matchingLocation && matchingLocation.name.toLowerCase().includes('greenlight')) {
+      console.log(`💰 GREENLIGHT TRANSACTION PROCESSED: Account ${accountId}, Volume: ${totalTransactionVolume}, Net Payout: ${agentPayout}`);
+    }
     
     return acc;
   }, {} as Record<string, LocationData>);
@@ -137,6 +175,30 @@ export const calculateLocationCommissions = (
     // Special check for Greenlight & Company
     if (locationName.toLowerCase().includes('greenlight')) {
       console.log(`🎯 GREENLIGHT FOUND WITH VOLUME: Account ID: ${accountId}, Name: "${locationName}", Volume: $${data.totalVolume.toLocaleString()}`);
+    }
+  });
+
+  // ENHANCED: Check why Greenlight might not be appearing in locationData
+  greenlightLocations.forEach(loc => {
+    if (!locationData[loc.account_id]) {
+      console.log(`🚨 GREENLIGHT LOCATION NOT IN LOCATION DATA: "${loc.name}" (Account: ${loc.account_id})`);
+      console.log(`   Checking if any transactions exist for this account...`);
+      
+      const allTransactionsForAccount = transactions.filter(t => t.account_id === loc.account_id);
+      console.log(`   Total transactions for account ${loc.account_id}: ${allTransactionsForAccount.length}`);
+      
+      allTransactionsForAccount.forEach((t, index) => {
+        const bankVol = Number(t.volume) || 0;
+        const debitVol = Number(t.debit_volume) || 0;
+        const totalVol = bankVol + debitVol;
+        console.log(`     Transaction ${index + 1}: Bank=${bankVol}, Debit=${debitVol}, Total=${totalVol}, Agent Payout=${t.agent_payout}`);
+      });
+      
+      const nonZeroForAccount = allTransactionsForAccount.filter(t => {
+        const totalVol = (Number(t.volume) || 0) + (Number(t.debit_volume) || 0);
+        return totalVol > 0;
+      });
+      console.log(`   Non-zero volume transactions for this account: ${nonZeroForAccount.length}`);
     }
   });
 
@@ -273,6 +335,26 @@ export const calculateLocationCommissions = (
       console.log(`✅ GREENLIGHT FINAL VERIFIED: "${name}", Total Volume: $${summary.volume.toLocaleString()}, Entries: ${summary.count}`);
     }
   });
+
+  // ENHANCED: Final check - is Greenlight missing from final results?
+  const greenlightInResults = commissions.filter(c => c.locationName.toLowerCase().includes('greenlight'));
+  console.log(`🎯 GREENLIGHT IN FINAL RESULTS: ${greenlightInResults.length} entries`);
+  
+  if (greenlightInResults.length === 0) {
+    console.log(`🚨 GREENLIGHT MISSING FROM FINAL RESULTS!`);
+    console.log(`🔍 Re-checking Greenlight locations and assignments...`);
+    
+    greenlightLocations.forEach(loc => {
+      const assignments = assignmentsByLocation[loc.id] || [];
+      console.log(`  Location: ${loc.name} (${loc.id})`);
+      console.log(`    Account ID: ${loc.account_id}`);
+      console.log(`    Assignments: ${assignments.length}`);
+      console.log(`    Location Data Exists: ${!!locationData[loc.account_id]}`);
+      if (locationData[loc.account_id]) {
+        console.log(`    Volume in Location Data: ${locationData[loc.account_id].totalVolume}`);
+      }
+    });
+  }
 
   // ENHANCED: Verify no zero-volume entries made it through
   const zeroVolumeCommissions = commissions.filter(c => c.locationVolume === 0);
