@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -418,7 +419,10 @@ const FileUpload = () => {
       const { data: existingLocations, error: selectError } = await supabase
         .from('locations')
         .select('id, name, account_id')
-        .ilike('name', locationName);
+        .ilike('name', locationName) as { 
+          data: Array<{ id: string; name: string | null; account_id: string | null }> | null; 
+          error: any 
+        };
 
       if (selectError && selectError.code !== 'PGRST116') {
         console.error('Error checking existing locations:', selectError);
@@ -426,7 +430,7 @@ const FileUpload = () => {
       }
 
       // Find exact match by name (case-insensitive)
-      const exactMatch = existingLocations?.find((loc: { id: string; name: string | null; account_id: string | null }) => 
+      const exactMatch = existingLocations?.find((loc) => 
         loc.name?.toLowerCase().trim() === locationName.toLowerCase().trim()
       );
 
