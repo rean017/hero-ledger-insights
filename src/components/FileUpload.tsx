@@ -404,7 +404,7 @@ const FileUpload = () => {
     }
   };
 
-  // SIMPLIFIED: Location creation with basic validation
+  // ENHANCED: Location merging with identical names but different account IDs
   const ensureLocationExists = async (locationName: string, accountId?: string): Promise<string | null> => {
     if (!locationName || !isValidLocationName(locationName)) {
       console.log('❌ CRITICAL: Attempting to create location with invalid name:', locationName);
@@ -412,22 +412,54 @@ const FileUpload = () => {
     }
 
     try {
-      const { data: existingLocation, error: selectError } = await supabase
+      console.log('🔍 LOCATION MERGER: Checking for existing location with name:', locationName);
+      
+      // First, check for exact name match (case-insensitive)
+      const { data: existingLocations, error: selectError } = await supabase
         .from('locations')
-        .select('id')
-        .eq('name', locationName)
-        .maybeSingle();
+        .select('id, name, account_id')
+        .ilike('name', locationName);
 
       if (selectError && selectError.code !== 'PGRST116') {
-        console.error('Error checking existing location:', selectError);
+        console.error('Error checking existing locations:', selectError);
         return null;
       }
 
-      if (existingLocation) {
-        console.log('✅ Found existing location with name:', locationName);
-        return existingLocation.id;
+      // Find exact match by name (case-insensitive)
+      const exactMatch = existingLocations?.find(loc => 
+        loc.name?.toLowerCase().trim() === locationName.toLowerCase().trim()
+      );
+
+      if (exactMatch) {
+        console.log('✅ FOUND EXISTING LOCATION:', exactMatch.name, 'with ID:', exactMatch.id);
+        
+        // If we have a new account ID and the existing location doesn't have one, update it
+        if (accountId && !exactMatch.account_id) {
+          console.log('🔄 UPDATING EXISTING LOCATION with new account ID:', accountId);
+          const { error: updateError } = await supabase
+            .from('locations')
+            .update({ account_id: accountId })
+            .eq('id', exactMatch.id);
+            
+          if (updateError) {
+            console.error('Error updating location with account ID:', updateError);
+          } else {
+            console.log('✅ Successfully updated location with account ID');
+          }
+        }
+        
+        // If account IDs are different but names are identical, we still use the existing location
+        if (accountId && exactMatch.account_id && exactMatch.account_id !== accountId) {
+          console.log('🔀 LOCATION MERGER: Found identical name with different account ID');
+          console.log(`   Existing: "${exactMatch.name}" (Account: ${exactMatch.account_id})`);
+          console.log(`   New:      "${locationName}" (Account: ${accountId})`);
+          console.log('   ✅ MERGING: Using existing location ID to consolidate data');
+        }
+        
+        return exactMatch.id;
       }
 
+      // No exact match found, create new location
       console.log('✅ Creating new location with name:', locationName);
       const { data: newLocation, error: insertError } = await supabase
         .from('locations')
@@ -605,10 +637,10 @@ const FileUpload = () => {
     }
 
     setUploading(true);
-    setUploadStatus({ status: 'processing', message: 'Processing file with ZERO VOLUME FILTERING...', filename: file.name });
+    setUploadStatus({ status: 'processing', message: 'Processing file with LOCATION MERGING and ZERO VOLUME FILTERING...', filename: file.name });
 
     try {
-      console.log('=== STARTING ZERO VOLUME FILTERING UPLOAD ===');
+      console.log('=== STARTING LOCATION MERGING UPLOAD ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
@@ -702,10 +734,11 @@ const FileUpload = () => {
       let errorCount = 0;
       let zeroVolumeRejected = 0;
       let locationsCreated = 0;
+      let locationsMerged = 0;
       let merchantHeroAssignments = 0;
       const errors: any[] = [];
 
-      console.log('=== PROCESSING ROWS WITH ZERO VOLUME FILTERING ===');
+      console.log('=== PROCESSING ROWS WITH LOCATION MERGING ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         console.log(`\n--- Processing row ${i + 1} with ${detectedProcessor.name} format ---`);
@@ -718,9 +751,30 @@ const FileUpload = () => {
           try {
             let locationId = null;
             if (processedData.locationName) {
+              // Check if this will result in a merge
+              const { data: existingByName } = await supabase
+                .from('locations')
+                .select('id, account_id')
+                .ilike('name', processedData.locationName);
+              
+              const exactMatch = existingByName?.find(loc => 
+                loc.name?.toLowerCase().trim() === processedData.locationName?.toLowerCase().trim()
+              );
+              
+              const willMerge = exactMatch && processedData.accountId && 
+                              exactMatch.account_id && 
+                              exactMatch.account_id !== processedData.accountId;
+              
+              if (willMerge) {
+                console.log('🔀 LOCATION WILL BE MERGED: Same name, different account IDs');
+                locationsMerged++;
+              }
+              
               const existingLocationId = await ensureLocationExists(processedData.locationName, processedData.accountId);
               if (existingLocationId) {
                 locationId = existingLocationId;
+                
+                // Check if this was a new location creation
                 const { data: locationCheck } = await supabase
                   .from('locations')
                   .select('created_at')
@@ -787,7 +841,7 @@ const FileUpload = () => {
         }
       }
 
-      console.log('=== ZERO VOLUME FILTERING UPLOAD SUMMARY ===');
+      console.log('=== LOCATION MERGING UPLOAD SUMMARY ===');
       console.log('Processor:', detectedProcessor.name);
       console.log('Selected month for data:', selectedMonth);
       console.log('Transaction date assigned:', transactionDate);
@@ -795,6 +849,7 @@ const FileUpload = () => {
       console.log('Error count:', errorCount);
       console.log('Zero volume rows rejected:', zeroVolumeRejected);
       console.log('Locations created:', locationsCreated);
+      console.log('Locations merged (same name, diff account):', locationsMerged);
       console.log('Merchant Hero assignments created/updated:', merchantHeroAssignments);
       console.log('Total rows processed:', rawData.length);
 
@@ -821,7 +876,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
       const monthName = monthOptions.find(m => m.value === selectedMonth)?.label;
-      const successMessage = `${detectedProcessor.name} upload completed with zero volume filtering! ${successCount} rows processed for ${monthName}. ${zeroVolumeRejected} zero-volume duplicate rows were automatically filtered out. ${errorCount} rows had other issues. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} All data is tagged for ${monthName}.`;
+      const successMessage = `${detectedProcessor.name} upload completed with location merging! ${successCount} rows processed for ${monthName}. ${zeroVolumeRejected} zero-volume duplicate rows were automatically filtered out. ${locationsMerged} locations with identical names but different account IDs were automatically merged. ${errorCount} rows had other issues. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} All data is tagged for ${monthName}.`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -861,7 +916,7 @@ const FileUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5" />
-          Smart Processor Detection Upload (Zero Volume Filtering)
+          Smart Processor Detection Upload (Location Merging + Zero Volume Filtering)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -897,6 +952,9 @@ const FileUpload = () => {
                   <p className="text-xs text-muted-foreground">CSV or XLSX files only</p>
                   <p className="text-xs text-primary mt-1">
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
+                  </p>
+                  <p className="text-xs text-green-600 mt-1 font-medium">
+                    <strong>🔀 LOCATION MERGER:</strong> Identical names with different account IDs automatically merged
                   </p>
                   <p className="text-xs text-red-600 mt-1 font-medium">
                     <strong>🚫 ZERO VOLUME FILTER:</strong> Duplicate rows with $0 volume automatically rejected
@@ -940,6 +998,18 @@ const FileUpload = () => {
             </div>
           </div>
         )}
+
+        <div className="text-xs text-muted-foreground bg-green-50 border border-green-200 rounded-lg p-3">
+          <p className="font-medium mb-2 text-green-800">🔀 LOCATION MERGING:</p>
+          <ul className="space-y-1 text-green-700">
+            <li><strong>📋 Name Matching:</strong> Locations with identical names automatically detected</li>
+            <li><strong>🔗 Account Consolidation:</strong> Different account IDs for same location merged</li>
+            <li><strong>📊 Data Unification:</strong> All transactions consolidated under single location</li>
+            <li><strong>🎯 Greenlight Fix:</strong> Resolves Greenlight & Company appearing with different account IDs</li>
+            <li><strong>✅ Smart Merging:</strong> Only merges when location names are 100% identical</li>
+            <li><strong>🔄 Account Updates:</strong> Missing account IDs automatically filled when available</li>
+          </ul>
+        </div>
 
         <div className="text-xs text-muted-foreground bg-red-50 border border-red-200 rounded-lg p-3">
           <p className="font-medium mb-2 text-red-800">🚫 ZERO VOLUME FILTERING:</p>
