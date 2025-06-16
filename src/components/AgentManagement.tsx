@@ -418,13 +418,13 @@ const AgentManagement = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Commission</p>
-                    <p className="font-semibold text-emerald-600">${agent.totalCommission.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                    <p className="font-semibold text-emerald-600">${agent.totalCommission.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
                   </div>
                 </div>
                 
                 <div>
                   <p className="text-sm text-muted-foreground">Total Volume</p>
-                  <p className="font-semibold text-emerald-600">${agent.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                  <p className="font-semibold text-emerald-600">${agent.totalRevenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
                 </div>
 
                 {agent.locationCommissions && agent.locationCommissions.length > 0 && (
@@ -453,7 +453,7 @@ const AgentManagement = () => {
                                   {loc.locationName}
                                 </TableCell>
                                 <TableCell className="text-xs p-1 text-right text-emerald-600">
-                                  ${commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  ${commissionAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                                 </TableCell>
                               </TableRow>
                             );

@@ -145,7 +145,7 @@ const LocationCommissionReport = () => {
                 <Calculator className="h-4 w-4" />
                 Total Volume
               </span>
-              <span className="font-semibold">${totalVolume.toLocaleString()}</span>
+              <span className="font-semibold">${totalVolume.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
             </div>
           </CardContent>
         </Card>
@@ -157,7 +157,7 @@ const LocationCommissionReport = () => {
                 <DollarSign className="h-4 w-4" />
                 Net Agent Payout
               </span>
-              <span className="font-semibold">${totalNetPayout.toLocaleString()}</span>
+              <span className="font-semibold">${totalNetPayout.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
             </div>
           </CardContent>
         </Card>
@@ -169,7 +169,7 @@ const LocationCommissionReport = () => {
                 <TrendingUp className="h-4 w-4" />
                 Total Commissions
               </span>
-              <span className="font-semibold">${totalCommissions.toLocaleString()}</span>
+              <span className="font-semibold">${totalCommissions.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
             </div>
           </CardContent>
         </Card>
@@ -201,7 +201,7 @@ const LocationCommissionReport = () => {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold">{summary.agentName}</h3>
                   <Badge variant="secondary" className="text-lg px-3 py-1">
-                    ${summary.totalCommission.toLocaleString()}
+                    ${summary.totalCommission.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </Badge>
                 </div>
                 
@@ -220,8 +220,8 @@ const LocationCommissionReport = () => {
                     {summary.locations.map((location) => (
                       <TableRow key={`${location.locationId}-${location.agentName}`}>
                         <TableCell className="font-medium">{location.locationName}</TableCell>
-                        <TableCell>${location.locationVolume.toLocaleString()}</TableCell>
-                        <TableCell>${location.netAgentPayout.toLocaleString()}</TableCell>
+                        <TableCell>${location.locationVolume.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
+                        <TableCell>${location.netAgentPayout.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
                         <TableCell>
                           {location.agentName === 'Merchant Hero' ? (
                             <Badge variant="secondary">Remainder</Badge>
@@ -230,10 +230,10 @@ const LocationCommissionReport = () => {
                           )}
                         </TableCell>
                         <TableCell className="font-semibold">
-                          ${location.agentPayout.toLocaleString()}
+                          ${location.agentPayout.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="font-semibold">
-                          ${location.merchantHeroPayout.toLocaleString()}
+                          ${location.merchantHeroPayout.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -276,8 +276,8 @@ const LocationCommissionReport = () => {
                 <TableRow key={index}>
                   <TableCell className="font-medium">{commission.locationName}</TableCell>
                   <TableCell>{commission.agentName}</TableCell>
-                  <TableCell>${commission.locationVolume.toLocaleString()}</TableCell>
-                  <TableCell>${commission.netAgentPayout.toLocaleString()}</TableCell>
+                  <TableCell>${commission.locationVolume.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell>${commission.netAgentPayout.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
                   <TableCell>
                     {commission.agentName === 'Merchant Hero' ? (
                       <Badge variant="secondary">Remainder</Badge>
@@ -286,10 +286,10 @@ const LocationCommissionReport = () => {
                     )}
                   </TableCell>
                   <TableCell className="font-semibold">
-                    ${commission.agentPayout.toLocaleString()}
+                    ${commission.agentPayout.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </TableCell>
                   <TableCell className="font-semibold">
-                    ${commission.merchantHeroPayout.toLocaleString()}
+                    ${commission.merchantHeroPayout.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </TableCell>
                 </TableRow>
               ))}

@@ -284,21 +284,21 @@ const Dashboard = () => {
   const dashboardStats = [
     {
       title: "Total Sales Volume",
-      value: `$${stats?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
+      value: `$${stats?.totalRevenue.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '0.00'}`,
       change: dateRange.label,
       trend: "up",
       icon: DollarSign,
     },
     {
       title: "Agent Payouts",
-      value: `$${stats?.totalAgentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
+      value: `$${stats?.totalAgentPayouts.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '0.00'}`,
       change: dateRange.label,
       trend: "up",
       icon: Users,
     },
     {
       title: "Net Income",
-      value: `$${stats?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}`,
+      value: `$${stats?.netIncome.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '0.00'}`,
       change: dateRange.label,
       trend: "up",
       icon: TrendingUp,
@@ -367,16 +367,16 @@ const Dashboard = () => {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Total Sales Volume</span>
-                <span className="font-semibold">${stats?.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                <span className="font-semibold">${stats?.totalRevenue.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '0.00'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Agent Commissions</span>
-                <span className="font-semibold text-red-600">-${stats?.totalAgentPayouts.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                <span className="font-semibold text-red-600">-${stats?.totalAgentPayouts.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '0.00'}</span>
               </div>
               <div className="border-t pt-2">
                 <div className="flex justify-between items-center">
                   <span className="font-semibold">Merchant Hero Net Income</span>
-                  <span className="font-bold text-emerald-600">${stats?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}</span>
+                  <span className="font-bold text-emerald-600">${stats?.netIncome.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '0.00'}</span>
                 </div>
               </div>
             </div>
@@ -394,10 +394,10 @@ const Dashboard = () => {
                   <div key={agent.name} className="flex justify-between items-center">
                     <div>
                       <p className="font-medium">{agent.name}</p>
-                      <p className="text-sm text-muted-foreground">Revenue: ${agent.revenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-sm text-muted-foreground">Revenue: ${agent.revenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold text-emerald-600">${agent.commission.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                      <p className="font-semibold text-emerald-600">${agent.commission.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
                       <p className="text-sm text-muted-foreground">
                         {agent.name === 'Merchant Hero' ? 'Net Income' : 'Commission'}
                       </p>
