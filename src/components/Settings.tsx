@@ -312,12 +312,12 @@ const Settings = () => {
                   </p>
                 </div>
                 <Switch
-                  checked={heroMode}
-                  onCheckedChange={handleHeroModeToggle}
+                  checked={settings.heroMode}
+                  onCheckedChange={(checked) => handleSettingChange("heroMode", checked)}
                 />
               </div>
               
-              {heroMode && (
+              {settings.heroMode && (
                 <div className="p-4 rounded-lg bg-lime-500/10 border border-lime-500/20">
                   <p className="text-sm text-lime-600 dark:text-lime-400 font-medium">
                     🚀 Hero Mode Active! You're now running with lime green power and black aesthetics.
