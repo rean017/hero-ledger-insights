@@ -426,7 +426,7 @@ const FileUpload = () => {
       }
 
       // Find exact match by name (case-insensitive)
-      const exactMatch = existingLocations?.find(loc => 
+      const exactMatch = existingLocations?.find((loc: { id: string; name: string | null; account_id: string | null }) => 
         loc.name?.toLowerCase().trim() === locationName.toLowerCase().trim()
       );
 
