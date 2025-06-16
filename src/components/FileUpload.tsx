@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,7 +68,7 @@ const FileUpload = () => {
     {
       name: 'Maverick',
       locationColumn: ['dba name', 'dba_name', 'dba'],
-      volumeColumn: ['sales amount', 'sales_amount', 'total sales'],
+      volumeColumn: ['sales amount', 'sales_amount', 'total sales', 'volume'],
       commissionColumn: ['agent net revenue', 'agent_net_revenue', 'agent net', 'net revenue'],
       detection: ['dba name', 'sales amount', 'agent net revenue']
     },
@@ -234,17 +235,26 @@ const FileUpload = () => {
     return null;
   };
 
-  // Enhanced row processing with separate debit volume handling for TRNXN
+  // ENHANCED: Row processing with detailed Greenlight debugging
   const processRow = (row: any, processorConfig: ProcessorConfig, locationColumn: string | null, volumeColumn: string | null, debitVolumeColumn: string | null, commissionColumn: string | null): ProcessedData | null => {
     try {
       let processed: ProcessedData = { rawData: row, processor: processorConfig.name };
 
-      console.log('\n=== PROCESSING ROW WITH ENHANCED GREEN PAYMENTS SUPPORT ===');
+      console.log('\n=== PROCESSING ROW WITH GREENLIGHT DEBUGGING ===');
       console.log('Processor:', processorConfig.name);
-      console.log('Location column:', locationColumn);
-      console.log('Volume column:', volumeColumn);
-      console.log('Debit volume column:', debitVolumeColumn);
-      console.log('Commission column:', commissionColumn);
+      console.log('Raw row data:', JSON.stringify(row, null, 2));
+      
+      // Check if this is a Greenlight row
+      const rowString = JSON.stringify(row).toLowerCase();
+      const isGreenlight = rowString.includes('greenlight');
+      
+      if (isGreenlight) {
+        console.log('🟢 GREENLIGHT ROW DETECTED!');
+        console.log('Full row content:', row);
+        console.log('Location column:', locationColumn);
+        console.log('Volume column:', volumeColumn);
+        console.log('Commission column:', commissionColumn);
+      }
 
       // ENHANCED: Handle the specific Green Payments CSV format with __parsed_extra
       if (row.__parsed_extra && Array.isArray(row.__parsed_extra) && processorConfig.name === 'Green Payments') {
@@ -280,7 +290,7 @@ const FileUpload = () => {
           return null;
         }
       } else {
-        // Handle other processor formats
+        // Handle other processor formats (including Maverick)
         if (!locationColumn) {
           console.log('❌ FATAL ERROR: No location column detected - cannot process row');
           return null;
@@ -302,13 +312,39 @@ const FileUpload = () => {
         processed.locationName = locationValue;
         console.log('✅ CONFIRMED: Valid location name set:', processed.locationName);
         
-        // Enhanced volume detection for TRNXN with separate columns
+        // ENHANCED: Volume detection with Greenlight debugging
         if (volumeColumn && row[volumeColumn]) {
-          const volumeValue = String(row[volumeColumn]).replace(/[,$]/g, '');
-          processed.volume = parseFloat(volumeValue) || 0;
-          console.log('✅ Set bank card volume to:', processed.volume);
+          const rawVolumeValue = row[volumeColumn];
+          console.log(`📊 RAW VOLUME VALUE from column "${volumeColumn}":`, rawVolumeValue, typeof rawVolumeValue);
+          
+          // Handle different volume formats
+          let volumeValue = String(rawVolumeValue);
+          
+          // Remove currency symbols, commas, and parentheses
+          volumeValue = volumeValue.replace(/[\$,()]/g, '');
+          
+          // Handle negative values in parentheses format
+          const isNegative = String(rawVolumeValue).includes('(') && String(rawVolumeValue).includes(')');
+          
+          const parsedVolume = parseFloat(volumeValue) || 0;
+          processed.volume = isNegative ? -parsedVolume : parsedVolume;
+          
+          if (isGreenlight) {
+            console.log('🟢 GREENLIGHT VOLUME PROCESSING:');
+            console.log('  Raw value:', rawVolumeValue);
+            console.log('  Cleaned value:', volumeValue);
+            console.log('  Is negative:', isNegative);
+            console.log('  Final volume:', processed.volume);
+          }
+          
+          console.log('✅ Set volume to:', processed.volume);
         } else {
           processed.volume = 0;
+          if (isGreenlight) {
+            console.log('🟢 GREENLIGHT WARNING: No volume column found or value is empty');
+            console.log('  Volume column:', volumeColumn);
+            console.log('  Value in volume column:', row[volumeColumn]);
+          }
         }
         
         // ENHANCED: Handle debit volume separately for TRNXN with better detection
@@ -323,11 +359,34 @@ const FileUpload = () => {
           }
         }
         
-        // Commission detection
+        // ENHANCED: Commission detection with Greenlight debugging
         if (commissionColumn && row[commissionColumn]) {
-          const commissionValue = String(row[commissionColumn]).replace(/[,$]/g, '');
-          processed.agentPayout = parseFloat(commissionValue) || 0;
+          const rawCommissionValue = row[commissionColumn];
+          console.log(`💰 RAW COMMISSION VALUE from column "${commissionColumn}":`, rawCommissionValue, typeof rawCommissionValue);
+          
+          let commissionValue = String(rawCommissionValue);
+          commissionValue = commissionValue.replace(/[\$,()]/g, '');
+          
+          const isNegative = String(rawCommissionValue).includes('(') && String(rawCommissionValue).includes(')');
+          const parsedCommission = parseFloat(commissionValue) || 0;
+          processed.agentPayout = isNegative ? -parsedCommission : parsedCommission;
+          
+          if (isGreenlight) {
+            console.log('🟢 GREENLIGHT COMMISSION PROCESSING:');
+            console.log('  Raw value:', rawCommissionValue);
+            console.log('  Cleaned value:', commissionValue);
+            console.log('  Is negative:', isNegative);
+            console.log('  Final commission:', processed.agentPayout);
+          }
+          
           console.log('✅ Set commission to:', processed.agentPayout);
+        } else {
+          processed.agentPayout = 0;
+          if (isGreenlight) {
+            console.log('🟢 GREENLIGHT WARNING: No commission column found or value is empty');
+            console.log('  Commission column:', commissionColumn);
+            console.log('  Value in commission column:', row[commissionColumn]);
+          }
         }
 
         processed.agentName = null;
@@ -341,6 +400,10 @@ const FileUpload = () => {
             break;
           }
         }
+        
+        if (isGreenlight && processed.accountId) {
+          console.log('🟢 GREENLIGHT ACCOUNT ID:', processed.accountId);
+        }
       }
 
       console.log('=== ENHANCED VALIDATION ===');
@@ -350,6 +413,15 @@ const FileUpload = () => {
       console.log('Total Volume (H + I):', (processed.volume || 0) + (processed.debitVolume || 0));
       console.log('Commission:', processed.agentPayout);
       console.log('Account ID:', processed.accountId);
+
+      if (isGreenlight) {
+        console.log('🟢 GREENLIGHT FINAL PROCESSING RESULT:');
+        console.log('  Location:', processed.locationName);
+        console.log('  Volume:', processed.volume);
+        console.log('  Commission:', processed.agentPayout);
+        console.log('  Account ID:', processed.accountId);
+        console.log('  Will be processed:', !!processed.locationName);
+      }
 
       if (!processed.locationName || !isValidLocationName(processed.locationName)) {
         console.log('❌ FINAL REJECTION: No valid location name found - ROW WILL BE SKIPPED');
@@ -565,16 +637,27 @@ const FileUpload = () => {
     }
 
     setUploading(true);
-    setUploadStatus({ status: 'processing', message: 'Processing file with enhanced Green Payments support for __parsed_extra format...', filename: file.name });
+    setUploadStatus({ status: 'processing', message: 'Processing file with ENHANCED GREENLIGHT DEBUGGING...', filename: file.name });
 
     try {
-      console.log('=== STARTING ENHANCED UPLOAD WITH GREEN PAYMENTS __PARSED_EXTRA SUPPORT ===');
+      console.log('=== STARTING ENHANCED UPLOAD WITH GREENLIGHT DEBUGGING ===');
       console.log('Selected month:', selectedMonth);
       console.log('File name:', file.name);
       
       const rawData = await parseFile(file);
       console.log('Parsed data length:', rawData.length);
       console.log('Parsed data sample (first 3 rows):', rawData.slice(0, 3));
+
+      // Look for Greenlight rows in the raw data
+      const greenlightRows = rawData.filter(row => {
+        const rowString = JSON.stringify(row).toLowerCase();
+        return rowString.includes('greenlight');
+      });
+      
+      console.log('🟢 GREENLIGHT ROWS FOUND:', greenlightRows.length);
+      if (greenlightRows.length > 0) {
+        console.log('🟢 GREENLIGHT RAW DATA:', greenlightRows);
+      }
 
       if (rawData.length === 0) {
         throw new Error('No data found in file');
@@ -591,7 +674,7 @@ const FileUpload = () => {
 
       console.log(`=== PROCESSOR DETECTED: ${detectedProcessor.name} (${(confidence * 100).toFixed(1)}% confidence) ===`);
       
-      // Enhanced column mapping with Green Payments special handling
+      // Enhanced column mapping with Greenlight debugging
       let locationColumn = null;
       let volumeColumn = null;
       let debitVolumeColumn = null;
@@ -623,7 +706,7 @@ const FileUpload = () => {
 
       // FIXED: Use the first day of the selected month as the transaction date
       const [year, month] = selectedMonth.split('-');
-      const transactionDate = `${selectedMonth}-01`; // Always use the 1st of the selected month
+      const transactionDate = `${selectedMonth}-01`;
       const lastDayOfMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
       const endDate = `${selectedMonth}-${lastDayOfMonth}`;
 
@@ -663,16 +746,30 @@ const FileUpload = () => {
       let errorCount = 0;
       let locationsCreated = 0;
       let merchantHeroAssignments = 0;
+      let greenlightProcessed = 0;
       const errors: any[] = [];
 
-      console.log('=== PROCESSING ROWS WITH ENHANCED GREEN PAYMENTS SUPPORT ===');
+      console.log('=== PROCESSING ROWS WITH ENHANCED GREENLIGHT DEBUGGING ===');
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
-        console.log(`\n--- Processing row ${i + 1} with ${detectedProcessor.name} format ---`);
+        const rowString = JSON.stringify(row).toLowerCase();
+        const isGreenlight = rowString.includes('greenlight');
+        
+        if (isGreenlight) {
+          console.log(`\n🟢 PROCESSING GREENLIGHT ROW ${i + 1} of ${rawData.length}`);
+        } else {
+          console.log(`\n--- Processing row ${i + 1} with ${detectedProcessor.name} format ---`);
+        }
+        
         const processedData = processRow(row, detectedProcessor, locationColumn, volumeColumn, debitVolumeColumn, commissionColumn);
 
         if (processedData && processedData.locationName) {
-          console.log('✅ APPROVED: Valid location name for row', i + 1, ':', processedData.locationName);
+          if (isGreenlight) {
+            console.log('🟢 GREENLIGHT ROW APPROVED FOR PROCESSING:', processedData.locationName);
+            greenlightProcessed++;
+          } else {
+            console.log('✅ APPROVED: Valid location name for row', i + 1, ':', processedData.locationName);
+          }
 
           try {
             let locationId = null;
@@ -690,15 +787,17 @@ const FileUpload = () => {
                   locationsCreated++;
                 }
 
-                // FIXED: Calculate total volume correctly for TRNXN (Bank Card + Debit Card) - This is the key fix!
                 const bankCardVolume = processedData.volume || 0;
                 const debitCardVolume = processedData.debitVolume || 0;
                 const totalVolume = bankCardVolume + debitCardVolume;
                 
-                console.log(`TOTAL VOLUME CALCULATION for ${processedData.locationName}:`);
-                console.log(`  Bank Card Volume (H): ${bankCardVolume}`);
-                console.log(`  Debit Card Volume (I): ${debitCardVolume}`);
-                console.log(`  TOTAL VOLUME (H + I): ${totalVolume}`);
+                if (isGreenlight) {
+                  console.log('🟢 GREENLIGHT VOLUME CALCULATION:');
+                  console.log(`  Bank Card Volume: ${bankCardVolume}`);
+                  console.log(`  Debit Card Volume: ${debitCardVolume}`);
+                  console.log(`  TOTAL VOLUME: ${totalVolume}`);
+                  console.log(`  Commission: ${processedData.agentPayout}`);
+                }
                 
                 if (totalVolume > 0 && processedData.agentPayout) {
                   await createMerchantHeroAssignment(existingLocationId, totalVolume, processedData.agentPayout);
@@ -714,14 +813,14 @@ const FileUpload = () => {
               agent_payout: processedData.agentPayout || 0,
               agent_name: null,
               account_id: processedData.accountId,
-              transaction_date: transactionDate, // CRITICAL: Use the selected month's date
+              transaction_date: transactionDate,
               raw_data: processedData.rawData
             };
 
-            console.log('=== TRANSACTION DATE ASSIGNMENT ===');
-            console.log('Selected month from UI:', selectedMonth);
-            console.log('Transaction date being stored:', transactionDate);
-            console.log('This ensures data appears when filtering by:', selectedMonth);
+            if (isGreenlight) {
+              console.log('🟢 GREENLIGHT TRANSACTION DATA TO INSERT:');
+              console.log(JSON.stringify(transactionData, null, 2));
+            }
 
             const { error } = await supabase
               .from('transactions')
@@ -729,26 +828,42 @@ const FileUpload = () => {
 
             if (error) {
               console.error('❌ Database insertion error for row', i + 1, ':', error);
+              if (isGreenlight) {
+                console.log('🟢 GREENLIGHT DATABASE ERROR:', error);
+              }
               errorCount++;
               errors.push({ row: i + 1, error: error.message });
             } else {
               successCount++;
-              console.log(`✅ SUCCESS: Row ${i + 1} processed with location name: ${processedData.locationName} for month: ${selectedMonth}`);
+              if (isGreenlight) {
+                console.log(`🟢 GREENLIGHT SUCCESS: Row ${i + 1} processed successfully!`);
+              } else {
+                console.log(`✅ SUCCESS: Row ${i + 1} processed with location name: ${processedData.locationName} for month: ${selectedMonth}`);
+              }
             }
           } catch (error) {
             console.error('❌ Error processing row', i + 1, ':', error);
+            if (isGreenlight) {
+              console.log('🟢 GREENLIGHT PROCESSING ERROR:', error);
+            }
             errorCount++;
             errors.push({ row: i + 1, error: String(error) });
           }
         } else {
-          console.log(`❌ REJECTED: Row ${i + 1} - no valid location name found`);
+          if (isGreenlight) {
+            console.log(`🟢 GREENLIGHT ROW ${i + 1} REJECTED - no valid location name found`);
+          } else {
+            console.log(`❌ REJECTED: Row ${i + 1} - no valid location name found`);
+          }
           errorCount++;
           errors.push({ row: i + 1, error: 'No valid location name found' });
         }
       }
 
-      console.log('=== ENHANCED UPLOAD SUMMARY ===');
+      console.log('=== ENHANCED UPLOAD SUMMARY WITH GREENLIGHT TRACKING ===');
       console.log('Processor:', detectedProcessor.name);
+      console.log('Greenlight rows found in file:', greenlightRows.length);
+      console.log('Greenlight rows processed successfully:', greenlightProcessed);
       console.log('Selected month for data:', selectedMonth);
       console.log('Transaction date assigned:', transactionDate);
       console.log('Success count:', successCount);
@@ -780,7 +895,7 @@ const FileUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['numeric-locations'] });
 
       const monthName = monthOptions.find(m => m.value === selectedMonth)?.label;
-      const successMessage = `${detectedProcessor.name} upload completed with enhanced Green Payments support! Processed ${successCount} rows for ${monthName}. ${errorCount} rows rejected for missing location names. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} ${detectedProcessor.name === 'Green Payments' ? ' ✅ Green Payments __parsed_extra format processed successfully!' : ''} All data is tagged for ${monthName} and will appear when you filter by this month.`;
+      const successMessage = `${detectedProcessor.name} upload completed with enhanced Greenlight debugging! Found ${greenlightRows.length} Greenlight rows in file, processed ${greenlightProcessed} successfully. Total: ${successCount} rows processed for ${monthName}. ${errorCount} rows had issues. ${locationsCreated > 0 ? ` Created ${locationsCreated} new locations.` : ''} ${merchantHeroAssignments > 0 ? ` Automatically assigned Merchant Hero to ${merchantHeroAssignments} locations with calculated BPS rates.` : ''} All data is tagged for ${monthName}.`;
 
       setUploadStatus({
         status: errorCount === rawData.length ? 'error' : 'success',
@@ -820,7 +935,7 @@ const FileUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5" />
-          Smart Processor Detection Upload
+          Smart Processor Detection Upload (Enhanced Greenlight Debugging)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -858,7 +973,7 @@ const FileUpload = () => {
                     Data will be uploaded for: {monthOptions.find(m => m.value === selectedMonth)?.label}
                   </p>
                   <p className="text-xs text-green-600 mt-1 font-medium">
-                    <strong>AUTO-DETECT:</strong> Maverick, Green Payments, TRNXN, or SignaPay formats
+                    <strong>🟢 GREENLIGHT DEBUGGING:</strong> Enhanced logging for Greenlight & Company data
                   </p>
                   <p className="text-xs text-blue-600 mt-1 font-medium">
                     <strong>AUTO-ASSIGN:</strong> Merchant Hero with calculated BPS rates
@@ -901,42 +1016,23 @@ const FileUpload = () => {
         )}
 
         <div className="text-xs text-muted-foreground bg-green-50 border border-green-200 rounded-lg p-3">
-          <p className="font-medium mb-2 text-green-800">✅ Supported Upload Formats:</p>
+          <p className="font-medium mb-2 text-green-800">🟢 GREENLIGHT DEBUGGING ACTIVE:</p>
           <ul className="space-y-1 text-green-700">
-            <li><strong>Maverick:</strong> DBA Name, Sales Amount, Agent Net Revenue</li>
-            <li><strong>Green Payments:</strong> Merchant, Sales Amount, Agent Net (including __parsed_extra format)</li>
-            <li><strong>TRNXN:</strong> DBA, Bank Card Volume + Debit Card Volume, Net Commission</li>
-            <li><strong>SignaPay:</strong> DBA, Volume, Net</li>
+            <li><strong>🔍 Detection:</strong> Automatically finds Greenlight & Company rows</li>
+            <li><strong>📊 Volume Tracking:</strong> Enhanced logging for volume extraction</li>
+            <li><strong>💰 Commission Tracking:</strong> Detailed commission processing logs</li>
+            <li><strong>📋 Account ID Mapping:</strong> Tracks account ID assignments</li>
           </ul>
-          <p className="mt-2 text-sm font-medium text-green-800">
-            <strong>🔍 AUTOMATIC DETECTION:</strong> System will detect your processor type automatically
-          </p>
-          <p className="mt-1 text-sm font-medium text-blue-800">
-            <strong>🚀 GREEN PAYMENTS ENHANCED:</strong> Now handles special __parsed_extra CSV format!
-          </p>
         </div>
 
         <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <p className="font-medium mb-2 text-blue-800">🤖 MERCHANT HERO AUTO-ASSIGNMENT:</p>
+          <p className="font-medium mb-2 text-blue-800">✅ Supported Upload Formats:</p>
           <ul className="space-y-1 text-blue-700">
-            <li><strong>✅ AUTO-CALCULATE:</strong> BPS rates based on Volume vs Net Commission</li>
-            <li><strong>✅ AUTO-ASSIGN:</strong> Merchant Hero as agent to every location</li>
-            <li><strong>✅ AUTO-UPDATE:</strong> Existing assignments with new calculated rates</li>
-            <li><strong>✅ FORMULA:</strong> (Net Commission ÷ Volume) × 10,000 = BPS Rate</li>
+            <li><strong>Maverick:</strong> DBA Name, Sales Amount, Agent Net Revenue</li>
+            <li><strong>Green Payments:</strong> Merchant, Sales Amount, Agent Net</li>
+            <li><strong>TRNXN:</strong> DBA, Bank Card Volume + Debit Card Volume, Net Commission</li>
+            <li><strong>SignaPay:</strong> DBA, Volume, Net</li>
           </ul>
-        </div>
-
-        <div className="text-xs text-muted-foreground bg-gray-50 border border-gray-200 rounded-lg p-3">
-          <p className="font-medium mb-2 text-gray-800">📝 Location Name Requirements:</p>
-          <ul className="space-y-1 text-gray-700">
-            <li><strong>✅ ACCEPTS:</strong> Any non-empty location name or identifier</li>
-            <li><strong>✅ ACCEPTS:</strong> Numeric account IDs like "100336", "12345"</li>
-            <li><strong>✅ ACCEPTS:</strong> Business names like "Joe's Restaurant"</li>
-            <li><strong>❌ REJECTS ONLY:</strong> Empty or null values</li>
-          </ul>
-          <p className="mt-2 text-sm font-medium text-gray-800">
-            <strong>✅ ALL VALID LOCATION IDENTIFIERS ARE NOW ACCEPTED</strong>
-          </p>
         </div>
       </CardContent>
     </Card>
