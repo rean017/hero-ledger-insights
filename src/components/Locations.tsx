@@ -81,6 +81,33 @@ const Locations = () => {
     }
   });
 
+  const handleToggleFranchise = async (location: Location) => {
+    try {
+      const newFranchiseStatus = !location.is_franchise;
+      
+      const { error } = await supabase
+        .from('locations')
+        .update({ is_franchise: newFranchiseStatus })
+        .eq('id', location.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Location ${newFranchiseStatus ? 'marked as' : 'unmarked as'} franchise`,
+      });
+
+      refetchLocations();
+    } catch (error: any) {
+      console.error('Error toggling franchise status:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update franchise status",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleAssignAgent = async () => {
     if (!selectedAgent || !commissionRate || !selectedLocation) {
       toast({
@@ -392,14 +419,24 @@ const Locations = () => {
                       </p>
                     )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEditLocation(location)}
-                    className="flex-shrink-0"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant={location.is_franchise ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handleToggleFranchise(location)}
+                      className={`flex-shrink-0 ${location.is_franchise ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                    >
+                      <Building2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEditLocation(location)}
+                      className="flex-shrink-0"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               
