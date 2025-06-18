@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -75,13 +74,15 @@ const UnifiedLocations = () => {
   }, [timeFrame, customDateRange]);
 
   // Fetch monthly P&L data for the selected timeframe
-  const { data: monthlyData } = useMonthlyData(timeFrame, customDateRange, dateRange);
+  const { data: monthlyData, isLoading: isMonthlyDataLoading } = useMonthlyData(timeFrame, customDateRange, dateRange);
 
   // Debug: Log the timeframe and date range
   console.log('🗓️ UnifiedLocations: Current timeframe selected:', timeFrame);
   console.log('🗓️ UnifiedLocations: Date range for timeframe:', dateRange);
   console.log('🗓️ UnifiedLocations: Available timeframes:', timeFrames);
   console.log('🗓️ UnifiedLocations: Custom date range:', customDateRange);
+  console.log('📊 UnifiedLocations: Monthly data loading:', isMonthlyDataLoading);
+  console.log('📊 UnifiedLocations: Monthly data result:', monthlyData);
 
   // Run Merchant Hero setup on component mount
   useEffect(() => {
@@ -246,7 +247,8 @@ const UnifiedLocations = () => {
           commissions: [] // We'll calculate these separately if needed
         } as LocationWithExtras;
       });
-    }
+    },
+    enabled: !isMonthlyDataLoading // Wait for monthly data to load first
   });
 
   const handleTimeFrameChange = (value: string) => {
@@ -270,7 +272,7 @@ const UnifiedLocations = () => {
     location.agentNames?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
-  if (isLoading) {
+  if (isLoading || isMonthlyDataLoading) {
     return (
       <div className="space-y-6">
         <div>
@@ -278,7 +280,7 @@ const UnifiedLocations = () => {
           <p className="text-muted-foreground">Manage locations, accounts, and agent assignments</p>
         </div>
         <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading locations...</p>
+          <p className="text-muted-foreground">Loading locations and data...</p>
         </div>
       </div>
     );
@@ -292,10 +294,16 @@ const UnifiedLocations = () => {
           <p className="text-muted-foreground">Manage locations, accounts, and agent assignments</p>
           {monthlyData && monthlyData.length > 0 && (
             <p className="text-sm text-emerald-600 mt-1">
-              📊 Showing estimated monthly volume data for {timeFrame.toUpperCase()}
+              📊 Showing monthly volume data for {timeFrame.toUpperCase()} ({monthlyData.length} records)
+            </p>
+          )}
+          {(!monthlyData || monthlyData.length === 0) && (
+            <p className="text-sm text-orange-600 mt-1">
+              ⚠️ No monthly volume data found for {timeFrame.toUpperCase()}
             </p>
           )}
         </div>
+        
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button>
