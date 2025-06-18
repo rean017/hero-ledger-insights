@@ -175,17 +175,19 @@ const FileUpload = () => {
       
       // Use the selected upload month instead of trying to parse dates from the file
       let transactionDate = null;
-      let month = uploadMonth;
 
+      // Use the upload month to create a transaction date (first day of the month)
+      if (uploadMonth) {
+        transactionDate = `${uploadMonth}-01`;
+      }
       // If no upload month is selected, fall back to parsing the date from the file
-      if (!uploadMonth && dateValue) {
+      else if (dateValue) {
         try {
           // Handle Excel date serial numbers
           if (typeof dateValue === 'number') {
             const excelEpoch = new Date(1899, 11, 30);
             const date = new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
             transactionDate = date.toISOString().split('T')[0];
-            month = getMonthString(date);
           } 
           // Handle string dates
           else if (typeof dateValue === 'string') {
@@ -193,15 +195,11 @@ const FileUpload = () => {
             const date = new Date(dateValue);
             if (!isNaN(date.getTime())) {
               transactionDate = date.toISOString().split('T')[0];
-              month = getMonthString(date);
             }
           }
         } catch (error) {
           console.error('Error parsing date:', dateValue, error);
         }
-      } else if (uploadMonth) {
-        // Use the upload month to create a transaction date (first day of the month)
-        transactionDate = `${uploadMonth}-01`;
       }
       
       return {
@@ -210,10 +208,9 @@ const FileUpload = () => {
         volume: isNaN(volume) ? 0 : volume,
         debit_volume: isNaN(debitVolume) ? 0 : debitVolume,
         agent_payout: isNaN(agentPayout) ? 0 : agentPayout,
-        transaction_date: transactionDate,
-        month
+        transaction_date: transactionDate
       };
-    }).filter(row => row.month !== null); // Filter out rows without a valid month
+    }).filter(row => row.transaction_date !== null); // Filter out rows without a valid transaction date
   };
 
   const uploadTransactions = async () => {
