@@ -63,56 +63,81 @@ const normalizeLocationName = (name: string): string => {
 
 // Enhanced function to find matching location for a transaction
 const findMatchingLocation = (transaction: Transaction, locations: Location[]): Location | null => {
+  console.log(`🔍 MAVERICK DEBUG: Looking for location match for transaction:`, {
+    account_id: transaction.account_id,
+    location_id: transaction.location_id,
+    volume: transaction.volume,
+    debit_volume: transaction.debit_volume
+  });
+
   // First check if transaction has a direct location_id (from new upload process)
   if (transaction.location_id) {
     const directMatch = locations.find(loc => loc.id === transaction.location_id);
     if (directMatch) {
-      console.log(`✅ Direct location match found: ${directMatch.name} (ID: ${directMatch.id})`);
+      console.log(`✅ MAVERICK DEBUG: Direct location match found: ${directMatch.name} (ID: ${directMatch.id})`);
       return directMatch;
+    } else {
+      console.log(`❌ MAVERICK DEBUG: No direct location match for location_id: ${transaction.location_id}`);
     }
   }
 
   // Fall back to account_id matching if no direct location_id
   const transactionAccountId = transaction.account_id;
   if (!transactionAccountId) {
-    console.log(`⚠️ No account_id or location_id for transaction`);
+    console.log(`⚠️ MAVERICK DEBUG: No account_id or location_id for transaction - SKIPPING`);
     return null;
   }
+  
+  console.log(`🔍 MAVERICK DEBUG: Searching for account_id match: "${transactionAccountId}"`);
+  console.log(`📋 MAVERICK DEBUG: Available locations:`, locations.map(l => ({
+    id: l.id,
+    name: l.name,
+    account_id: l.account_id
+  })));
   
   // First try exact match
   let matchingLocation = locations.find(loc => loc.account_id === transactionAccountId);
   if (matchingLocation) {
-    console.log(`✅ Exact account_id match: ${matchingLocation.name} (${matchingLocation.account_id})`);
+    console.log(`✅ MAVERICK DEBUG: Exact account_id match: ${matchingLocation.name} (${matchingLocation.account_id})`);
     return matchingLocation;
   }
   
   // Try normalized matching
   const normalizedTransactionId = normalizeAccountId(transactionAccountId);
+  console.log(`🔄 MAVERICK DEBUG: Trying normalized matching for: "${normalizedTransactionId}"`);
+  
   matchingLocation = locations.find(loc => {
     if (!loc.account_id) return false;
     const normalizedLocationId = normalizeAccountId(loc.account_id);
-    return normalizedLocationId === normalizedTransactionId;
+    const matches = normalizedLocationId === normalizedTransactionId;
+    if (matches) {
+      console.log(`✅ MAVERICK DEBUG: Normalized match found: ${loc.name} (${loc.account_id} -> ${normalizedLocationId})`);
+    }
+    return matches;
   });
   
   if (matchingLocation) {
-    console.log(`✅ Normalized account_id match: ${matchingLocation.name}`);
     return matchingLocation;
   }
   
   // Try partial matching
+  console.log(`🔄 MAVERICK DEBUG: Trying partial matching...`);
   matchingLocation = locations.find(loc => {
     if (!loc.account_id) return false;
     const normalizedLocationId = normalizeAccountId(loc.account_id);
-    return normalizedLocationId.includes(normalizedTransactionId) || 
+    const partialMatch = normalizedLocationId.includes(normalizedTransactionId) || 
            normalizedTransactionId.includes(normalizedLocationId);
+    if (partialMatch) {
+      console.log(`✅ MAVERICK DEBUG: Partial match found: ${loc.name} (${loc.account_id} -> ${normalizedLocationId})`);
+    }
+    return partialMatch;
   });
   
   if (matchingLocation) {
-    console.log(`✅ Partial account_id match: ${matchingLocation.name}`);
     return matchingLocation;
   }
 
-  console.log(`❌ No location found for account ID: "${transactionAccountId}"`);
+  console.log(`❌ MAVERICK DEBUG: NO LOCATION FOUND for account ID: "${transactionAccountId}"`);
   return null;
 };
 
@@ -121,19 +146,26 @@ export const calculateLocationCommissions = (
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('🚨 === ENHANCED LOCATION CONSOLIDATION ===');
-  console.log('📊 INPUT DATA:');
+  console.log('🚨 === MAVERICK VOLUME DEBUG SESSION ===');
+  console.log('📊 MAVERICK DEBUG INPUT DATA:');
   console.log('- Transactions:', transactions.length);
   console.log('- Assignments:', assignments.length);
   console.log('- Locations:', locations.length);
   
   // Debug transaction data structure
-  console.log('🔍 Sample transaction structure:', transactions.slice(0, 3).map(t => ({
+  console.log('🔍 MAVERICK DEBUG: First 5 transactions:', transactions.slice(0, 5).map(t => ({
     account_id: t.account_id,
     location_id: t.location_id,
     volume: t.volume,
     debit_volume: t.debit_volume,
-    agent_payout: t.agent_payout
+    agent_payout: t.agent_payout,
+    transaction_date: t.transaction_date
+  })));
+
+  console.log('🔍 MAVERICK DEBUG: First 5 locations:', locations.slice(0, 5).map(l => ({
+    id: l.id,
+    name: l.name,
+    account_id: l.account_id
   })));
 
   // Step 1: Group locations by normalized name to identify duplicates
@@ -147,7 +179,7 @@ export const calculateLocationCommissions = (
   });
 
   // Step 2: Find and log duplicate location groups
-  console.log('🔍 DUPLICATE LOCATION ANALYSIS:');
+  console.log('🔍 MAVERICK DEBUG: DUPLICATE LOCATION ANALYSIS:');
   locationNameGroups.forEach((locationGroup, normalizedName) => {
     if (locationGroup.length > 1) {
       console.log(`🔄 Found ${locationGroup.length} locations with name "${normalizedName}":`, 
@@ -160,26 +192,40 @@ export const calculateLocationCommissions = (
     const bankCardVolume = Number(transaction.volume) || 0;
     const debitCardVolume = Number(transaction.debit_volume) || 0;
     const totalVolume = bankCardVolume + debitCardVolume;
-    return totalVolume > 0;
+    const hasVolume = totalVolume > 0;
+    
+    if (!hasVolume) {
+      console.log(`⚠️ MAVERICK DEBUG: Filtering out zero-volume transaction:`, {
+        account_id: transaction.account_id,
+        volume: transaction.volume,
+        debit_volume: transaction.debit_volume,
+        totalVolume
+      });
+    }
+    
+    return hasVolume;
   });
 
-  console.log(`📊 VOLUME FILTERING: ${transactions.length} total → ${nonZeroTransactions.length} with volume > 0`);
+  console.log(`📊 MAVERICK DEBUG: VOLUME FILTERING: ${transactions.length} total → ${nonZeroTransactions.length} with volume > 0`);
 
   // Step 4: Group transactions by NORMALIZED location name using enhanced matching
   const locationDataByName = new Map<string, LocationData>();
   let matchedTransactions = 0;
   let unmatchedTransactions = 0;
   
-  nonZeroTransactions.forEach(transaction => {
+  nonZeroTransactions.forEach((transaction, index) => {
+    console.log(`\n🔍 MAVERICK DEBUG: Processing transaction ${index + 1}/${nonZeroTransactions.length}`);
+    
     // Use enhanced matching function
     const matchingLocation = findMatchingLocation(transaction, locations);
     
     if (!matchingLocation) {
       unmatchedTransactions++;
-      console.log(`⚠️ No location found for transaction:`, {
+      console.log(`❌ MAVERICK DEBUG: No location found for transaction:`, {
         account_id: transaction.account_id,
         location_id: transaction.location_id,
-        volume: transaction.volume
+        volume: transaction.volume,
+        debit_volume: transaction.debit_volume
       });
       return;
     }
@@ -190,6 +236,7 @@ export const calculateLocationCommissions = (
     const normalizedLocationName = normalizeLocationName(matchingLocation.name);
     
     if (!locationDataByName.has(normalizedLocationName)) {
+      console.log(`🆕 MAVERICK DEBUG: Creating new location data entry for: ${normalizedLocationName}`);
       locationDataByName.set(normalizedLocationName, {
         totalVolume: 0,
         totalAgentPayout: 0,
@@ -217,10 +264,15 @@ export const calculateLocationCommissions = (
     const agentPayout = Number(transaction.agent_payout) || 0;
     locationData.totalAgentPayout += agentPayout;
     
-    console.log(`💰 MATCHED TRANSACTION: ${matchingLocation.name} → Volume: $${totalTransactionVolume}, Running Total: $${locationData.totalVolume}`);
+    console.log(`💰 MAVERICK DEBUG: MATCHED TRANSACTION: ${matchingLocation.name} → Volume: $${totalTransactionVolume}, Running Total: $${locationData.totalVolume}`);
   });
 
-  console.log(`📊 MATCHING RESULTS: ${matchedTransactions} matched, ${unmatchedTransactions} unmatched`);
+  console.log(`\n📊 MAVERICK DEBUG: FINAL MATCHING RESULTS: ${matchedTransactions} matched, ${unmatchedTransactions} unmatched`);
+  console.log(`📊 MAVERICK DEBUG: Location data summary:`, Array.from(locationDataByName.entries()).map(([name, data]) => ({
+    name,
+    totalVolume: data.totalVolume,
+    transactionCount: data.transactionCount
+  })));
 
   const commissions: LocationCommission[] = [];
 
@@ -229,7 +281,7 @@ export const calculateLocationCommissions = (
     // Get the consolidated data for this location name
     const locationData = locationDataByName.get(normalizedName);
     if (!locationData || locationData.totalVolume === 0) {
-      console.log(`⚠️ No transaction data for location group: ${normalizedName}`);
+      console.log(`⚠️ MAVERICK DEBUG: No transaction data for location group: ${normalizedName}`);
       return;
     }
 
@@ -242,11 +294,11 @@ export const calculateLocationCommissions = (
     );
 
     if (allAssignments.length === 0) {
-      console.log(`⚠️ No assignments for location group: ${normalizedName}`);
+      console.log(`⚠️ MAVERICK DEBUG: No assignments for location group: ${normalizedName}`);
       return;
     }
 
-    console.log(`💼 Processing consolidated location: ${primaryLocation.name} with volume: $${locationData.totalVolume.toLocaleString()}`);
+    console.log(`💼 MAVERICK DEBUG: Processing consolidated location: ${primaryLocation.name} with volume: $${locationData.totalVolume.toLocaleString()}`);
 
     // Calculate commissions using consolidated data
     const otherAgents = allAssignments.filter(a => a.agent_name !== 'Merchant Hero');
@@ -260,7 +312,7 @@ export const calculateLocationCommissions = (
       const agentPayout = locationData.totalVolume * bpsDecimal;
       totalCommissionsPaid += agentPayout;
       
-      console.log(`💰 Agent calculation for ${assignment.agent_name}:`, {
+      console.log(`💰 MAVERICK DEBUG: Agent calculation for ${assignment.agent_name}:`, {
         locationName: primaryLocation.name,
         totalVolume: locationData.totalVolume,
         bpsRate: Math.round(assignment.commission_rate * 100),
@@ -287,7 +339,7 @@ export const calculateLocationCommissions = (
         ? Math.round((merchantHeroPayout / locationData.totalVolume) * 10000)
         : 0;
       
-      console.log(`💰 Merchant Hero calculation:`, {
+      console.log(`💰 MAVERICK DEBUG: Merchant Hero calculation:`, {
         locationName: primaryLocation.name,
         netAgentPayout: locationData.totalAgentPayout,
         totalCommissionsPaid,
@@ -309,8 +361,8 @@ export const calculateLocationCommissions = (
     }
   });
 
-  console.log('🚨 === ENHANCED LOCATION CONSOLIDATION END ===');
-  console.log(`🎉 Total commissions calculated: ${commissions.length}`);
+  console.log('🚨 === MAVERICK VOLUME DEBUG SESSION END ===');
+  console.log(`🎉 MAVERICK DEBUG: Total commissions calculated: ${commissions.length}`);
   
   return commissions;
 };
