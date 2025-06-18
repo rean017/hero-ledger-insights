@@ -59,6 +59,35 @@ const UnifiedLocations = () => {
   
   const { toast } = useToast();
 
+  // Fetch monthly P&L data for the selected timeframe
+  const { data: monthlyData } = useQuery({
+    queryKey: ['monthly-pl-data', timeFrame, customDateRange],
+    queryFn: async () => {
+      if (!dateRange) {
+        console.log('📊 UnifiedLocations: No date range available, skipping P&L data fetch');
+        return [];
+      }
+
+      console.log('📊 UnifiedLocations: Fetching P&L data for date range:', dateRange);
+
+      const { data, error } = await supabase
+        .from('pl_data')
+        .select('*')
+        .gte('month', dateRange.fromFormatted)
+        .lte('month', dateRange.toFormatted)
+        .order('month');
+
+      if (error) {
+        console.error('📊 UnifiedLocations: Error fetching P&L data:', error);
+        throw error;
+      }
+
+      console.log('📊 UnifiedLocations: P&L data fetched:', data?.length || 0, 'records');
+      return data || [];
+    },
+    enabled: !!dateRange
+  });
+
   // Get date range - use custom if selected and available, otherwise use timeframe
   const dateRange = React.useMemo(() => {
     if (timeFrame === 'custom' && customDateRange) {
