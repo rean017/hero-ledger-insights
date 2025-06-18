@@ -1,4 +1,3 @@
-
 import { convertToDecimalRate } from './bpsCalculations';
 
 export interface LocationCommission {
@@ -34,6 +33,7 @@ interface Transaction {
   debit_volume: number;
   agent_payout: number;
   transaction_date?: string;
+  location_id?: string; // Add this field for direct location matching
 }
 
 interface Assignment {
@@ -61,13 +61,30 @@ const normalizeLocationName = (name: string): string => {
   return name.toLowerCase().trim().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ');
 };
 
-// Helper function to find matching location for a transaction
-const findMatchingLocation = (transactionAccountId: string, locations: Location[]): Location | null => {
-  if (!transactionAccountId) return null;
+// Enhanced function to find matching location for a transaction
+const findMatchingLocation = (transaction: Transaction, locations: Location[]): Location | null => {
+  // First check if transaction has a direct location_id (from new upload process)
+  if (transaction.location_id) {
+    const directMatch = locations.find(loc => loc.id === transaction.location_id);
+    if (directMatch) {
+      console.log(`✅ Direct location match found: ${directMatch.name} (ID: ${directMatch.id})`);
+      return directMatch;
+    }
+  }
+
+  // Fall back to account_id matching if no direct location_id
+  const transactionAccountId = transaction.account_id;
+  if (!transactionAccountId) {
+    console.log(`⚠️ No account_id or location_id for transaction`);
+    return null;
+  }
   
   // First try exact match
   let matchingLocation = locations.find(loc => loc.account_id === transactionAccountId);
-  if (matchingLocation) return matchingLocation;
+  if (matchingLocation) {
+    console.log(`✅ Exact account_id match: ${matchingLocation.name} (${matchingLocation.account_id})`);
+    return matchingLocation;
+  }
   
   // Try normalized matching
   const normalizedTransactionId = normalizeAccountId(transactionAccountId);
@@ -77,7 +94,10 @@ const findMatchingLocation = (transactionAccountId: string, locations: Location[
     return normalizedLocationId === normalizedTransactionId;
   });
   
-  if (matchingLocation) return matchingLocation;
+  if (matchingLocation) {
+    console.log(`✅ Normalized account_id match: ${matchingLocation.name}`);
+    return matchingLocation;
+  }
   
   // Try partial matching
   matchingLocation = locations.find(loc => {
@@ -87,7 +107,13 @@ const findMatchingLocation = (transactionAccountId: string, locations: Location[
            normalizedTransactionId.includes(normalizedLocationId);
   });
   
-  return matchingLocation || null;
+  if (matchingLocation) {
+    console.log(`✅ Partial account_id match: ${matchingLocation.name}`);
+    return matchingLocation;
+  }
+
+  console.log(`❌ No location found for account ID: "${transactionAccountId}"`);
+  return null;
 };
 
 export const calculateLocationCommissions = (
@@ -95,12 +121,21 @@ export const calculateLocationCommissions = (
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('🚨 === DUPLICATE LOCATION CONSOLIDATION ===');
+  console.log('🚨 === ENHANCED LOCATION CONSOLIDATION ===');
   console.log('📊 INPUT DATA:');
   console.log('- Transactions:', transactions.length);
   console.log('- Assignments:', assignments.length);
   console.log('- Locations:', locations.length);
   
+  // Debug transaction data structure
+  console.log('🔍 Sample transaction structure:', transactions.slice(0, 3).map(t => ({
+    account_id: t.account_id,
+    location_id: t.location_id,
+    volume: t.volume,
+    debit_volume: t.debit_volume,
+    agent_payout: t.agent_payout
+  })));
+
   // Step 1: Group locations by normalized name to identify duplicates
   const locationNameGroups = new Map<string, Location[]>();
   locations.forEach(location => {
@@ -130,20 +165,26 @@ export const calculateLocationCommissions = (
 
   console.log(`📊 VOLUME FILTERING: ${transactions.length} total → ${nonZeroTransactions.length} with volume > 0`);
 
-  // Step 4: Group transactions by NORMALIZED location name instead of account_id
+  // Step 4: Group transactions by NORMALIZED location name using enhanced matching
   const locationDataByName = new Map<string, LocationData>();
+  let matchedTransactions = 0;
+  let unmatchedTransactions = 0;
   
   nonZeroTransactions.forEach(transaction => {
-    const accountId = transaction.account_id;
-    if (!accountId) return;
-    
-    // Find matching location using improved matching function
-    const matchingLocation = findMatchingLocation(accountId, locations);
+    // Use enhanced matching function
+    const matchingLocation = findMatchingLocation(transaction, locations);
     
     if (!matchingLocation) {
-      console.log(`⚠️ No location found for account ID: "${accountId}"`);
+      unmatchedTransactions++;
+      console.log(`⚠️ No location found for transaction:`, {
+        account_id: transaction.account_id,
+        location_id: transaction.location_id,
+        volume: transaction.volume
+      });
       return;
     }
+    
+    matchedTransactions++;
     
     // Use NORMALIZED location name as the key to consolidate duplicates
     const normalizedLocationName = normalizeLocationName(matchingLocation.name);
@@ -169,28 +210,21 @@ export const calculateLocationCommissions = (
     locationData.bankCardTotal += bankCardVolume;
     locationData.debitCardTotal += debitCardVolume;
     locationData.transactionCount += 1;
-    locationData.accountIds.add(accountId);
+    if (transaction.account_id) {
+      locationData.accountIds.add(transaction.account_id);
+    }
     
     const agentPayout = Number(transaction.agent_payout) || 0;
     locationData.totalAgentPayout += agentPayout;
     
-    console.log(`💰 CONSOLIDATED TRANSACTION: Account "${accountId}" → Location "${matchingLocation.name}" (normalized: "${normalizedLocationName}"), Volume: $${totalTransactionVolume}, Running Total: $${locationData.totalVolume}`);
+    console.log(`💰 MATCHED TRANSACTION: ${matchingLocation.name} → Volume: $${totalTransactionVolume}, Running Total: $${locationData.totalVolume}`);
   });
 
-  // Step 5: Verify Greenlight consolidation
-  console.log('🎯 GREENLIGHT CONSOLIDATION VERIFICATION:');
-  const greenlightNormalizedName = normalizeLocationName('greenlight & company');
-  const greenlightData = locationDataByName.get(greenlightNormalizedName);
-  if (greenlightData) {
-    console.log(`✅ GREENLIGHT CONSOLIDATED: Volume: $${greenlightData.totalVolume.toLocaleString()}, Transactions: ${greenlightData.transactionCount}, Account IDs: ${Array.from(greenlightData.accountIds).join(', ')}`);
-  } else {
-    console.log(`❌ GREENLIGHT NOT FOUND IN CONSOLIDATED DATA`);
-    console.log('Available consolidated location names:', Array.from(locationDataByName.keys()));
-  }
+  console.log(`📊 MATCHING RESULTS: ${matchedTransactions} matched, ${unmatchedTransactions} unmatched`);
 
   const commissions: LocationCommission[] = [];
 
-  // Step 6: Process assignments by location, using the primary location for each name group
+  // Step 5: Process assignments by location, using the primary location for each name group
   locationNameGroups.forEach((locationGroup, normalizedName) => {
     // Get the consolidated data for this location name
     const locationData = locationDataByName.get(normalizedName);
@@ -275,21 +309,7 @@ export const calculateLocationCommissions = (
     }
   });
 
-  // Final verification
-  const greenlightInFinalResults = commissions.filter(c => 
-    normalizeLocationName(c.locationName) === normalizeLocationName('greenlight & company')
-  );
-  console.log(`🎯 FINAL RESULT: ${greenlightInFinalResults.length} Greenlight commission entries found`);
-  
-  if (greenlightInFinalResults.length > 0) {
-    greenlightInFinalResults.forEach(commission => {
-      console.log(`✅ GREENLIGHT COMMISSION: ${commission.locationName}, Volume: $${commission.locationVolume.toLocaleString()}, Agent: ${commission.agentName}`);
-    });
-  } else {
-    console.log('🚨 GREENLIGHT STILL MISSING FROM FINAL RESULTS!');
-  }
-
-  console.log('🚨 === DUPLICATE LOCATION CONSOLIDATION END ===');
+  console.log('🚨 === ENHANCED LOCATION CONSOLIDATION END ===');
   console.log(`🎉 Total commissions calculated: ${commissions.length}`);
   
   return commissions;
