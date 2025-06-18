@@ -302,14 +302,18 @@ const FileUpload = () => {
             // Ensure location exists and get its ID
             if (transaction.location_name && transaction.location_name !== 'Unknown Location') {
               const locationId = await ensureLocationExists(transaction.location_name, transaction.account_id);
+              // Remove location_name from transaction data and add location_id
+              const { location_name, ...transactionWithoutLocationName } = transaction;
               batchWithLocations.push({
-                ...transaction,
+                ...transactionWithoutLocationName,
                 location_id: locationId,
                 processor: `Upload-${uploadMonth}` // Tag with the selected month
               });
             } else {
+              // Remove location_name from transaction data
+              const { location_name, ...transactionWithoutLocationName } = transaction;
               batchWithLocations.push({
-                ...transaction,
+                ...transactionWithoutLocationName,
                 processor: `Upload-${uploadMonth}` // Tag with the selected month
               });
             }
