@@ -5,12 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Upload, File, CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Upload, File, CheckCircle, XCircle, AlertCircle, Loader2, Calendar as CalendarIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { getMonthString } from "@/utils/timeFrameUtils";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface ProcessingProgress {
   total: number;
@@ -21,6 +25,7 @@ interface ProcessingProgress {
 
 const FileUpload = () => {
   const [file, setFile] = useState<File | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<Date | undefined>(undefined);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -126,7 +131,7 @@ const FileUpload = () => {
     });
   };
 
-  const normalizeTransactionData = (rawData: any[]) => {
+  const normalizeTransactionData = (rawData: any[], uploadMonth?: string) => {
     return rawData.map(row => {
       // Try to extract date from various possible fields
       const dateValue = row['Transaction Date'] || row['Date'] || row['TRANSACTION_DATE'] || null;
@@ -146,15 +151,19 @@ const FileUpload = () => {
       // Try to extract agent payout from various possible fields
       const agentPayout = parseFloat(row['Agent Payout'] || row['AGENT_PAYOUT'] || row['Net Revenue'] || row['NET_REVENUE'] || 0);
       
-      // Normalize transaction date to YYYY-MM-DD format
+      // Use the selected upload month instead of trying to parse dates from the file
       let transactionDate = null;
-      if (dateValue) {
+      let month = uploadMonth;
+
+      // If no upload month is selected, fall back to parsing the date from the file
+      if (!uploadMonth && dateValue) {
         try {
           // Handle Excel date serial numbers
           if (typeof dateValue === 'number') {
             const excelEpoch = new Date(1899, 11, 30);
             const date = new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
             transactionDate = date.toISOString().split('T')[0];
+            month = getMonthString(date);
           } 
           // Handle string dates
           else if (typeof dateValue === 'string') {
@@ -162,18 +171,15 @@ const FileUpload = () => {
             const date = new Date(dateValue);
             if (!isNaN(date.getTime())) {
               transactionDate = date.toISOString().split('T')[0];
+              month = getMonthString(date);
             }
           }
         } catch (error) {
           console.error('Error parsing date:', dateValue, error);
         }
-      }
-      
-      // Get the month string (YYYY-MM) for grouping
-      let month = null;
-      if (transactionDate) {
-        const date = new Date(transactionDate);
-        month = getMonthString(date);
+      } else if (uploadMonth) {
+        // Use the upload month to create a transaction date (first day of the month)
+        transactionDate = `${uploadMonth}-01`;
       }
       
       return {
@@ -185,17 +191,44 @@ const FileUpload = () => {
         transaction_date: transactionDate,
         month
       };
-    }).filter(row => row.transaction_date !== null); // Filter out rows with invalid dates
+    }).filter(row => row.month !== null); // Filter out rows without a valid month
   };
 
   const uploadTransactions = async () => {
     if (!file) return;
+    
+    if (!selectedMonth) {
+      toast({
+        title: "Month Required",
+        description: "Please select a month for this upload before proceeding.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsUploading(true);
     setUploadSuccess(false);
     setUploadError(null);
     
     try {
+      const uploadMonth = getMonthString(selectedMonth); // Format: YYYY-MM
+      console.log('📅 Upload Month Selected:', uploadMonth);
+
+      // Record the upload in file_uploads table
+      const { data: uploadRecord, error: uploadRecordError } = await supabase
+        .from('file_uploads')
+        .insert([{
+          filename: file.name,
+          processor: `Upload-${uploadMonth}`,
+          status: 'processing'
+        }])
+        .select('id')
+        .single();
+
+      if (uploadRecordError) {
+        throw uploadRecordError;
+      }
+
       let rawData;
       if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         rawData = await processExcelFile(file);
@@ -205,8 +238,8 @@ const FileUpload = () => {
         throw new Error('Unsupported file format. Please upload an Excel (.xlsx, .xls) or CSV file.');
       }
       
-      // Normalize the data to a consistent format
-      const normalizedData = normalizeTransactionData(rawData as any[]);
+      // Normalize the data to a consistent format with the selected month
+      const normalizedData = normalizeTransactionData(rawData as any[], uploadMonth);
       
       setProgress({
         total: normalizedData.length,
@@ -222,7 +255,7 @@ const FileUpload = () => {
         batches.push(normalizedData.slice(i, i + batchSize));
       }
       
-      console.log(`Processing ${normalizedData.length} transactions in ${batches.length} batches`);
+      console.log(`Processing ${normalizedData.length} transactions in ${batches.length} batches for month ${uploadMonth}`);
       
       let processedCount = 0;
       const errors = [];
@@ -249,10 +282,14 @@ const FileUpload = () => {
               const locationId = await ensureLocationExists(transaction.location_name, transaction.account_id);
               batchWithLocations.push({
                 ...transaction,
-                location_id: locationId
+                location_id: locationId,
+                processor: `Upload-${uploadMonth}` // Tag with the selected month
               });
             } else {
-              batchWithLocations.push(transaction);
+              batchWithLocations.push({
+                ...transaction,
+                processor: `Upload-${uploadMonth}` // Tag with the selected month
+              });
             }
             
             processedCount++;
@@ -282,6 +319,16 @@ const FileUpload = () => {
           errors
         }));
       }
+
+      // Update the upload record as completed
+      await supabase
+        .from('file_uploads')
+        .update({
+          status: errors.length > 0 ? 'failed' : 'completed',
+          rows_processed: processedCount,
+          errors: errors.length > 0 ? errors : null
+        })
+        .eq('id', uploadRecord.id);
       
       if (errors.length > 0) {
         setUploadError(`Uploaded with ${errors.length} errors. Check console for details.`);
@@ -289,7 +336,7 @@ const FileUpload = () => {
         setUploadSuccess(true);
         toast({
           title: "Upload Successful",
-          description: `Successfully processed ${processedCount} transactions.`,
+          description: `Successfully processed ${processedCount} transactions for ${format(selectedMonth, 'MMMM yyyy')}.`,
         });
       }
     } catch (error: any) {
@@ -307,6 +354,7 @@ const FileUpload = () => {
 
   const resetUpload = () => {
     setFile(null);
+    setSelectedMonth(undefined);
     setUploadSuccess(false);
     setUploadError(null);
     setProgress({
@@ -332,6 +380,39 @@ const FileUpload = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
+            {/* Month Selection */}
+            <div className="space-y-2">
+              <Label>Select Month for Upload</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !selectedMonth && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {selectedMonth ? format(selectedMonth, "MMMM yyyy") : "Pick a month"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedMonth}
+                    onSelect={setSelectedMonth}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+              {selectedMonth && (
+                <p className="text-sm text-muted-foreground">
+                  All transactions in this upload will be tagged for {format(selectedMonth, 'MMMM yyyy')}
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="file-upload">Select File</Label>
               <div className="flex items-center gap-2">
@@ -343,7 +424,7 @@ const FileUpload = () => {
                   disabled={isUploading}
                   className="flex-1"
                 />
-                {file && !uploadSuccess && !isUploading && (
+                {file && !uploadSuccess && !isUploading && selectedMonth && (
                   <Button onClick={uploadTransactions}>
                     Upload
                   </Button>
@@ -359,6 +440,11 @@ const FileUpload = () => {
                   <File className="h-4 w-4" />
                   {file.name} ({(file.size / 1024).toFixed(2)} KB)
                 </div>
+              )}
+              {file && !selectedMonth && (
+                <p className="text-sm text-orange-600">
+                  Please select a month before uploading
+                </p>
               )}
             </div>
             
@@ -383,7 +469,7 @@ const FileUpload = () => {
                 <div>
                   <h4 className="font-medium text-green-800">Upload Successful</h4>
                   <p className="text-sm text-green-700 mt-1">
-                    Successfully processed {progress.processed} transactions.
+                    Successfully processed {progress.processed} transactions for {selectedMonth && format(selectedMonth, 'MMMM yyyy')}.
                   </p>
                 </div>
               </div>
@@ -419,10 +505,14 @@ const FileUpload = () => {
               <div>
                 <h4 className="font-medium text-blue-800">Upload Instructions</h4>
                 <p className="text-sm text-blue-700 mt-1">
-                  Upload Excel (.xlsx, .xls) or CSV files containing transaction data. The system will attempt to
-                  automatically map columns like Transaction Date, Location, Account ID, Volume, and Agent Payout.
+                  Select a month first, then upload Excel (.xlsx, .xls) or CSV files containing transaction data. 
+                  All transactions will be tagged with the selected month. The system will automatically map columns 
+                  like Transaction Date, Location, Account ID, Volume, and Agent Payout.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
+                    Month Selection Required
+                  </Badge>
                   <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
                     Transaction Date
                   </Badge>
