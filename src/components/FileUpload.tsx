@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -414,14 +415,11 @@ const FileUpload = () => {
     try {
       console.log('🔍 LOCATION MERGER: Checking for existing location with name:', locationName);
       
-      // First, check for exact name match (case-insensitive) - FIXED: Properly typed query
+      // First, check for exact name match (case-insensitive) - FIXED: Properly typed query with name field
       const { data: existingLocations, error: selectError } = await supabase
         .from('locations')
         .select('id, name, account_id')
-        .ilike('name', locationName) as { 
-          data: Array<{ id: string; name: string | null; account_id: string | null }> | null; 
-          error: any 
-        };
+        .ilike('name', locationName);
 
       if (selectError && selectError.code !== 'PGRST116') {
         console.error('Error checking existing locations:', selectError);
