@@ -48,93 +48,111 @@ interface Location {
   account_id: string;
 }
 
+// Helper function to normalize account IDs for matching
+const normalizeAccountId = (accountId: string): string => {
+  if (!accountId) return '';
+  // Remove all non-alphanumeric characters and convert to lowercase
+  return accountId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+};
+
+// Helper function to find matching location for a transaction
+const findMatchingLocation = (transactionAccountId: string, locations: Location[]): Location | null => {
+  if (!transactionAccountId) return null;
+  
+  // First try exact match
+  let matchingLocation = locations.find(loc => loc.account_id === transactionAccountId);
+  if (matchingLocation) return matchingLocation;
+  
+  // Try normalized matching
+  const normalizedTransactionId = normalizeAccountId(transactionAccountId);
+  matchingLocation = locations.find(loc => {
+    if (!loc.account_id) return false;
+    const normalizedLocationId = normalizeAccountId(loc.account_id);
+    return normalizedLocationId === normalizedTransactionId;
+  });
+  
+  if (matchingLocation) return matchingLocation;
+  
+  // Try partial matching (for cases where one ID is contained in another)
+  matchingLocation = locations.find(loc => {
+    if (!loc.account_id) return false;
+    const normalizedLocationId = normalizeAccountId(loc.account_id);
+    return normalizedLocationId.includes(normalizedTransactionId) || 
+           normalizedTransactionId.includes(normalizedLocationId);
+  });
+  
+  return matchingLocation || null;
+};
+
 export const calculateLocationCommissions = (
   transactions: Transaction[],
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('🚨 === FIXED GREENLIGHT DEBUGGING SESSION START ===');
-  console.log('📊 INPUT DATA SUMMARY:');
-  console.log('- Total transactions received:', transactions.length);
-  console.log('- Total assignments received:', assignments.length);
-  console.log('- Total locations received:', locations.length);
+  console.log('🚨 === GREENLIGHT COMMISSION CALCULATION DEBUG ===');
+  console.log('📊 INPUT DATA:');
+  console.log('- Transactions:', transactions.length);
+  console.log('- Assignments:', assignments.length);
+  console.log('- Locations:', locations.length);
   
-  // STEP 1: Find Greenlight locations and show their account IDs
-  const greenlightLocations = locations.filter(loc => 
+  // Find Greenlight location specifically
+  const greenlightLocation = locations.find(loc => 
     loc.name.toLowerCase().includes('greenlight')
   );
   
-  console.log('🎯 GREENLIGHT LOCATIONS FOUND:', greenlightLocations.length);
-  greenlightLocations.forEach((loc, index) => {
-    console.log(`  ${index + 1}. ID: ${loc.id}, Account: "${loc.account_id}", Name: "${loc.name}"`);
-  });
-
-  // STEP 2: Check what account IDs we have in transactions
-  const allTransactionAccountIds = [...new Set(transactions.map(t => t.account_id))].sort();
-  console.log('📊 ALL UNIQUE ACCOUNT IDs IN TRANSACTIONS:', allTransactionAccountIds);
-  
-  // STEP 3: Find transactions that match Greenlight account IDs (with fuzzy matching)
-  console.log('🔍 SEARCHING FOR GREENLIGHT TRANSACTIONS...');
-  const greenlightAccountIds = greenlightLocations.map(loc => loc.account_id);
-  console.log('🎯 Greenlight account IDs to search for:', greenlightAccountIds);
-
-  // Try exact match first
-  let greenlightTransactions = transactions.filter(t => 
-    greenlightAccountIds.includes(t.account_id)
-  );
-
-  console.log('✅ EXACT MATCH GREENLIGHT TRANSACTIONS:', greenlightTransactions.length);
-
-  // If no exact match, try fuzzy matching (remove spaces, hyphens, etc.)
-  if (greenlightTransactions.length === 0) {
-    console.log('🔍 NO EXACT MATCHES - TRYING FUZZY MATCHING...');
-    
-    const normalizeId = (id: string) => id.replace(/[\s\-_]/g, '').toLowerCase();
-    const normalizedGreenlightIds = greenlightAccountIds.map(id => normalizeId(id));
-    
-    console.log('🎯 Normalized Greenlight IDs:', normalizedGreenlightIds);
-    
-    greenlightTransactions = transactions.filter(t => {
-      const normalizedTransactionId = normalizeId(t.account_id);
-      const found = normalizedGreenlightIds.some(normalizedId => 
-        normalizedTransactionId.includes(normalizedId) || normalizedId.includes(normalizedTransactionId)
-      );
-      if (found) {
-        console.log(`🎯 FUZZY MATCH FOUND: Transaction "${t.account_id}" matches Greenlight`);
-      }
-      return found;
-    });
-    
-    console.log('✅ FUZZY MATCH GREENLIGHT TRANSACTIONS:', greenlightTransactions.length);
+  if (greenlightLocation) {
+    console.log('🎯 GREENLIGHT LOCATION FOUND:');
+    console.log('- ID:', greenlightLocation.id);
+    console.log('- Name:', greenlightLocation.name);
+    console.log('- Account ID:', greenlightLocation.account_id);
+    console.log('- Normalized Account ID:', normalizeAccountId(greenlightLocation.account_id));
+  } else {
+    console.log('❌ NO GREENLIGHT LOCATION FOUND');
   }
-
-  // Show sample Greenlight transactions
+  
+  // Check transaction account IDs
+  const uniqueAccountIds = [...new Set(transactions.map(t => t.account_id))].filter(Boolean);
+  console.log('📊 UNIQUE TRANSACTION ACCOUNT IDs:', uniqueAccountIds.length);
+  uniqueAccountIds.slice(0, 10).forEach(id => {
+    console.log(`- "${id}" (normalized: "${normalizeAccountId(id)}")`);
+  });
+  
+  // Find Greenlight transactions
+  const greenlightTransactions = transactions.filter(t => {
+    if (!greenlightLocation || !t.account_id) return false;
+    const matchingLocation = findMatchingLocation(t.account_id, [greenlightLocation]);
+    return matchingLocation !== null;
+  });
+  
+  console.log('🎯 GREENLIGHT TRANSACTIONS FOUND:', greenlightTransactions.length);
   if (greenlightTransactions.length > 0) {
-    console.log('🎯 SAMPLE GREENLIGHT TRANSACTIONS:');
-    greenlightTransactions.slice(0, 5).forEach((t, index) => {
-      const bankVolume = Number(t.volume) || 0;
-      const debitVolume = Number(t.debit_volume) || 0;
-      const totalVolume = bankVolume + debitVolume;
-      console.log(`  ${index + 1}. Account: "${t.account_id}", Date: ${t.transaction_date}, Bank: $${bankVolume}, Debit: $${debitVolume}, Total: $${totalVolume}, Agent Payout: $${t.agent_payout}`);
-    });
-    
     const totalGreenlightVolume = greenlightTransactions.reduce((sum, t) => {
       const bankVolume = Number(t.volume) || 0;
       const debitVolume = Number(t.debit_volume) || 0;
       return sum + bankVolume + debitVolume;
     }, 0);
-    console.log('💰 TOTAL GREENLIGHT VOLUME: $', totalGreenlightVolume.toLocaleString());
-  } else {
-    console.log('🚨 NO GREENLIGHT TRANSACTIONS FOUND!');
-    console.log('🔍 DEBUGGING: Sample transaction account IDs vs Greenlight account IDs:');
-    allTransactionAccountIds.slice(0, 10).forEach(transId => {
-      console.log(`  Transaction: "${transId}"`);
-      greenlightAccountIds.forEach(greenlightId => {
-        if (transId && greenlightId && (transId.includes(greenlightId) || greenlightId.includes(transId))) {
-          console.log(`    ⚡ POTENTIAL MATCH with Greenlight: "${greenlightId}"`);
-        }
-      });
+    console.log('💰 TOTAL GREENLIGHT VOLUME:', totalGreenlightVolume.toLocaleString());
+    
+    // Show sample transactions
+    greenlightTransactions.slice(0, 3).forEach((t, index) => {
+      const bankVolume = Number(t.volume) || 0;
+      const debitVolume = Number(t.debit_volume) || 0;
+      console.log(`Sample ${index + 1}: Account "${t.account_id}", Bank: $${bankVolume}, Debit: $${debitVolume}, Date: ${t.transaction_date}`);
     });
+  } else {
+    console.log('❌ NO GREENLIGHT TRANSACTIONS FOUND');
+    
+    // Debug why no matches
+    if (greenlightLocation) {
+      const normalizedGreenlightId = normalizeAccountId(greenlightLocation.account_id);
+      console.log('🔍 DEBUGGING ACCOUNT ID MATCHING:');
+      console.log('- Looking for normalized:', normalizedGreenlightId);
+      
+      uniqueAccountIds.slice(0, 10).forEach(transId => {
+        const normalizedTransId = normalizeAccountId(transId);
+        console.log(`- Transaction "${transId}" (normalized: "${normalizedTransId}") - Match: ${normalizedTransId === normalizedGreenlightId}`);
+      });
+    }
   }
 
   // Filter out zero-volume transactions
@@ -147,29 +165,21 @@ export const calculateLocationCommissions = (
 
   console.log(`📊 VOLUME FILTERING: ${transactions.length} total → ${nonZeroTransactions.length} with volume > 0`);
 
-  // CRITICAL FIX: Group transactions by location with improved matching
+  // Group transactions by location using improved matching
   const locationData = nonZeroTransactions.reduce((acc, transaction) => {
     const accountId = transaction.account_id;
     if (!accountId) return acc;
     
-    // Find matching location - try exact match first, then fuzzy match
-    let matchingLocation = locations.find(loc => loc.account_id === accountId);
+    // Find matching location using our improved matching function
+    const matchingLocation = findMatchingLocation(accountId, locations);
     
     if (!matchingLocation) {
-      // Try fuzzy matching for location lookup
-      const normalizeId = (id: string) => id.replace(/[\s\-_]/g, '').toLowerCase();
-      const normalizedTransactionId = normalizeId(accountId);
-      
-      matchingLocation = locations.find(loc => {
-        if (!loc.account_id) return false;
-        const normalizedLocationId = normalizeId(loc.account_id);
-        return normalizedTransactionId.includes(normalizedLocationId) || 
-               normalizedLocationId.includes(normalizedTransactionId);
-      });
+      console.log(`⚠️ No location found for account ID: "${accountId}"`);
+      return acc;
     }
     
-    // Use the location's account_id as the key (for consistency)
-    const locationKey = matchingLocation ? matchingLocation.account_id : accountId;
+    // Use the location's account_id as the key for consistency
+    const locationKey = matchingLocation.account_id;
     
     if (!acc[locationKey]) {
       acc[locationKey] = {
@@ -194,7 +204,7 @@ export const calculateLocationCommissions = (
     acc[locationKey].totalAgentPayout += agentPayout;
     
     // Special logging for Greenlight
-    if (matchingLocation && matchingLocation.name.toLowerCase().includes('greenlight')) {
+    if (matchingLocation.name.toLowerCase().includes('greenlight')) {
       console.log(`💰 GREENLIGHT TRANSACTION PROCESSED: Account "${accountId}" → Location "${matchingLocation.name}", Volume: $${totalTransactionVolume}, Running Total: $${acc[locationKey].totalVolume}`);
     }
     
@@ -203,25 +213,32 @@ export const calculateLocationCommissions = (
 
   // VERIFY: Check Greenlight in final location data
   console.log('🎯 FINAL GREENLIGHT VERIFICATION:');
-  greenlightLocations.forEach(loc => {
-    const locationInfo = locationData[loc.account_id];
+  if (greenlightLocation) {
+    const locationInfo = locationData[greenlightLocation.account_id];
     if (locationInfo) {
-      console.log(`✅ GREENLIGHT IN FINAL DATA: "${loc.name}" (${loc.account_id}) - Volume: $${locationInfo.totalVolume.toLocaleString()}, Transactions: ${locationInfo.transactionCount}`);
+      console.log(`✅ GREENLIGHT IN FINAL DATA: "${greenlightLocation.name}" - Volume: $${locationInfo.totalVolume.toLocaleString()}, Transactions: ${locationInfo.transactionCount}`);
     } else {
-      console.log(`❌ GREENLIGHT MISSING: "${loc.name}" (${loc.account_id}) not found in location data`);
+      console.log(`❌ GREENLIGHT MISSING FROM FINAL DATA: "${greenlightLocation.name}" (${greenlightLocation.account_id})`);
       
-      // Check if any similar account IDs exist in locationData
+      // Check if any location data keys are similar
       const locationDataKeys = Object.keys(locationData);
       console.log('🔍 Available location data keys:', locationDataKeys);
       
-      const similarKeys = locationDataKeys.filter(key => 
-        key.includes(loc.account_id.slice(-6)) || loc.account_id.includes(key.slice(-6))
-      );
+      const normalizedGreenlightId = normalizeAccountId(greenlightLocation.account_id);
+      const similarKeys = locationDataKeys.filter(key => {
+        const normalizedKey = normalizeAccountId(key);
+        return normalizedKey.includes(normalizedGreenlightId.slice(-6)) || 
+               normalizedGreenlightId.includes(normalizedKey.slice(-6));
+      });
+      
       if (similarKeys.length > 0) {
-        console.log(`🔍 Similar keys found for ${loc.account_id}:`, similarKeys);
+        console.log(`🔍 Similar keys found:`, similarKeys);
+        similarKeys.forEach(key => {
+          console.log(`- Key "${key}" has volume: $${locationData[key].totalVolume.toLocaleString()}`);
+        });
       }
     }
-  });
+  }
 
   const commissions: LocationCommission[] = [];
 
@@ -335,7 +352,7 @@ export const calculateLocationCommissions = (
     console.log('🚨 GREENLIGHT STILL MISSING FROM FINAL RESULTS!');
   }
 
-  console.log('🚨 === FIXED GREENLIGHT DEBUGGING SESSION END ===');
+  console.log('🚨 === GREENLIGHT COMMISSION CALCULATION DEBUG END ===');
   console.log(`🎉 Total commissions calculated: ${commissions.length}`);
   
   return commissions;
