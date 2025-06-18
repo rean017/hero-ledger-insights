@@ -233,12 +233,12 @@ const FileUpload = () => {
       const uploadMonth = selectedMonth; // Already in YYYY-MM format
       console.log('📅 Upload Month Selected:', uploadMonth);
 
-      // Record the upload in file_uploads table
+      // Record the upload in file_uploads table - using "Maverick" as processor
       const { data: uploadRecord, error: uploadRecordError } = await supabase
         .from('file_uploads')
         .insert([{
           filename: file.name,
-          processor: `Upload-${uploadMonth}`,
+          processor: 'Maverick',
           status: 'processing'
         }])
         .select('id')
@@ -304,14 +304,14 @@ const FileUpload = () => {
               batchWithLocations.push({
                 ...transactionWithoutLocationName,
                 location_id: locationId,
-                processor: `Upload-${uploadMonth}` // Tag with the selected month
+                processor: 'Maverick' // Use "Maverick" instead of dynamic month
               });
             } else {
               // Remove location_name from transaction data
               const { location_name, ...transactionWithoutLocationName } = transaction;
               batchWithLocations.push({
                 ...transactionWithoutLocationName,
-                processor: `Upload-${uploadMonth}` // Tag with the selected month
+                processor: 'Maverick' // Use "Maverick" instead of dynamic month
               });
             }
             
