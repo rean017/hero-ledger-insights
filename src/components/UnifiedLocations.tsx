@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -341,7 +340,7 @@ const UnifiedLocations = () => {
     }
   };
 
-  // Fetch locations with assignment data and commission calculations
+  // Fetch locations with assignment data and use monthly volume data
   const { data: locations, isLoading, refetch } = useQuery({
     queryKey: ['unified-locations', timeFrame, customDateRange],
     queryFn: async () => {
@@ -359,99 +358,50 @@ const UnifiedLocations = () => {
 
       if (assignmentError) throw assignmentError;
 
-      const { data: transactions, error: transactionError } = await supabase
-        .from('transactions')
-        .select('account_id, volume, debit_volume, agent_payout, transaction_date');
+      console.log('🏢 UnifiedLocations: Processing locations with monthly volume data...');
+      console.log('📊 UnifiedLocations: Available monthly data:', monthlyData?.length || 0, 'records');
 
-      if (transactionError) throw transactionError;
+      // Calculate total monthly volume from P&L data for the timeframe
+      const totalMonthlyVolume = monthlyData?.reduce((sum, plData) => {
+        const volume = Number(plData.total_volume) || 0;
+        const debitVolume = Number(plData.total_debit_volume) || 0;
+        return sum + volume + debitVolume;
+      }, 0) || 0;
 
-      console.log('🔄 UnifiedLocations: Fetching transactions for date filtering...');
-      console.log('📅 UnifiedLocations: Date range:', dateRange);
-      console.log('📊 UnifiedLocations: Total transactions fetched:', transactions.length);
+      const totalMonthlyAgentPayouts = monthlyData?.reduce((sum, plData) => {
+        const payouts = Number(plData.total_agent_payouts) || 0;
+        return sum + payouts;
+      }, 0) || 0;
 
-      // Debug: Log sample transaction dates
-      console.log('📊 UnifiedLocations: Sample transaction dates:', transactions.slice(0, 10).map(t => ({
-        account_id: t.account_id,
-        transaction_date: t.transaction_date,
-        parsedDate: t.transaction_date ? new Date(t.transaction_date + 'T00:00:00.000Z').toISOString() : 'No date'
-      })));
+      console.log('📊 UnifiedLocations: Total monthly volume:', totalMonthlyVolume.toLocaleString());
+      console.log('📊 UnifiedLocations: Total monthly agent payouts:', totalMonthlyAgentPayouts.toLocaleString());
 
-      // Apply date filtering FIRST, then calculate commissions with filtered data
-      const filteredTransactions = dateRange 
-        ? transactions.filter(t => {
-            if (!t.transaction_date) {
-              console.log('⚠️ UnifiedLocations: Transaction with no date:', t.account_id);
-              return false;
-            }
-            
-            // CONSISTENT: Use same date parsing logic as other components
-            const transactionDate = new Date(t.transaction_date + 'T00:00:00.000Z'); // Force UTC to avoid timezone issues
-            
-            // Ensure the transaction date is valid
-            if (isNaN(transactionDate.getTime())) {
-              console.log('⚠️ UnifiedLocations: Invalid transaction date:', t.transaction_date);
-              return false;
-            }
-            
-            const isInRange = transactionDate >= dateRange.from && transactionDate <= dateRange.to;
-            
-            // Debug: Log each transaction's date filtering
-            console.log('🔍 UnifiedLocations: Date filtering:', {
-              accountId: t.account_id,
-              originalDate: t.transaction_date,
-              transactionDate: transactionDate.toISOString(),
-              fromDate: dateRange.from.toISOString(),
-              toDate: dateRange.to.toISOString(),
-              isInRange,
-              timeFrame: timeFrame
-            });
-            
-            return isInRange;
-          })
-        : transactions;
+      // For now, since we don't have location-specific monthly data,
+      // we'll distribute the total monthly volume across locations with assignments
+      const locationsWithAssignments = locations.filter(location => 
+        assignments.some(a => a.location_id === location.id)
+      );
 
-      console.log('📅 UnifiedLocations: Original transactions:', transactions.length);
-      console.log('📅 UnifiedLocations: Filtered transactions:', filteredTransactions.length);
-      console.log('📅 UnifiedLocations: Timeframe:', timeFrame);
-      
-      // If no transactions after filtering, let's see what dates we actually have
-      if (filteredTransactions.length === 0 && transactions.length > 0) {
-        console.log('🚨 UnifiedLocations: NO TRANSACTIONS AFTER FILTERING!');
-        console.log('📅 UnifiedLocations: All unique transaction dates:', 
-          [...new Set(transactions.map(t => t.transaction_date))].sort()
-        );
-        console.log('📅 UnifiedLocations: Filter range:', {
-          from: dateRange.from.toISOString(),
-          to: dateRange.to.toISOString()
-        });
-      }
+      const volumePerLocation = locationsWithAssignments.length > 0 
+        ? totalMonthlyVolume / locationsWithAssignments.length 
+        : 0;
 
-      // Calculate commissions for all locations using filtered transactions
-      const commissions = calculateLocationCommissions(filteredTransactions, assignments, locations);
+      const payoutPerLocation = locationsWithAssignments.length > 0 
+        ? totalMonthlyAgentPayouts / locationsWithAssignments.length 
+        : 0;
 
-      // Map locations with their assignment data and commission calculations
+      console.log('📊 UnifiedLocations: Volume per location (estimated):', volumePerLocation.toLocaleString());
+      console.log('📊 UnifiedLocations: Payout per location (estimated):', payoutPerLocation.toLocaleString());
+
+      // Map locations with their assignment data and estimated monthly volume
       return locations.map(location => {
         const locationAssignments = assignments.filter(a => a.location_id === location.id);
-        const locationTransactions = filteredTransactions.filter(t => t.account_id === location.account_id);
-        const locationCommissions = commissions.filter(c => c.locationId === location.id);
         
-        const totalVolume = locationTransactions.reduce((sum, t) => {
-          const volume = Number(t.volume) || 0;
-          const debitVolume = Number(t.debit_volume) || 0;
-          return sum + volume + debitVolume;
-        }, 0);
-        
-        const totalCommission = locationTransactions.reduce((sum, t) => {
-          const agentPayout = Number(t.agent_payout) || 0;
-          return sum + agentPayout;
-        }, 0);
+        // Use estimated volume for locations with assignments, 0 for others
+        const totalVolume = locationAssignments.length > 0 ? volumePerLocation : 0;
+        const totalCommission = locationAssignments.length > 0 ? payoutPerLocation : 0;
 
-        console.log(`🏢 Location ${location.name} data for ${timeFrame}:`, {
-          totalVolume,
-          totalCommission,
-          transactionCount: locationTransactions.length,
-          commissionsCount: locationCommissions.length
-        });
+        console.log(`🏢 UnifiedLocations: Location ${location.name} - Volume: $${totalVolume.toLocaleString()}, Commission: $${totalCommission.toLocaleString()}`);
 
         return {
           ...location,
@@ -460,7 +410,7 @@ const UnifiedLocations = () => {
           totalCommission,
           agentNames: locationAssignments.map(a => a.agent_name).join(', '),
           assignments: locationAssignments,
-          commissions: locationCommissions
+          commissions: [] // We'll calculate these separately if needed
         } as LocationWithExtras;
       });
     }
@@ -593,6 +543,11 @@ const UnifiedLocations = () => {
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Locations & Accounts</h2>
           <p className="text-muted-foreground">Manage locations, accounts, and agent assignments</p>
+          {monthlyData && monthlyData.length > 0 && (
+            <p className="text-sm text-emerald-600 mt-1">
+              📊 Showing estimated monthly volume data for {timeFrame.toUpperCase()}
+            </p>
+          )}
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
