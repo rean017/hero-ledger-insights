@@ -5,16 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Upload, File, CheckCircle, XCircle, AlertCircle, Loader2, Calendar as CalendarIcon } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload, File, CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { getMonthString } from "@/utils/timeFrameUtils";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 
 interface ProcessingProgress {
   total: number;
@@ -25,7 +22,7 @@ interface ProcessingProgress {
 
 const FileUpload = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<Date | undefined>(undefined);
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -35,6 +32,31 @@ const FileUpload = () => {
     errors: []
   });
   const { toast } = useToast();
+
+  // Generate month options for the current year and next year
+  const generateMonthOptions = () => {
+    const currentYear = new Date().getFullYear();
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    const options = [];
+    
+    // Add months for current year and next year
+    for (let year = currentYear; year <= currentYear + 1; year++) {
+      months.forEach((month, index) => {
+        const monthNumber = (index + 1).toString().padStart(2, '0');
+        const value = `${year}-${monthNumber}`;
+        const label = `${month} ${year}`;
+        options.push({ value, label });
+      });
+    }
+    
+    return options;
+  };
+
+  const monthOptions = generateMonthOptions();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -211,7 +233,7 @@ const FileUpload = () => {
     setUploadError(null);
     
     try {
-      const uploadMonth = getMonthString(selectedMonth); // Format: YYYY-MM
+      const uploadMonth = selectedMonth; // Already in YYYY-MM format
       console.log('📅 Upload Month Selected:', uploadMonth);
 
       // Record the upload in file_uploads table
@@ -330,13 +352,16 @@ const FileUpload = () => {
         })
         .eq('id', uploadRecord.id);
       
+      const selectedMonthObj = monthOptions.find(opt => opt.value === selectedMonth);
+      const monthLabel = selectedMonthObj?.label || selectedMonth;
+      
       if (errors.length > 0) {
         setUploadError(`Uploaded with ${errors.length} errors. Check console for details.`);
       } else {
         setUploadSuccess(true);
         toast({
           title: "Upload Successful",
-          description: `Successfully processed ${processedCount} transactions for ${format(selectedMonth, 'MMMM yyyy')}.`,
+          description: `Successfully processed ${processedCount} transactions for ${monthLabel}.`,
         });
       }
     } catch (error: any) {
@@ -354,7 +379,7 @@ const FileUpload = () => {
 
   const resetUpload = () => {
     setFile(null);
-    setSelectedMonth(undefined);
+    setSelectedMonth("");
     setUploadSuccess(false);
     setUploadError(null);
     setProgress({
@@ -363,6 +388,8 @@ const FileUpload = () => {
       errors: []
     });
   };
+
+  const selectedMonthObj = monthOptions.find(opt => opt.value === selectedMonth);
 
   return (
     <div className="space-y-6">
@@ -383,32 +410,21 @@ const FileUpload = () => {
             {/* Month Selection */}
             <div className="space-y-2">
               <Label>Select Month for Upload</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !selectedMonth && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {selectedMonth ? format(selectedMonth, "MMMM yyyy") : "Pick a month"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={selectedMonth}
-                    onSelect={setSelectedMonth}
-                    initialFocus
-                    className="p-3 pointer-events-auto"
-                  />
-                </PopoverContent>
-              </Popover>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pick a month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {selectedMonth && (
                 <p className="text-sm text-muted-foreground">
-                  All transactions in this upload will be tagged for {format(selectedMonth, 'MMMM yyyy')}
+                  All transactions in this upload will be tagged for {selectedMonthObj?.label}
                 </p>
               )}
             </div>
@@ -469,7 +485,7 @@ const FileUpload = () => {
                 <div>
                   <h4 className="font-medium text-green-800">Upload Successful</h4>
                   <p className="text-sm text-green-700 mt-1">
-                    Successfully processed {progress.processed} transactions for {selectedMonth && format(selectedMonth, 'MMMM yyyy')}.
+                    Successfully processed {progress.processed} transactions for {selectedMonthObj?.label}.
                   </p>
                 </div>
               </div>
