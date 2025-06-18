@@ -1,23 +1,24 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Plus, Search, MapPin, Building2, Users, DollarSign, Edit3, Check, X, CalendarIcon, Edit } from "lucide-react";
+import { Plus, Search, CalendarIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import LocationAgentInlineEdit from "./LocationAgentInlineEdit";
-import { calculateLocationCommissions } from "@/utils/commissionCalculations";
 import { getDynamicTimeFrames, getDateRangeForTimeFrame, normalizeCustomDateRange } from "@/utils/timeFrameUtils";
+import { ensureMerchantHeroSetup } from "@/utils/locationOperations";
+import { useMonthlyData } from "@/hooks/useMonthlyData";
+import LocationSummaryCards from "./LocationSummaryCards";
+import LocationCard from "./LocationCard";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -45,48 +46,14 @@ const UnifiedLocations = () => {
   const [newAccountId, setNewAccountId] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
   const [commissionRate, setCommissionRate] = useState("");
-  const [editingNotes, setEditingNotes] = useState<string | null>(null);
-  const [tempNotes, setTempNotes] = useState("");
   const [customDateRange, setCustomDateRange] = useState<{ from: Date; to: Date } | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [editingLocation, setEditingLocation] = useState<string | null>(null);
-  const [tempLocationName, setTempLocationName] = useState("");
-  const [tempAccountId, setTempAccountId] = useState("");
   
   // Get dynamic time frames and set default to April (first option) since that's what was uploaded
   const timeFrames = getDynamicTimeFrames();
   const [timeFrame, setTimeFrame] = useState(timeFrames[0].value); // April (first option)
   
   const { toast } = useToast();
-
-  // Fetch monthly P&L data for the selected timeframe
-  const { data: monthlyData } = useQuery({
-    queryKey: ['monthly-pl-data', timeFrame, customDateRange],
-    queryFn: async () => {
-      if (!dateRange) {
-        console.log('📊 UnifiedLocations: No date range available, skipping P&L data fetch');
-        return [];
-      }
-
-      console.log('📊 UnifiedLocations: Fetching P&L data for date range:', dateRange);
-
-      const { data, error } = await supabase
-        .from('pl_data')
-        .select('*')
-        .gte('month', dateRange.fromFormatted)
-        .lte('month', dateRange.toFormatted)
-        .order('month');
-
-      if (error) {
-        console.error('📊 UnifiedLocations: Error fetching P&L data:', error);
-        throw error;
-      }
-
-      console.log('📊 UnifiedLocations: P&L data fetched:', data?.length || 0, 'records');
-      return data || [];
-    },
-    enabled: !!dateRange
-  });
 
   // Get date range - use custom if selected and available, otherwise use timeframe
   const dateRange = React.useMemo(() => {
@@ -107,107 +74,14 @@ const UnifiedLocations = () => {
     return getDateRangeForTimeFrame(timeFrame);
   }, [timeFrame, customDateRange]);
 
+  // Fetch monthly P&L data for the selected timeframe
+  const { data: monthlyData } = useMonthlyData(timeFrame, customDateRange, dateRange);
+
   // Debug: Log the timeframe and date range
   console.log('🗓️ UnifiedLocations: Current timeframe selected:', timeFrame);
   console.log('🗓️ UnifiedLocations: Date range for timeframe:', dateRange);
   console.log('🗓️ UnifiedLocations: Available timeframes:', timeFrames);
   console.log('🗓️ UnifiedLocations: Custom date range:', customDateRange);
-
-  // Ensure Merchant Hero exists and assign to locations without assignments
-  const ensureMerchantHeroSetup = async () => {
-    try {
-      // Ensure Merchant Hero exists
-      const { data: existingMerchantHero, error: checkError } = await supabase
-        .from('agents')
-        .select('id')
-        .eq('name', 'Merchant Hero')
-        .maybeSingle();
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('Error checking for Merchant Hero:', checkError);
-        return;
-      }
-
-      if (!existingMerchantHero) {
-        console.log('Creating Merchant Hero agent...');
-        const { error: insertError } = await supabase
-          .from('agents')
-          .insert([{ name: 'Merchant Hero', is_active: true }]);
-        
-        if (insertError) {
-          console.error('Error creating Merchant Hero:', insertError);
-          return;
-        }
-      }
-
-      // Get all locations that don't have Merchant Hero assigned
-      const { data: locationsWithoutMerchantHero, error: queryError } = await supabase
-        .from('locations')
-        .select(`
-          id, 
-          name,
-          location_agent_assignments!inner(location_id)
-        `)
-        .not('location_agent_assignments.agent_name', 'eq', 'Merchant Hero')
-        .eq('location_agent_assignments.is_active', true);
-
-      if (queryError) {
-        console.error('Error querying locations:', queryError);
-        return;
-      }
-
-      // Also get locations with no assignments at all
-      const { data: locationsWithNoAssignments, error: noAssignError } = await supabase
-        .from('locations')
-        .select('id, name')
-        .not('id', 'in', 
-          supabase
-            .from('location_agent_assignments')
-            .select('location_id')
-            .eq('is_active', true)
-        );
-
-      if (noAssignError) {
-        console.error('Error querying locations with no assignments:', noAssignError);
-        return;
-      }
-
-      // Combine both sets of locations that need Merchant Hero
-      const allLocationsNeedingMerchantHero = [
-        ...(locationsWithoutMerchantHero || []),
-        ...(locationsWithNoAssignments || [])
-      ];
-
-      // Remove duplicates based on id
-      const uniqueLocations = allLocationsNeedingMerchantHero.filter(
-        (location, index, self) => self.findIndex(l => l.id === location.id) === index
-      );
-
-      if (uniqueLocations.length > 0) {
-        console.log(`Assigning Merchant Hero to ${uniqueLocations.length} locations...`);
-        
-        // Create assignments in batch
-        const assignments = uniqueLocations.map(location => ({
-          location_id: location.id,
-          agent_name: 'Merchant Hero',
-          commission_rate: 0, // 0 BPS since they get the remainder
-          is_active: true
-        }));
-
-        const { error: batchInsertError } = await supabase
-          .from('location_agent_assignments')
-          .insert(assignments);
-
-        if (batchInsertError) {
-          console.error('Error batch inserting Merchant Hero assignments:', batchInsertError);
-        } else {
-          console.log('Successfully assigned Merchant Hero to all locations');
-        }
-      }
-    } catch (error) {
-      console.error('Error in ensureMerchantHeroSetup:', error);
-    }
-  };
 
   // Run Merchant Hero setup on component mount
   useEffect(() => {
@@ -228,76 +102,6 @@ const UnifiedLocations = () => {
       return data;
     }
   });
-
-  const handleToggleFranchise = async (location: LocationWithExtras) => {
-    try {
-      const newFranchiseStatus = !location.is_franchise;
-      
-      const { error } = await supabase
-        .from('locations')
-        .update({ is_franchise: newFranchiseStatus })
-        .eq('id', location.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: `Location ${newFranchiseStatus ? 'marked as' : 'unmarked as'} franchise`,
-      });
-
-      refetch();
-    } catch (error: any) {
-      console.error('Error toggling franchise status:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update franchise status",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleEditLocation = async (locationId: string, name: string, accountId: string) => {
-    try {
-      const { error } = await supabase
-        .from('locations')
-        .update({ 
-          name: name.trim(),
-          account_id: accountId.trim()
-        })
-        .eq('id', locationId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Location updated successfully"
-      });
-
-      setEditingLocation(null);
-      setTempLocationName("");
-      setTempAccountId("");
-      refetch();
-    } catch (error: any) {
-      console.error('Error updating location:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update location",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const startEditingLocation = (location: LocationWithExtras) => {
-    setEditingLocation(location.id);
-    setTempLocationName(location.name);
-    setTempAccountId(location.account_id || "");
-  };
-
-  const cancelEditingLocation = () => {
-    setEditingLocation(null);
-    setTempLocationName("");
-    setTempAccountId("");
-  };
 
   const handleAddLocation = async () => {
     if (!newLocationName.trim() || !newAccountId.trim()) {
@@ -445,43 +249,6 @@ const UnifiedLocations = () => {
     }
   });
 
-  const handleNotesUpdate = async (locationId: string, notes: string) => {
-    try {
-      const { error } = await supabase
-        .from('locations')
-        .update({ notes })
-        .eq('id', locationId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Notes updated successfully"
-      });
-
-      setEditingNotes(null);
-      setTempNotes("");
-      refetch();
-    } catch (error: any) {
-      console.error('Error updating notes:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update notes",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const startEditingNotes = (locationId: string, currentNotes: string) => {
-    setEditingNotes(locationId);
-    setTempNotes(currentNotes || "");
-  };
-
-  const cancelEditingNotes = () => {
-    setEditingNotes(null);
-    setTempNotes("");
-  };
-
   const handleTimeFrameChange = (value: string) => {
     setTimeFrame(value);
     if (value !== 'custom') {
@@ -495,55 +262,6 @@ const UnifiedLocations = () => {
     if (range?.from && range?.to) {
       setIsCalendarOpen(false);
     }
-  };
-
-  const AgentAssignmentDisplay = ({ location }: { location: LocationWithExtras }) => {
-    const { assignments = [], commissions = [], totalCommission = 0 } = location;
-    
-    // Sort assignments to show Merchant Hero first
-    const sortedAssignments = [...assignments].sort((a, b) => {
-      if (a.agent_name === 'Merchant Hero') return -1;
-      if (b.agent_name === 'Merchant Hero') return 1;
-      return a.agent_name.localeCompare(b.agent_name);
-    });
-
-    return (
-      <div className="space-y-3">
-        {sortedAssignments.map((assignment) => {
-          const commission = commissions.find(c => c.agentName === assignment.agent_name);
-          const earnings = assignment.agent_name === 'Merchant Hero' 
-            ? commission?.merchantHeroPayout || 0
-            : commission?.agentPayout || 0;
-          
-          // For Merchant Hero, show auto-calculated BPS; for others, show their set rate
-          const bpsDisplay = assignment.agent_name === 'Merchant Hero'
-            ? `${commission?.bpsRate || 0} BPS (Auto)`
-            : `${Math.round(assignment.commission_rate * 100)} BPS`;
-
-          return (
-            <div key={assignment.id} className="bg-muted/30 rounded-lg p-3">
-              <div className="font-medium text-foreground mb-1">
-                {assignment.agent_name} – {bpsDisplay}
-              </div>
-              <div className="text-emerald-600 font-semibold">
-                Earnings: ${earnings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-            </div>
-          );
-        })}
-        
-        {assignments.length === 0 && (
-          <div className="text-sm text-muted-foreground">No agents assigned</div>
-        )}
-        
-        <div className="pt-3 border-t border-muted">
-          <div className="text-sm text-muted-foreground mb-1">Total Net Payout:</div>
-          <div className="font-semibold text-emerald-600">
-            ${totalCommission.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        </div>
-      </div>
-    );
   };
 
   const filteredLocations = locations?.filter(location =>
@@ -649,61 +367,7 @@ const UnifiedLocations = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground flex items-center gap-2">
-                <Building2 className="h-4 w-4" />
-                Total Locations
-              </span>
-              <span className="font-semibold">{locations?.length || 0}</span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Assigned Locations
-              </span>
-              <span className="font-semibold">
-                {locations?.filter(l => l.assignedAgents > 0).length || 0}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Total Volume
-              </span>
-              <span className="font-semibold">
-                ${(locations?.reduce((sum, l) => sum + (l.totalVolume || 0), 0) || 0).toLocaleString()}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Total Commission
-              </span>
-              <span className="font-semibold">
-                ${(locations?.reduce((sum, l) => sum + (l.totalCommission || 0), 0) || 0).toLocaleString()}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <LocationSummaryCards locations={locations} />
 
       <Card>
         <CardHeader>
@@ -774,165 +438,12 @@ const UnifiedLocations = () => {
         <CardContent>
           {filteredLocations.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredLocations.map((location, index) => (
-                <Card key={index} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-4">
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between">
-                        {editingLocation === location.id ? (
-                          <div className="flex-1 space-y-2 pr-2">
-                            <Input
-                              value={tempLocationName}
-                              onChange={(e) => setTempLocationName(e.target.value)}
-                              placeholder="Location name"
-                              className="font-semibold"
-                            />
-                            <Input
-                              value={tempAccountId}
-                              onChange={(e) => setTempAccountId(e.target.value)}
-                              placeholder="Account ID"
-                              className="text-sm font-mono"
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleEditLocation(location.id, tempLocationName, tempAccountId)}
-                              >
-                                <Check className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={cancelEditingLocation}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="space-y-1 flex-1">
-                              <CardTitle className="flex items-center gap-2 text-lg">
-                                <Building2 className="h-5 w-5" />
-                                {location.name}
-                                {location.is_franchise && (
-                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
-                                    <Building2 className="h-3 w-3 mr-1" />
-                                    Franchise
-                                  </Badge>
-                                )}
-                              </CardTitle>
-                              {location.account_id && (
-                                <p className="text-sm text-muted-foreground font-mono">
-                                  Account: {location.account_id}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant={location.is_franchise ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => handleToggleFranchise(location)}
-                                className={`flex-shrink-0 ${location.is_franchise ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
-                                title="Toggle franchise status"
-                              >
-                                <Building2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => startEditingLocation(location)}
-                                className="flex-shrink-0"
-                                title="Edit location"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </>
-                        )}
-                        <Badge variant="secondary">
-                          {location.account_type || 'Unknown'}
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Total Volume</span>
-                      <span className="font-semibold text-emerald-600">
-                        ${(location.totalVolume || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        Assigned Agents ({location.assignedAgents || 0})
-                      </div>
-                      <LocationAgentInlineEdit 
-                        locationId={location.id}
-                        locationName={location.name}
-                        onUpdate={refetch}
-                      />
-                    </div>
-
-                    <div>
-                      <AgentAssignmentDisplay location={location} />
-                    </div>
-
-                    {/* Notes Section */}
-                    <div className="pt-3 border-t border-muted">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-muted-foreground">Notes</span>
-                        {editingNotes !== location.id && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0"
-                            onClick={() => startEditingNotes(location.id, location.notes || "")}
-                          >
-                            <Edit3 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                      
-                      {editingNotes === location.id ? (
-                        <div className="space-y-2">
-                          <Textarea
-                            value={tempNotes}
-                            onChange={(e) => setTempNotes(e.target.value)}
-                            placeholder="Add notes..."
-                            className="min-h-[60px] text-sm"
-                            autoFocus
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2"
-                              onClick={() => handleNotesUpdate(location.id, tempNotes)}
-                            >
-                              <Check className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2"
-                              onClick={cancelEditingNotes}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground min-h-[40px] p-2 bg-muted/20 rounded border">
-                          {location.notes || "No notes added"}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+              {filteredLocations.map((location) => (
+                <LocationCard 
+                  key={location.id} 
+                  location={location} 
+                  onUpdate={refetch} 
+                />
               ))}
             </div>
           ) : (
