@@ -229,24 +229,20 @@ const UnifiedLocations = () => {
         console.log('🏢 UnifiedLocations: Found', transactions?.length || 0, 'Maverick transactions');
 
         if (transactions && transactions.length > 0) {
-          // Group transactions by location
+          // Group transactions by location using account_id matching
           transactions.forEach(transaction => {
-            let locationId = transaction.location_id;
-            
-            // If no location_id, try to match by account_id
-            if (!locationId && transaction.account_id) {
+            // Match by account_id only since location_id doesn't exist in transactions table
+            if (transaction.account_id) {
               const matchingLocation = locations.find(loc => loc.account_id === transaction.account_id);
+              
               if (matchingLocation) {
-                locationId = matchingLocation.id;
+                const locationId = matchingLocation.id;
+                const volume = (Number(transaction.volume) || 0) + (Number(transaction.debit_volume) || 0);
+                const payout = Number(transaction.agent_payout) || 0;
+
+                locationVolumeMap.set(locationId, (locationVolumeMap.get(locationId) || 0) + volume);
+                locationPayoutMap.set(locationId, (locationPayoutMap.get(locationId) || 0) + payout);
               }
-            }
-
-            if (locationId) {
-              const volume = (Number(transaction.volume) || 0) + (Number(transaction.debit_volume) || 0);
-              const payout = Number(transaction.agent_payout) || 0;
-
-              locationVolumeMap.set(locationId, (locationVolumeMap.get(locationId) || 0) + volume);
-              locationPayoutMap.set(locationId, (locationPayoutMap.get(locationId) || 0) + payout);
             }
           });
 
