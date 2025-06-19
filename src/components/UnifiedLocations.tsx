@@ -210,30 +210,76 @@ const UnifiedLocations = () => {
       console.log('📊 UnifiedLocations: Total monthly volume:', totalMonthlyVolume.toLocaleString());
       console.log('📊 UnifiedLocations: Total monthly agent payouts:', totalMonthlyAgentPayouts.toLocaleString());
 
-      // For now, since we don't have location-specific monthly data,
-      // we'll distribute the total monthly volume across locations with assignments
+      // If we have monthly data, get actual transaction details for better location distribution
+      let locationVolumeMap = new Map<string, number>();
+      let locationPayoutMap = new Map<string, number>();
+
+      if (monthlyData && monthlyData.length > 0 && dateRange) {
+        // Fetch actual transactions to get location-specific data
+        const fromFormatted = format(dateRange.from, 'yyyy-MM-dd');
+        const toFormatted = format(dateRange.to, 'yyyy-MM-dd');
+
+        const { data: transactions } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('processor', 'Maverick')
+          .gte('transaction_date', fromFormatted)
+          .lte('transaction_date', toFormatted);
+
+        console.log('🏢 UnifiedLocations: Found', transactions?.length || 0, 'Maverick transactions');
+
+        if (transactions && transactions.length > 0) {
+          // Group transactions by location
+          transactions.forEach(transaction => {
+            let locationId = transaction.location_id;
+            
+            // If no location_id, try to match by account_id
+            if (!locationId && transaction.account_id) {
+              const matchingLocation = locations.find(loc => loc.account_id === transaction.account_id);
+              if (matchingLocation) {
+                locationId = matchingLocation.id;
+              }
+            }
+
+            if (locationId) {
+              const volume = (Number(transaction.volume) || 0) + (Number(transaction.debit_volume) || 0);
+              const payout = Number(transaction.agent_payout) || 0;
+
+              locationVolumeMap.set(locationId, (locationVolumeMap.get(locationId) || 0) + volume);
+              locationPayoutMap.set(locationId, (locationPayoutMap.get(locationId) || 0) + payout);
+            }
+          });
+
+          console.log('📊 UnifiedLocations: Location volume distribution:', 
+            Array.from(locationVolumeMap.entries()).map(([id, volume]) => {
+              const location = locations.find(l => l.id === id);
+              return `${location?.name || id}: $${volume.toLocaleString()}`;
+            })
+          );
+        }
+      }
+
+      // For locations without specific transaction data, distribute evenly among assigned locations
       const locationsWithAssignments = locations.filter(location => 
         assignments.some(a => a.location_id === location.id)
       );
 
-      const volumePerLocation = locationsWithAssignments.length > 0 
-        ? totalMonthlyVolume / locationsWithAssignments.length 
-        : 0;
+      const unassignedVolume = totalMonthlyVolume - Array.from(locationVolumeMap.values()).reduce((sum, vol) => sum + vol, 0);
+      const unassignedPayouts = totalMonthlyAgentPayouts - Array.from(locationPayoutMap.values()).reduce((sum, payout) => sum + payout, 0);
+      
+      const locationsWithoutData = locationsWithAssignments.filter(loc => !locationVolumeMap.has(loc.id));
+      const volumePerUnassignedLocation = locationsWithoutData.length > 0 ? unassignedVolume / locationsWithoutData.length : 0;
+      const payoutPerUnassignedLocation = locationsWithoutData.length > 0 ? unassignedPayouts / locationsWithoutData.length : 0;
 
-      const payoutPerLocation = locationsWithAssignments.length > 0 
-        ? totalMonthlyAgentPayouts / locationsWithAssignments.length 
-        : 0;
-
-      console.log('📊 UnifiedLocations: Volume per location (estimated):', volumePerLocation.toLocaleString());
-      console.log('📊 UnifiedLocations: Payout per location (estimated):', payoutPerLocation.toLocaleString());
-
-      // Map locations with their assignment data and estimated monthly volume
+      // Map locations with their assignment data and calculated volume
       return locations.map(location => {
         const locationAssignments = assignments.filter(a => a.location_id === location.id);
         
-        // Use estimated volume for locations with assignments, 0 for others
-        const totalVolume = locationAssignments.length > 0 ? volumePerLocation : 0;
-        const totalCommission = locationAssignments.length > 0 ? payoutPerLocation : 0;
+        // Use actual volume if available, otherwise estimated volume for assigned locations
+        const totalVolume = locationVolumeMap.get(location.id) || 
+          (locationAssignments.length > 0 ? volumePerUnassignedLocation : 0);
+        const totalCommission = locationPayoutMap.get(location.id) || 
+          (locationAssignments.length > 0 ? payoutPerUnassignedLocation : 0);
 
         console.log(`🏢 UnifiedLocations: Location ${location.name} - Volume: $${totalVolume.toLocaleString()}, Commission: $${totalCommission.toLocaleString()}`);
 
@@ -272,12 +318,19 @@ const UnifiedLocations = () => {
     location.agentNames?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
+  const dataStatus = monthlyData && monthlyData.length > 0 ? 
+    `📊 Showing data for ${timeFrame.toUpperCase()} (${monthlyData.length} records)` :
+    `⚠️ No data found for ${timeFrame.toUpperCase()}`;
+
   if (isLoading || isMonthlyDataLoading) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Locations & Accounts</h2>
           <p className="text-muted-foreground">Manage locations, accounts, and agent assignments</p>
+          <p className={`text-sm mt-1 ${monthlyData && monthlyData.length > 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
+            {dataStatus}
+          </p>
         </div>
         <div className="flex items-center justify-center h-64">
           <p className="text-muted-foreground">Loading locations and data...</p>
@@ -292,16 +345,9 @@ const UnifiedLocations = () => {
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Locations & Accounts</h2>
           <p className="text-muted-foreground">Manage locations, accounts, and agent assignments</p>
-          {monthlyData && monthlyData.length > 0 && (
-            <p className="text-sm text-emerald-600 mt-1">
-              📊 Showing monthly volume data for {timeFrame.toUpperCase()} ({monthlyData.length} records)
-            </p>
-          )}
-          {(!monthlyData || monthlyData.length === 0) && (
-            <p className="text-sm text-orange-600 mt-1">
-              ⚠️ No monthly volume data found for {timeFrame.toUpperCase()}
-            </p>
-          )}
+          <p className={`text-sm mt-1 ${monthlyData && monthlyData.length > 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
+            {dataStatus}
+          </p>
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
