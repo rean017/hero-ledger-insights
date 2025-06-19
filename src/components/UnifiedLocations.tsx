@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getDynamicTimeFrames, getDateRangeForTimeFrame, normalizeCustomDateRange } from "@/utils/timeFrameUtils";
 import { ensureMerchantHeroSetup } from "@/utils/locationOperations";
 import { useMonthlyData } from "@/hooks/useMonthlyData";
+import { calculateLocationCommissions } from "@/utils/commissionCalculations";
 import LocationSummaryCards from "./LocationSummaryCards";
 import LocationCard from "./LocationCard";
 import { format } from "date-fns";
@@ -178,7 +179,7 @@ const UnifiedLocations = () => {
   const { data: locations, isLoading, refetch } = useQuery({
     queryKey: ['unified-locations', timeFrame, customDateRange, dateRange],
     queryFn: async () => {
-      console.log('🚀 MAVERICK ANALYSIS: Starting comprehensive location data fetch...');
+      console.log('🚀 UNIFIED LOCATIONS: Starting comprehensive location data fetch...');
       
       // First, get all locations
       const { data: locations, error: locationError } = await supabase
@@ -187,15 +188,11 @@ const UnifiedLocations = () => {
         .order('name');
 
       if (locationError) {
-        console.error('❌ MAVERICK: Error fetching locations:', locationError);
+        console.error('❌ UNIFIED LOCATIONS: Error fetching locations:', locationError);
         throw locationError;
       }
 
-      console.log('🏢 MAVERICK: Found', locations?.length || 0, 'total locations');
-      console.log('🏢 MAVERICK: Sample locations:', locations?.slice(0, 3).map(l => ({
-        name: l.name,
-        account_id: l.account_id
-      })));
+      console.log('🏢 UNIFIED LOCATIONS: Found', locations?.length || 0, 'total locations');
 
       // Get assignments
       const { data: assignments, error: assignmentError } = await supabase
@@ -204,31 +201,21 @@ const UnifiedLocations = () => {
         .eq('is_active', true);
 
       if (assignmentError) {
-        console.error('❌ MAVERICK: Error fetching assignments:', assignmentError);
+        console.error('❌ UNIFIED LOCATIONS: Error fetching assignments:', assignmentError);
         throw assignmentError;
       }
 
-      console.log('🏢 MAVERICK: Found', assignments?.length || 0, 'active assignments');
+      console.log('🏢 UNIFIED LOCATIONS: Found', assignments?.length || 0, 'active assignments');
 
-      // Initialize maps for volume and commission calculations
-      const locationVolumeMap = new Map<string, number>();
-      const locationCommissionMap = new Map<string, number>();
-      
-      // Get total payouts from monthly data
-      const totalMonthlyPayouts = monthlyData?.reduce((sum, plData) => {
-        return sum + (Number(plData.total_agent_payouts) || 0);
-      }, 0) || 0;
-
-      console.log('💰 MAVERICK: Total monthly payouts from P&L:', totalMonthlyPayouts.toLocaleString());
-
-      // Fetch and process transactions if we have a date range
+      // Fetch transactions if we have a date range
+      let transactions = [];
       if (dateRange) {
         const fromFormatted = format(dateRange.from, 'yyyy-MM-dd');
         const toFormatted = format(dateRange.to, 'yyyy-MM-dd');
 
-        console.log('📅 MAVERICK: Fetching transactions from', fromFormatted, 'to', toFormatted);
+        console.log('📅 UNIFIED LOCATIONS: Fetching transactions from', fromFormatted, 'to', toFormatted);
 
-        const { data: transactions, error: transError } = await supabase
+        const { data: transactionData, error: transError } = await supabase
           .from('transactions')
           .select('*')
           .eq('processor', 'Maverick')
@@ -236,155 +223,44 @@ const UnifiedLocations = () => {
           .lte('transaction_date', toFormatted);
 
         if (transError) {
-          console.error('❌ MAVERICK: Error fetching transactions:', transError);
+          console.error('❌ UNIFIED LOCATIONS: Error fetching transactions:', transError);
         } else {
-          console.log('📊 MAVERICK: Found', transactions?.length || 0, 'Maverick transactions');
-
-          if (transactions && transactions.length > 0) {
-            // First, let's analyze the transaction data structure
-            const sampleTransaction = transactions[0];
-            console.log('🔍 MAVERICK: Sample transaction structure:', {
-              id: sampleTransaction.id,
-              account_id: sampleTransaction.account_id,
-              volume: sampleTransaction.volume,
-              debit_volume: sampleTransaction.debit_volume,
-              agent_payout: sampleTransaction.agent_payout,
-              transaction_date: sampleTransaction.transaction_date,
-              agent_name: sampleTransaction.agent_name
-            });
-
-            // Count transactions by account_id status
-            const withAccountId = transactions.filter(t => t.account_id && t.account_id !== null).length;
-            const withoutAccountId = transactions.filter(t => !t.account_id || t.account_id === null).length;
-            const withVolume = transactions.filter(t => (Number(t.volume) || 0) > 0 || (Number(t.debit_volume) || 0) > 0).length;
-            const withPayout = transactions.filter(t => (Number(t.agent_payout) || 0) !== 0).length;
-
-            console.log('📊 MAVERICK: Transaction analysis:');
-            console.log('  - With account_id:', withAccountId);
-            console.log('  - Without account_id (null):', withoutAccountId);
-            console.log('  - With volume:', withVolume);
-            console.log('  - With payout:', withPayout);
-
-            // If most transactions have null account_id, let's try to match by agent_name to location
-            if (withoutAccountId > withAccountId) {
-              console.log('⚠️ MAVERICK: Most transactions have null account_id, attempting agent_name matching...');
-              
-              // Try to match by agent name if account_id is null
-              transactions.forEach((transaction, index) => {
-                const creditVolume = Number(transaction.volume) || 0;
-                const debitVolume = Number(transaction.debit_volume) || 0;
-                const totalVolume = creditVolume + debitVolume;
-                const agentPayout = Number(transaction.agent_payout) || 0;
-
-                if (index < 5) {
-                  console.log(`🔍 MAVERICK: Transaction ${index + 1}:`, {
-                    account_id: transaction.account_id,
-                    agent_name: transaction.agent_name,
-                    totalVolume: totalVolume,
-                    agentPayout: agentPayout
-                  });
-                }
-
-                // For now, let's aggregate all transactions since we can't match by location
-                // This gives us total volume and commission across all transactions
-                if (totalVolume > 0 || agentPayout !== 0) {
-                  // Since we can't match to specific locations, let's distribute evenly or use a different strategy
-                  // For now, let's just log what we find
-                  if (index === 0) {
-                    console.log('💡 MAVERICK: Since account_id matching failed, considering alternative strategies...');
-                  }
-                }
-              });
-
-              // Calculate totals across all transactions
-              const totalTransactionVolume = transactions.reduce((sum, t) => {
-                const creditVol = Number(t.volume) || 0;
-                const debitVol = Number(t.debit_volume) || 0;
-                return sum + creditVol + debitVol;
-              }, 0);
-
-              const totalTransactionPayouts = transactions.reduce((sum, t) => {
-                return sum + (Number(t.agent_payout) || 0);
-              }, 0);
-
-              console.log('📊 MAVERICK: Total calculated from transactions:');
-              console.log('  - Total volume:', totalTransactionVolume.toLocaleString());
-              console.log('  - Total payouts:', totalTransactionPayouts.toLocaleString());
-              console.log('  - Expected P&L payouts:', totalMonthlyPayouts.toLocaleString());
-
-              // Since we can't match by account_id, let's assign proportionally to locations that have assignments
-              if (locations && locations.length > 0) {
-                const locationsWithAssignments = locations.filter(loc => 
-                  assignments?.some(a => a.location_id === loc.id)
-                );
-
-                if (locationsWithAssignments.length > 0) {
-                  const volumePerLocation = totalTransactionVolume / locationsWithAssignments.length;
-                  const payoutPerLocation = totalTransactionPayouts / locationsWithAssignments.length;
-
-                  console.log('📊 MAVERICK: Distributing evenly across', locationsWithAssignments.length, 'locations with assignments');
-                  console.log('  - Volume per location:', volumePerLocation.toLocaleString());
-                  console.log('  - Payout per location:', payoutPerLocation.toLocaleString());
-
-                  locationsWithAssignments.forEach(location => {
-                    locationVolumeMap.set(location.id, volumePerLocation);
-                    locationCommissionMap.set(location.id, payoutPerLocation);
-                  });
-                }
-              }
-            } else {
-              // Original logic for when we have account_ids
-              transactions.forEach((transaction, index) => {
-                const matchingLocation = locations.find(loc => 
-                  loc.account_id && transaction.account_id && 
-                  loc.account_id.trim() === transaction.account_id.trim()
-                );
-
-                if (matchingLocation) {
-                  const locationId = matchingLocation.id;
-                  const creditVolume = Number(transaction.volume) || 0;
-                  const debitVolume = Number(transaction.debit_volume) || 0;
-                  const totalVolume = creditVolume + debitVolume;
-                  const agentPayout = Number(transaction.agent_payout) || 0;
-
-                  locationVolumeMap.set(locationId, (locationVolumeMap.get(locationId) || 0) + totalVolume);
-                  locationCommissionMap.set(locationId, (locationCommissionMap.get(locationId) || 0) + agentPayout);
-
-                  if (index < 5) {
-                    console.log(`✅ MAVERICK: Matched ${matchingLocation.name} → Volume: $${totalVolume.toLocaleString()}, Payout: $${agentPayout.toLocaleString()}`);
-                  }
-                }
-              });
-            }
-
-            // Log final totals
-            const totalCalculatedVolume = Array.from(locationVolumeMap.values()).reduce((sum, vol) => sum + vol, 0);
-            const totalCalculatedCommissions = Array.from(locationCommissionMap.values()).reduce((sum, comm) => sum + comm, 0);
-
-            console.log('📊 MAVERICK: Final location calculations:');
-            console.log('  - Total volume distributed:', totalCalculatedVolume.toLocaleString());
-            console.log('  - Total commissions distributed:', totalCalculatedCommissions.toLocaleString());
-
-            // Log per-location breakdown
-            Array.from(locationVolumeMap.entries()).forEach(([locationId, volume]) => {
-              const location = locations.find(l => l.id === locationId);
-              const commission = locationCommissionMap.get(locationId) || 0;
-              console.log(`  📍 ${location?.name || 'Unknown'}: Volume $${volume.toLocaleString()}, Commission $${commission.toLocaleString()}`);
-            });
-          }
+          transactions = transactionData || [];
+          console.log('📊 UNIFIED LOCATIONS: Found', transactions.length, 'Maverick transactions');
         }
       }
+
+      // Calculate commissions for each location
+      const commissions = calculateLocationCommissions(transactions, assignments || [], locations || []);
+      console.log('💰 UNIFIED LOCATIONS: Calculated commissions:', commissions.length);
+
+      // Create a map for quick lookup of commission data by location
+      const commissionMap = new Map();
+      commissions.forEach(commission => {
+        if (!commissionMap.has(commission.locationId)) {
+          commissionMap.set(commission.locationId, {
+            totalVolume: commission.locationVolume,
+            totalCommission: commission.netAgentPayout,
+            commissions: []
+          });
+        }
+        commissionMap.get(commission.locationId).commissions.push(commission);
+      });
 
       // Map locations with their calculated data
       const enrichedLocations = locations.map(location => {
         const locationAssignments = assignments?.filter(a => a.location_id === location.id) || [];
-        const totalVolume = locationVolumeMap.get(location.id) || 0;
-        const totalCommission = locationCommissionMap.get(location.id) || 0;
+        const commissionData = commissionMap.get(location.id);
+        
+        const totalVolume = commissionData?.totalVolume || 0;
+        const totalCommission = commissionData?.totalCommission || 0;
+        const locationCommissions = commissionData?.commissions || [];
 
-        console.log(`🏢 MAVERICK: Enriching ${location.name}:`, {
+        console.log(`🏢 UNIFIED LOCATIONS: Enriching ${location.name}:`, {
           assignedAgents: locationAssignments.length,
           totalVolume: totalVolume.toLocaleString(),
-          totalCommission: totalCommission.toLocaleString()
+          totalCommission: totalCommission.toLocaleString(),
+          commissions: locationCommissions.length
         });
 
         return {
@@ -394,11 +270,11 @@ const UnifiedLocations = () => {
           totalCommission,
           agentNames: locationAssignments.map(a => a.agent_name).join(', '),
           assignments: locationAssignments,
-          commissions: []
+          commissions: locationCommissions
         } as LocationWithExtras;
       });
 
-      console.log('🎉 MAVERICK: Final enriched locations:', enrichedLocations.length);
+      console.log('🎉 UNIFIED LOCATIONS: Final enriched locations:', enrichedLocations.length);
       return enrichedLocations;
     },
     enabled: !isMonthlyDataLoading && !!dateRange
