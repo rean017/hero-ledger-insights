@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -177,113 +176,131 @@ const UnifiedLocations = () => {
 
   // Fetch locations with assignment data and calculate volume from actual transactions
   const { data: locations, isLoading, refetch } = useQuery({
-    queryKey: ['unified-locations', timeFrame, customDateRange],
+    queryKey: ['unified-locations', timeFrame, customDateRange, dateRange],
     queryFn: async () => {
+      console.log('🏢 MAVERICK LOCATION QUERY: Starting location data fetch...');
+      
+      // First, get all locations
       const { data: locations, error: locationError } = await supabase
         .from('locations')
         .select('*')
         .order('name');
 
-      if (locationError) throw locationError;
+      if (locationError) {
+        console.error('❌ MAVERICK LOCATION: Error fetching locations:', locationError);
+        throw locationError;
+      }
 
+      console.log('🏢 MAVERICK LOCATION: Found', locations?.length || 0, 'total locations');
+
+      // Get assignments
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
         .select('*')
         .eq('is_active', true);
 
-      if (assignmentError) throw assignmentError;
+      if (assignmentError) {
+        console.error('❌ MAVERICK LOCATION: Error fetching assignments:', assignmentError);
+        throw assignmentError;
+      }
 
-      console.log('🏢 UnifiedLocations: Processing locations with actual transaction data...');
+      console.log('🏢 MAVERICK LOCATION: Found', assignments?.length || 0, 'active assignments');
 
-      // Initialize volume and payout maps
-      let locationVolumeMap = new Map<string, number>();
-      let locationPayoutMap = new Map<string, number>();
+      // Initialize maps for volume and commission calculations
+      const locationVolumeMap = new Map<string, number>();
+      const locationCommissionMap = new Map<string, number>();
       
-      // Get total agent payouts from monthly data for commission display
-      const totalMonthlyAgentPayouts = monthlyData?.reduce((sum, plData) => {
-        const payouts = Number(plData.total_agent_payouts) || 0;
-        return sum + payouts;
+      // Get total payouts from monthly data (this should be our commission baseline)
+      const totalMonthlyPayouts = monthlyData?.reduce((sum, plData) => {
+        return sum + (Number(plData.total_agent_payouts) || 0);
       }, 0) || 0;
 
-      console.log('📊 UnifiedLocations: Total monthly agent payouts from P&L:', totalMonthlyAgentPayouts.toLocaleString());
+      console.log('💰 MAVERICK LOCATION: Total monthly payouts from P&L:', totalMonthlyPayouts.toLocaleString());
 
-      // Fetch actual transactions to get real volume data
+      // Fetch and process transactions if we have a date range
       if (dateRange) {
         const fromFormatted = format(dateRange.from, 'yyyy-MM-dd');
         const toFormatted = format(dateRange.to, 'yyyy-MM-dd');
 
-        console.log('🔍 UnifiedLocations: Fetching transactions from', fromFormatted, 'to', toFormatted);
+        console.log('📅 MAVERICK LOCATION: Fetching transactions from', fromFormatted, 'to', toFormatted);
 
-        const { data: transactions } = await supabase
+        const { data: transactions, error: transError } = await supabase
           .from('transactions')
           .select('*')
           .eq('processor', 'Maverick')
           .gte('transaction_date', fromFormatted)
           .lte('transaction_date', toFormatted);
 
-        console.log('🏢 UnifiedLocations: Found', transactions?.length || 0, 'Maverick transactions');
+        if (transError) {
+          console.error('❌ MAVERICK LOCATION: Error fetching transactions:', transError);
+        } else {
+          console.log('📊 MAVERICK LOCATION: Found', transactions?.length || 0, 'Maverick transactions');
 
-        if (transactions && transactions.length > 0) {
-          // Group transactions by location using account_id matching
-          transactions.forEach(transaction => {
-            // Match by account_id only since location_id doesn't exist in transactions table
-            if (transaction.account_id) {
-              const matchingLocation = locations.find(loc => loc.account_id === transaction.account_id);
-              
+          if (transactions && transactions.length > 0) {
+            // Process each transaction
+            transactions.forEach((transaction, index) => {
+              console.log(`🔍 MAVERICK LOCATION: Processing transaction ${index + 1}:`, {
+                account_id: transaction.account_id,
+                volume: transaction.volume,
+                debit_volume: transaction.debit_volume,
+                agent_payout: transaction.agent_payout
+              });
+
+              // Find matching location by account_id
+              const matchingLocation = locations.find(loc => 
+                loc.account_id && transaction.account_id && 
+                loc.account_id.trim() === transaction.account_id.trim()
+              );
+
               if (matchingLocation) {
                 const locationId = matchingLocation.id;
-                const volume = (Number(transaction.volume) || 0) + (Number(transaction.debit_volume) || 0);
-                const payout = Number(transaction.agent_payout) || 0;
+                
+                // Calculate total volume for this transaction
+                const creditVolume = Number(transaction.volume) || 0;
+                const debitVolume = Number(transaction.debit_volume) || 0;
+                const totalVolume = creditVolume + debitVolume;
+                const agentPayout = Number(transaction.agent_payout) || 0;
 
-                locationVolumeMap.set(locationId, (locationVolumeMap.get(locationId) || 0) + volume);
-                locationPayoutMap.set(locationId, (locationPayoutMap.get(locationId) || 0) + payout);
+                // Add to location totals
+                locationVolumeMap.set(locationId, (locationVolumeMap.get(locationId) || 0) + totalVolume);
+                locationCommissionMap.set(locationId, (locationCommissionMap.get(locationId) || 0) + agentPayout);
 
-                console.log(`💰 UnifiedLocations: ${matchingLocation.name} → Volume: $${volume.toLocaleString()}, Payout: $${payout.toLocaleString()}`);
+                console.log(`✅ MAVERICK LOCATION: Matched ${matchingLocation.name} → Volume: $${totalVolume.toLocaleString()}, Payout: $${agentPayout.toLocaleString()}`);
               } else {
-                console.log(`⚠️ UnifiedLocations: No location found for account_id: ${transaction.account_id}`);
+                console.log(`⚠️ MAVERICK LOCATION: No location found for account_id: "${transaction.account_id}"`);
               }
-            }
-          });
+            });
 
-          console.log('📊 UnifiedLocations: Location volume distribution:', 
-            Array.from(locationVolumeMap.entries()).map(([id, volume]) => {
-              const location = locations.find(l => l.id === id);
-              return `${location?.name || id}: $${volume.toLocaleString()}`;
-            })
-          );
-        } else {
-          console.log('⚠️ UnifiedLocations: No Maverick transactions found for date range');
+            // Log final totals
+            const totalCalculatedVolume = Array.from(locationVolumeMap.values()).reduce((sum, vol) => sum + vol, 0);
+            const totalCalculatedCommissions = Array.from(locationCommissionMap.values()).reduce((sum, comm) => sum + comm, 0);
+
+            console.log('📊 MAVERICK LOCATION: Final calculations:');
+            console.log('  - Total volume across all locations:', totalCalculatedVolume.toLocaleString());
+            console.log('  - Total commissions across all locations:', totalCalculatedCommissions.toLocaleString());
+            console.log('  - Expected monthly payouts:', totalMonthlyPayouts.toLocaleString());
+
+            // Log per-location breakdown
+            Array.from(locationVolumeMap.entries()).forEach(([locationId, volume]) => {
+              const location = locations.find(l => l.id === locationId);
+              const commission = locationCommissionMap.get(locationId) || 0;
+              console.log(`  - ${location?.name || 'Unknown'}: Volume $${volume.toLocaleString()}, Commission $${commission.toLocaleString()}`);
+            });
+          }
         }
       }
 
-      // Calculate total actual volume from transactions
-      const totalActualVolume = Array.from(locationVolumeMap.values()).reduce((sum, vol) => sum + vol, 0);
-      const totalActualPayouts = Array.from(locationPayoutMap.values()).reduce((sum, payout) => sum + payout, 0);
-
-      console.log('📊 UnifiedLocations: Total actual volume from transactions:', totalActualVolume.toLocaleString());
-      console.log('📊 UnifiedLocations: Total actual payouts from transactions:', totalActualPayouts.toLocaleString());
-
-      // For locations with assignments but no transaction data, distribute remaining payouts evenly
-      const locationsWithAssignments = locations.filter(location => 
-        assignments.some(a => a.location_id === location.id)
-      );
-
-      const locationsWithoutData = locationsWithAssignments.filter(loc => !locationVolumeMap.has(loc.id));
-      const remainingPayouts = Math.max(0, totalMonthlyAgentPayouts - totalActualPayouts);
-      const payoutPerUnassignedLocation = locationsWithoutData.length > 0 ? remainingPayouts / locationsWithoutData.length : 0;
-
-      console.log(`📊 UnifiedLocations: Distributing remaining $${remainingPayouts.toLocaleString()} across ${locationsWithoutData.length} locations without data`);
-
-      // Map locations with their assignment data and calculated volume
-      return locations.map(location => {
-        const locationAssignments = assignments.filter(a => a.location_id === location.id);
-        
-        // Use actual volume and payouts if available, otherwise use estimated payouts for assigned locations
+      // Map locations with their calculated data
+      const enrichedLocations = locations.map(location => {
+        const locationAssignments = assignments?.filter(a => a.location_id === location.id) || [];
         const totalVolume = locationVolumeMap.get(location.id) || 0;
-        const totalCommission = locationPayoutMap.get(location.id) || 
-          (locationAssignments.length > 0 ? payoutPerUnassignedLocation : 0);
+        const totalCommission = locationCommissionMap.get(location.id) || 0;
 
-        console.log(`🏢 UnifiedLocations: Location ${location.name} - Volume: $${totalVolume.toLocaleString()}, Commission: $${totalCommission.toLocaleString()}`);
+        console.log(`🏢 MAVERICK LOCATION: Enriching ${location.name}:`, {
+          assignedAgents: locationAssignments.length,
+          totalVolume: totalVolume.toLocaleString(),
+          totalCommission: totalCommission.toLocaleString()
+        });
 
         return {
           ...location,
@@ -292,11 +309,14 @@ const UnifiedLocations = () => {
           totalCommission,
           agentNames: locationAssignments.map(a => a.agent_name).join(', '),
           assignments: locationAssignments,
-          commissions: [] // We'll calculate these separately if needed
+          commissions: []
         } as LocationWithExtras;
       });
+
+      console.log('🎉 MAVERICK LOCATION: Final enriched locations:', enrichedLocations.length);
+      return enrichedLocations;
     },
-    enabled: !isMonthlyDataLoading // Wait for monthly data to load first
+    enabled: !isMonthlyDataLoading && !!dateRange
   });
 
   const handleTimeFrameChange = (value: string) => {
