@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -174,7 +175,7 @@ const UnifiedLocations = () => {
     }
   };
 
-  // Fetch locations with assignment data and use monthly volume data
+  // Fetch locations with assignment data and calculate volume from actual transactions
   const { data: locations, isLoading, refetch } = useQuery({
     queryKey: ['unified-locations', timeFrame, customDateRange],
     queryFn: async () => {
@@ -192,32 +193,26 @@ const UnifiedLocations = () => {
 
       if (assignmentError) throw assignmentError;
 
-      console.log('🏢 UnifiedLocations: Processing locations with monthly volume data...');
-      console.log('📊 UnifiedLocations: Available monthly data:', monthlyData?.length || 0, 'records');
+      console.log('🏢 UnifiedLocations: Processing locations with actual transaction data...');
 
-      // Calculate total monthly volume from P&L data for the timeframe
-      const totalMonthlyVolume = monthlyData?.reduce((sum, plData) => {
-        const volume = Number(plData.total_volume) || 0;
-        const debitVolume = Number(plData.total_debit_volume) || 0;
-        return sum + volume + debitVolume;
-      }, 0) || 0;
-
+      // Initialize volume and payout maps
+      let locationVolumeMap = new Map<string, number>();
+      let locationPayoutMap = new Map<string, number>();
+      
+      // Get total agent payouts from monthly data for commission display
       const totalMonthlyAgentPayouts = monthlyData?.reduce((sum, plData) => {
         const payouts = Number(plData.total_agent_payouts) || 0;
         return sum + payouts;
       }, 0) || 0;
 
-      console.log('📊 UnifiedLocations: Total monthly volume:', totalMonthlyVolume.toLocaleString());
-      console.log('📊 UnifiedLocations: Total monthly agent payouts:', totalMonthlyAgentPayouts.toLocaleString());
+      console.log('📊 UnifiedLocations: Total monthly agent payouts from P&L:', totalMonthlyAgentPayouts.toLocaleString());
 
-      // If we have monthly data, get actual transaction details for better location distribution
-      let locationVolumeMap = new Map<string, number>();
-      let locationPayoutMap = new Map<string, number>();
-
-      if (monthlyData && monthlyData.length > 0 && dateRange) {
-        // Fetch actual transactions to get location-specific data
+      // Fetch actual transactions to get real volume data
+      if (dateRange) {
         const fromFormatted = format(dateRange.from, 'yyyy-MM-dd');
         const toFormatted = format(dateRange.to, 'yyyy-MM-dd');
+
+        console.log('🔍 UnifiedLocations: Fetching transactions from', fromFormatted, 'to', toFormatted);
 
         const { data: transactions } = await supabase
           .from('transactions')
@@ -242,6 +237,10 @@ const UnifiedLocations = () => {
 
                 locationVolumeMap.set(locationId, (locationVolumeMap.get(locationId) || 0) + volume);
                 locationPayoutMap.set(locationId, (locationPayoutMap.get(locationId) || 0) + payout);
+
+                console.log(`💰 UnifiedLocations: ${matchingLocation.name} → Volume: $${volume.toLocaleString()}, Payout: $${payout.toLocaleString()}`);
+              } else {
+                console.log(`⚠️ UnifiedLocations: No location found for account_id: ${transaction.account_id}`);
               }
             }
           });
@@ -252,28 +251,35 @@ const UnifiedLocations = () => {
               return `${location?.name || id}: $${volume.toLocaleString()}`;
             })
           );
+        } else {
+          console.log('⚠️ UnifiedLocations: No Maverick transactions found for date range');
         }
       }
 
-      // For locations without specific transaction data, distribute evenly among assigned locations
+      // Calculate total actual volume from transactions
+      const totalActualVolume = Array.from(locationVolumeMap.values()).reduce((sum, vol) => sum + vol, 0);
+      const totalActualPayouts = Array.from(locationPayoutMap.values()).reduce((sum, payout) => sum + payout, 0);
+
+      console.log('📊 UnifiedLocations: Total actual volume from transactions:', totalActualVolume.toLocaleString());
+      console.log('📊 UnifiedLocations: Total actual payouts from transactions:', totalActualPayouts.toLocaleString());
+
+      // For locations with assignments but no transaction data, distribute remaining payouts evenly
       const locationsWithAssignments = locations.filter(location => 
         assignments.some(a => a.location_id === location.id)
       );
 
-      const unassignedVolume = totalMonthlyVolume - Array.from(locationVolumeMap.values()).reduce((sum, vol) => sum + vol, 0);
-      const unassignedPayouts = totalMonthlyAgentPayouts - Array.from(locationPayoutMap.values()).reduce((sum, payout) => sum + payout, 0);
-      
       const locationsWithoutData = locationsWithAssignments.filter(loc => !locationVolumeMap.has(loc.id));
-      const volumePerUnassignedLocation = locationsWithoutData.length > 0 ? unassignedVolume / locationsWithoutData.length : 0;
-      const payoutPerUnassignedLocation = locationsWithoutData.length > 0 ? unassignedPayouts / locationsWithoutData.length : 0;
+      const remainingPayouts = Math.max(0, totalMonthlyAgentPayouts - totalActualPayouts);
+      const payoutPerUnassignedLocation = locationsWithoutData.length > 0 ? remainingPayouts / locationsWithoutData.length : 0;
+
+      console.log(`📊 UnifiedLocations: Distributing remaining $${remainingPayouts.toLocaleString()} across ${locationsWithoutData.length} locations without data`);
 
       // Map locations with their assignment data and calculated volume
       return locations.map(location => {
         const locationAssignments = assignments.filter(a => a.location_id === location.id);
         
-        // Use actual volume if available, otherwise estimated volume for assigned locations
-        const totalVolume = locationVolumeMap.get(location.id) || 
-          (locationAssignments.length > 0 ? volumePerUnassignedLocation : 0);
+        // Use actual volume and payouts if available, otherwise use estimated payouts for assigned locations
+        const totalVolume = locationVolumeMap.get(location.id) || 0;
         const totalCommission = locationPayoutMap.get(location.id) || 
           (locationAssignments.length > 0 ? payoutPerUnassignedLocation : 0);
 
