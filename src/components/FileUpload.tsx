@@ -76,7 +76,7 @@ const FileUpload = () => {
     try {
       console.log('🔍 LOCATION MERGER: Checking for existing location with name:', locationName);
       
-      // First, check for exact name match (case-insensitive) - FIXED: Include name in select
+      // First, check for exact name match (case-insensitive)
       const { data: existingLocations, error: selectError } = await supabase
         .from('locations')
         .select('id, name, account_id')
@@ -154,29 +154,78 @@ const FileUpload = () => {
   };
 
   const normalizeTransactionData = (rawData: any[], uploadMonth?: string) => {
-    return rawData.map(row => {
-      // Try to extract date from various possible fields
-      const dateValue = row['Transaction Date'] || row['Date'] || row['TRANSACTION_DATE'] || null;
+    console.log('🔍 MAVERICK PARSER: Starting to normalize transaction data...');
+    console.log('🔍 MAVERICK PARSER: Raw data sample (first 3 rows):', rawData.slice(0, 3));
+    
+    const normalized = rawData.map((row, index) => {
+      // Enhanced field mapping for Maverick data
+      console.log(`🔍 MAVERICK PARSER: Processing row ${index + 1}:`, row);
       
-      // Try to extract location name from various possible fields
-      const locationName = row['Location'] || row['LOCATION'] || row['Merchant'] || row['MERCHANT'] || 'Unknown Location';
+      // Try multiple field names for date
+      const dateValue = row['Transaction Date'] || row['Date'] || row['TRANSACTION_DATE'] || 
+                       row['transaction_date'] || row['TXN_DATE'] || null;
       
-      // Try to extract account ID from various possible fields
-      const accountId = row['Account ID'] || row['ACCOUNT_ID'] || row['Account'] || row['ACCOUNT'] || null;
+      // Try multiple field names for location/merchant
+      const locationName = row['Location'] || row['LOCATION'] || row['Merchant'] || 
+                          row['MERCHANT'] || row['merchant_name'] || row['MERCHANT_NAME'] ||
+                          row['Business Name'] || row['BUSINESS_NAME'] || 'Unknown Location';
       
-      // Try to extract volume from various possible fields (bank card volume)
-      const volume = parseFloat(row['Volume'] || row['VOLUME'] || row['Bank Card Volume'] || row['BANK_CARD_VOLUME'] || 0);
+      // Try multiple field names for account ID
+      const accountId = row['Account ID'] || row['ACCOUNT_ID'] || row['Account'] || 
+                       row['ACCOUNT'] || row['account_id'] || row['MID'] || 
+                       row['Merchant ID'] || row['MERCHANT_ID'] || null;
       
-      // Try to extract debit volume from various possible fields
-      const debitVolume = parseFloat(row['Debit Volume'] || row['DEBIT_VOLUME'] || 0);
+      // Enhanced volume parsing - try multiple field names and formats
+      let volume = 0;
+      const volumeFields = ['Volume', 'VOLUME', 'Bank Card Volume', 'BANK_CARD_VOLUME', 
+                           'Credit Volume', 'CREDIT_VOLUME', 'Transaction Amount', 
+                           'TRANSACTION_AMOUNT', 'Amount', 'AMOUNT', 'Sales Volume', 'SALES_VOLUME'];
       
-      // Try to extract agent payout from various possible fields
-      const agentPayout = parseFloat(row['Agent Payout'] || row['AGENT_PAYOUT'] || row['Net Revenue'] || row['NET_REVENUE'] || 0);
+      for (const field of volumeFields) {
+        if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+          const parsedVolume = parseFloat(String(row[field]).replace(/[$,]/g, ''));
+          if (!isNaN(parsedVolume) && parsedVolume > 0) {
+            volume = parsedVolume;
+            console.log(`✅ MAVERICK PARSER: Found volume ${volume} in field '${field}'`);
+            break;
+          }
+        }
+      }
       
-      // Use the selected upload month instead of trying to parse dates from the file
-      let transactionDate = null;
-
+      // Enhanced debit volume parsing
+      let debitVolume = 0;
+      const debitFields = ['Debit Volume', 'DEBIT_VOLUME', 'Debit Card Volume', 
+                          'DEBIT_CARD_VOLUME', 'PIN Debit Volume', 'PIN_DEBIT_VOLUME'];
+      
+      for (const field of debitFields) {
+        if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+          const parsedDebit = parseFloat(String(row[field]).replace(/[$,]/g, ''));
+          if (!isNaN(parsedDebit) && parsedDebit >= 0) {
+            debitVolume = parsedDebit;
+            console.log(`✅ MAVERICK PARSER: Found debit volume ${debitVolume} in field '${field}'`);
+            break;
+          }
+        }
+      }
+      
+      // Enhanced agent payout parsing
+      let agentPayout = 0;
+      const payoutFields = ['Agent Payout', 'AGENT_PAYOUT', 'Net Revenue', 'NET_REVENUE', 
+                           'Commission', 'COMMISSION', 'Payout', 'PAYOUT', 'Revenue', 'REVENUE'];
+      
+      for (const field of payoutFields) {
+        if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+          const parsedPayout = parseFloat(String(row[field]).replace(/[$,]/g, ''));
+          if (!isNaN(parsedPayout) && parsedPayout >= 0) {
+            agentPayout = parsedPayout;
+            console.log(`✅ MAVERICK PARSER: Found agent payout ${agentPayout} in field '${field}'`);
+            break;
+          }
+        }
+      }
+      
       // Use the upload month to create a transaction date (first day of the month)
+      let transactionDate = null;
       if (uploadMonth) {
         transactionDate = `${uploadMonth}-01`;
       }
@@ -191,7 +240,6 @@ const FileUpload = () => {
           } 
           // Handle string dates
           else if (typeof dateValue === 'string') {
-            // Try to parse the date string
             const date = new Date(dateValue);
             if (!isNaN(date.getTime())) {
               transactionDate = date.toISOString().split('T')[0];
@@ -202,15 +250,34 @@ const FileUpload = () => {
         }
       }
       
-      return {
+      const normalizedRow = {
         location_name: locationName,
         account_id: accountId,
-        volume: isNaN(volume) ? 0 : volume,
-        debit_volume: isNaN(debitVolume) ? 0 : debitVolume,
-        agent_payout: isNaN(agentPayout) ? 0 : agentPayout,
-        transaction_date: transactionDate
+        volume: volume,
+        debit_volume: debitVolume,
+        agent_payout: agentPayout,
+        transaction_date: transactionDate,
+        raw_data: row // Store original row for debugging
       };
-    }).filter(row => row.transaction_date !== null); // Filter out rows without a valid transaction date
+      
+      console.log(`🔍 MAVERICK PARSER: Normalized row ${index + 1}:`, normalizedRow);
+      
+      return normalizedRow;
+    }).filter(row => {
+      const isValid = row.transaction_date !== null && 
+                     (row.volume > 0 || row.debit_volume > 0 || row.agent_payout > 0);
+      
+      if (!isValid) {
+        console.log('⚠️ MAVERICK PARSER: Filtered out invalid row:', row);
+      }
+      
+      return isValid;
+    });
+    
+    console.log(`🎉 MAVERICK PARSER: Normalized ${normalized.length} valid transactions from ${rawData.length} raw rows`);
+    console.log('🎉 MAVERICK PARSER: Sample normalized data:', normalized.slice(0, 3));
+    
+    return normalized;
   };
 
   const uploadTransactions = async () => {

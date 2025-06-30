@@ -227,10 +227,22 @@ const UnifiedLocations = () => {
         } else {
           transactions = transactionData || [];
           console.log('📊 UNIFIED LOCATIONS: Found', transactions.length, 'Maverick transactions');
+          
+          // Log sample transaction data for debugging
+          if (transactions.length > 0) {
+            console.log('📊 UNIFIED LOCATIONS: Sample transaction:', transactions[0]);
+            console.log('📊 UNIFIED LOCATIONS: Transaction volume stats:', {
+              totalVolume: transactions.reduce((sum, t) => sum + (Number(t.volume) || 0), 0),
+              totalDebitVolume: transactions.reduce((sum, t) => sum + (Number(t.debit_volume) || 0), 0),
+              totalPayouts: transactions.reduce((sum, t) => sum + (Number(t.agent_payout) || 0), 0),
+              transactionsWithVolume: transactions.filter(t => (Number(t.volume) || 0) > 0).length,
+              transactionsWithPayouts: transactions.filter(t => (Number(t.agent_payout) || 0) > 0).length
+            });
+          }
         }
       }
 
-      // Calculate commissions for each location
+      // Calculate commissions using the improved logic
       const commissions = calculateLocationCommissions(transactions, assignments || [], locations || []);
       console.log('💰 UNIFIED LOCATIONS: Calculated commissions:', commissions.length);
 
@@ -239,12 +251,15 @@ const UnifiedLocations = () => {
       commissions.forEach(commission => {
         if (!commissionMap.has(commission.locationId)) {
           commissionMap.set(commission.locationId, {
-            totalVolume: commission.locationVolume,
-            totalCommission: commission.netAgentPayout,
+            totalVolume: 0,
+            totalCommission: 0,
             commissions: []
           });
         }
-        commissionMap.get(commission.locationId).commissions.push(commission);
+        const locationData = commissionMap.get(commission.locationId);
+        locationData.totalVolume = commission.locationVolume;
+        locationData.totalCommission = commission.netAgentPayout;
+        locationData.commissions.push(commission);
       });
 
       // Map locations with their calculated data
