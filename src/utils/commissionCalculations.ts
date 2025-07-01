@@ -22,8 +22,6 @@ export interface AgentLocationSummary {
 interface LocationData {
   totalVolume: number;
   totalAgentPayout: number;
-  bankCardTotal: number;
-  debitCardTotal: number;
   transactionCount: number;
   accountIds: Set<string>;
 }
@@ -55,8 +53,7 @@ const findMatchingLocation = (transaction: Transaction, locations: Location[]): 
   console.log(`🔍 COMMISSION CALC: Looking for location match for transaction:`, {
     account_id: transaction.account_id,
     location_id: transaction.location_id,
-    volume: transaction.volume,
-    debit_volume: transaction.debit_volume
+    agent_payout: transaction.agent_payout
   });
 
   // PRIORITY 1: Direct location_id match (from new Maverick uploads)
@@ -68,8 +65,8 @@ const findMatchingLocation = (transaction: Transaction, locations: Location[]): 
     }
   }
 
-  // PRIORITY 2: Exact account_id match (if account_id exists)
-  if (transaction.account_id && transaction.account_id !== null) {
+  // PRIORITY 2: Exact account_id match (if account_id exists and is not null)
+  if (transaction.account_id && transaction.account_id !== null && transaction.account_id !== 'null') {
     const exactMatch = locations.find(loc => loc.account_id === transaction.account_id);
     if (exactMatch) {
       console.log(`✅ COMMISSION CALC: Exact account_id match: ${exactMatch.name}`);
@@ -96,7 +93,13 @@ export const calculateLocationCommissions = (
   const locationMap = new Map<string, LocationData>();
   const unMatchedTransactions: Transaction[] = [];
 
+  // First, try to match transactions to specific locations
   transactions.forEach(transaction => {
+    const agentPayout = Number(transaction.agent_payout) || 0;
+    
+    // Skip transactions with no payout
+    if (agentPayout === 0) return;
+    
     const matchedLocation = findMatchingLocation(transaction, locations);
     
     if (matchedLocation) {
@@ -106,8 +109,6 @@ export const calculateLocationCommissions = (
         locationMap.set(locationId, {
           totalVolume: 0,
           totalAgentPayout: 0,
-          bankCardTotal: 0,
-          debitCardTotal: 0,
           transactionCount: 0,
           accountIds: new Set()
         });
@@ -116,11 +117,8 @@ export const calculateLocationCommissions = (
       const locationData = locationMap.get(locationId)!;
       const creditVolume = Number(transaction.volume) || 0;
       const debitVolume = Number(transaction.debit_volume) || 0;
-      const agentPayout = Number(transaction.agent_payout) || 0;
       
       locationData.totalVolume += creditVolume + debitVolume;
-      locationData.bankCardTotal += creditVolume;
-      locationData.debitCardTotal += debitVolume;
       locationData.totalAgentPayout += agentPayout;
       locationData.transactionCount += 1;
       
@@ -128,7 +126,7 @@ export const calculateLocationCommissions = (
         locationData.accountIds.add(transaction.account_id);
       }
       
-      console.log(`💰 COMMISSION CALC: Added transaction to ${matchedLocation.name}: $${(creditVolume + debitVolume).toLocaleString()} volume, $${agentPayout.toLocaleString()} payout`);
+      console.log(`💰 COMMISSION CALC: Added transaction to ${matchedLocation.name}: $${agentPayout.toLocaleString()} payout`);
     } else {
       unMatchedTransactions.push(transaction);
     }
@@ -137,46 +135,38 @@ export const calculateLocationCommissions = (
   console.log(`📊 COMMISSION CALC: Matched ${transactions.length - unMatchedTransactions.length} transactions to locations`);
   console.log(`⚠️ COMMISSION CALC: ${unMatchedTransactions.length} transactions could not be matched to locations`);
 
-  // Handle unmatched transactions by distributing them evenly
+  // Handle unmatched transactions by distributing them across all locations with active assignments
   if (unMatchedTransactions.length > 0) {
     const locationsWithAssignments = locations.filter(loc => 
       assignments?.some(a => a.location_id === loc.id && a.is_active)
     );
 
     if (locationsWithAssignments.length > 0) {
-      const totalUnmatchedVolume = unMatchedTransactions.reduce((sum, t) => {
-        const creditVol = Number(t.volume) || 0;
-        const debitVol = Number(t.debit_volume) || 0;
-        return sum + creditVol + debitVol;
-      }, 0);
-
       const totalUnmatchedPayouts = unMatchedTransactions.reduce((sum, t) => {
         return sum + (Number(t.agent_payout) || 0);
       }, 0);
 
-      const volumePerLocation = totalUnmatchedVolume / locationsWithAssignments.length;
       const payoutPerLocation = totalUnmatchedPayouts / locationsWithAssignments.length;
 
-      console.log(`📊 COMMISSION CALC: Distributing ${totalUnmatchedVolume.toLocaleString()} unmatched volume and ${totalUnmatchedPayouts.toLocaleString()} unmatched payouts`);
-      console.log(`📊 COMMISSION CALC: ${volumePerLocation.toLocaleString()} volume and ${payoutPerLocation.toLocaleString()} payout per location`);
+      console.log(`📊 COMMISSION CALC: Distributing ${totalUnmatchedPayouts.toLocaleString()} unmatched payouts`);
+      console.log(`📊 COMMISSION CALC: ${payoutPerLocation.toLocaleString()} payout per location`);
 
       locationsWithAssignments.forEach(location => {
         if (!locationMap.has(location.id)) {
           locationMap.set(location.id, {
             totalVolume: 0,
             totalAgentPayout: 0,
-            bankCardTotal: 0,
-            debitCardTotal: 0,
             transactionCount: 0,
             accountIds: new Set()
           });
         }
         
         const locationData = locationMap.get(location.id)!;
-        locationData.totalVolume += volumePerLocation;
         locationData.totalAgentPayout += payoutPerLocation;
-        locationData.bankCardTotal += volumePerLocation * 0.8; // Assume 80% credit cards
-        locationData.debitCardTotal += volumePerLocation * 0.2; // Assume 20% debit cards
+        // Since we don't have volume data, we'll calculate it based on typical commission rates
+        // Assuming roughly 0.5% commission rate to estimate volume
+        const estimatedVolume = payoutPerLocation / 0.005;
+        locationData.totalVolume += estimatedVolume;
       });
     }
   }
@@ -190,17 +180,29 @@ export const calculateLocationCommissions = (
 
     const locationAssignments = assignments.filter(a => a.location_id === locationId && a.is_active);
     
-    console.log(`💼 COMMISSION CALC: Processing location: ${location.name} with $${locationData.totalVolume.toLocaleString()} volume`);
+    console.log(`💼 COMMISSION CALC: Processing location: ${location.name} with $${locationData.totalAgentPayout.toLocaleString()} total payout`);
 
     const otherAgents = locationAssignments.filter(a => a.agent_name !== 'Merchant Hero');
     const merchantHeroAssignment = locationAssignments.find(a => a.agent_name === 'Merchant Hero');
     
     let totalCommissionsPaid = 0;
     
-    // Calculate payouts for other agents
+    // Calculate payouts for other agents based on their commission rates
     otherAgents.forEach(assignment => {
       const bpsDecimal = assignment.commission_rate / 100;
-      const agentPayout = locationData.totalVolume * bpsDecimal;
+      
+      // If we have volume, calculate based on volume; otherwise use proportional payout
+      let agentPayout = 0;
+      if (locationData.totalVolume > 0) {
+        agentPayout = locationData.totalVolume * bpsDecimal;
+      } else {
+        // If no volume, distribute the total payout proportionally based on commission rates
+        const totalBPS = locationAssignments.reduce((sum, a) => sum + (a.commission_rate / 100), 0);
+        if (totalBPS > 0) {
+          agentPayout = locationData.totalAgentPayout * (bpsDecimal / totalBPS);
+        }
+      }
+      
       totalCommissionsPaid += agentPayout;
       
       console.log(`💰 COMMISSION CALC: ${assignment.agent_name} → ${Math.round(assignment.commission_rate * 100)} BPS → $${agentPayout.toLocaleString()}`);
@@ -218,7 +220,7 @@ export const calculateLocationCommissions = (
       });
     });
 
-    // Calculate Merchant Hero's earnings
+    // Calculate Merchant Hero's earnings (remainder)
     if (merchantHeroAssignment) {
       const merchantHeroPayout = Math.max(0, locationData.totalAgentPayout - totalCommissionsPaid);
       const merchantHeroBPS = locationData.totalVolume > 0 
