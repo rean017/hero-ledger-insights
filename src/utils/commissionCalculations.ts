@@ -23,7 +23,6 @@ interface LocationData {
   totalVolume: number;
   totalAgentPayout: number;
   transactionCount: number;
-  accountIds: Set<string>;
 }
 
 interface Transaction {
@@ -49,82 +48,36 @@ interface Location {
   account_id: string;
 }
 
-// Enhanced function to find matching location for a transaction
+// Simplified function to find matching location for a transaction
 const findMatchingLocation = (transaction: Transaction, locations: Location[]): Location | null => {
-  console.log(`🔍 COMMISSION CALC: Looking for location match for transaction:`, {
+  console.log(`🎯 SIMPLIFIED MATCHING: Looking for location match for transaction:`, {
     account_id: transaction.account_id,
     location_id: transaction.location_id,
-    agent_payout: transaction.agent_payout,
-    raw_data_sample: transaction.raw_data ? Object.keys(transaction.raw_data).slice(0, 5) : 'none'
+    agent_payout: transaction.agent_payout
   });
 
-  // PRIORITY 1: Direct location_id match (from new Maverick uploads)
-  if (transaction.location_id && transaction.location_id !== 'undefined') {
+  // PRIORITY 1: Direct location_id match (most reliable)
+  if (transaction.location_id) {
     const directMatch = locations.find(loc => loc.id === transaction.location_id);
     if (directMatch) {
-      console.log(`✅ COMMISSION CALC: Direct location_id match found: ${directMatch.name}`);
+      console.log(`✅ SIMPLIFIED MATCHING: Direct location_id match found: ${directMatch.name}`);
       return directMatch;
     }
   }
 
-  // PRIORITY 2: Exact account_id match (if account_id exists and is not null)
-  if (transaction.account_id && transaction.account_id !== null && transaction.account_id !== 'null') {
-    const exactMatch = locations.find(loc => loc.account_id === transaction.account_id);
-    if (exactMatch) {
-      console.log(`✅ COMMISSION CALC: Exact account_id match: ${exactMatch.name}`);
-      return exactMatch;
+  // PRIORITY 2: Account_id match (DBA name used as account_id)
+  if (transaction.account_id) {
+    const accountMatch = locations.find(loc => 
+      loc.account_id === transaction.account_id || 
+      loc.name === transaction.account_id
+    );
+    if (accountMatch) {
+      console.log(`✅ SIMPLIFIED MATCHING: Account/DBA match found: ${accountMatch.name}`);
+      return accountMatch;
     }
   }
 
-  // PRIORITY 3: Try to extract location info from raw_data
-  if (transaction.raw_data) {
-    const rawData = transaction.raw_data;
-    console.log(`🔍 COMMISSION CALC: Checking raw_data for location clues:`, rawData);
-    
-    // Check various common field names in raw data
-    const possibleLocationFields = [
-      'location_id', 'locationId', 'location', 'store_id', 'storeId', 'store',
-      'merchant_id', 'merchantId', 'merchant', 'business_id', 'businessId',
-      'account_id', 'accountId', 'account', 'mid', 'MID'
-    ];
-    
-    for (const field of possibleLocationFields) {
-      if (rawData[field] && rawData[field] !== null && rawData[field] !== '') {
-        // Try to match by this field value against location account_ids or names
-        const fieldValue = String(rawData[field]).trim();
-        console.log(`🔍 COMMISSION CALC: Trying to match field '${field}' with value '${fieldValue}'`);
-        
-        const locationMatch = locations.find(loc => 
-          loc.account_id === fieldValue || 
-          loc.name.toLowerCase().includes(fieldValue.toLowerCase()) ||
-          loc.id === fieldValue
-        );
-        
-        if (locationMatch) {
-          console.log(`✅ COMMISSION CALC: Found match via raw_data field '${field}': ${locationMatch.name}`);
-          return locationMatch;
-        }
-      }
-    }
-    
-    // Check if there's any text field that might contain location name
-    const possibleNameFields = ['merchant_name', 'merchantName', 'business_name', 'businessName', 'name'];
-    for (const field of possibleNameFields) {
-      if (rawData[field] && typeof rawData[field] === 'string') {
-        const nameValue = rawData[field].toLowerCase().trim();
-        const locationMatch = locations.find(loc => 
-          loc.name.toLowerCase().includes(nameValue) || 
-          nameValue.includes(loc.name.toLowerCase())
-        );
-        if (locationMatch) {
-          console.log(`✅ COMMISSION CALC: Found match via name field '${field}': ${locationMatch.name}`);
-          return locationMatch;
-        }
-      }
-    }
-  }
-
-  console.log(`❌ COMMISSION CALC: No match found for transaction`);
+  console.log(`❌ SIMPLIFIED MATCHING: No match found for transaction`);
   return null;
 };
 
@@ -133,30 +86,29 @@ export const calculateLocationCommissions = (
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('🚨 === COMMISSION CALC DEBUG SESSION ===');
-  console.log('📊 COMMISSION CALC INPUT DATA:');
+  console.log('🎯 === SIMPLIFIED COMMISSION CALC SESSION ===');
+  console.log('📊 SIMPLIFIED COMMISSION INPUT DATA:');
   console.log('- Transactions:', transactions.length);
   console.log('- Assignments:', assignments.length);  
   console.log('- Locations:', locations.length);
 
   // Log sample transaction for debugging
   if (transactions.length > 0) {
-    console.log('📊 COMMISSION CALC: Sample transaction structure:', {
-      ...transactions[0],
-      raw_data: transactions[0].raw_data ? 'Present' : 'Missing'
-    });
+    console.log('📊 SIMPLIFIED COMMISSION: Sample transaction:', transactions[0]);
   }
 
-  // Group transactions by location
+  // Group transactions by location using simplified matching
   const locationMap = new Map<string, LocationData>();
-  const unMatchedTransactions: Transaction[] = [];
+  let totalUnmatchedPayout = 0;
+  let unmatchedCount = 0;
 
-  // First, try to match transactions to specific locations
+  // First pass: match transactions to specific locations
   transactions.forEach((transaction, index) => {
     const agentPayout = Number(transaction.agent_payout) || 0;
+    const volume = Number(transaction.volume) || 0;
     
-    // Skip transactions with no payout
-    if (agentPayout === 0) return;
+    // Skip transactions with no meaningful data
+    if (agentPayout === 0 && volume === 0) return;
     
     const matchedLocation = findMatchingLocation(transaction, locations);
     
@@ -167,68 +119,45 @@ export const calculateLocationCommissions = (
         locationMap.set(locationId, {
           totalVolume: 0,
           totalAgentPayout: 0,
-          transactionCount: 0,
-          accountIds: new Set()
+          transactionCount: 0
         });
       }
       
       const locationData = locationMap.get(locationId)!;
-      const creditVolume = Number(transaction.volume) || 0;
-      const debitVolume = Number(transaction.debit_volume) || 0;
-      
-      locationData.totalVolume += creditVolume + debitVolume;
+      locationData.totalVolume += volume;
       locationData.totalAgentPayout += agentPayout;
       locationData.transactionCount += 1;
       
-      if (transaction.account_id) {
-        locationData.accountIds.add(transaction.account_id);
-      }
-      
-      console.log(`💰 COMMISSION CALC: Added transaction ${index + 1} to ${matchedLocation.name}: $${agentPayout.toLocaleString()} payout`);
+      console.log(`💰 SIMPLIFIED COMMISSION: Added transaction ${index + 1} to ${matchedLocation.name}: $${agentPayout.toLocaleString()} payout, $${volume.toLocaleString()} volume`);
     } else {
-      unMatchedTransactions.push(transaction);
+      totalUnmatchedPayout += agentPayout;
+      unmatchedCount++;
+      console.log(`⚠️ SIMPLIFIED COMMISSION: Unmatched transaction ${index + 1}: $${agentPayout.toLocaleString()} payout`);
     }
   });
 
-  console.log(`📊 COMMISSION CALC: Matched ${transactions.length - unMatchedTransactions.length} transactions to locations`);
-  console.log(`⚠️ COMMISSION CALC: ${unMatchedTransactions.length} transactions could not be matched to locations`);
+  console.log(`📊 SIMPLIFIED COMMISSION: Matched ${transactions.length - unmatchedCount} transactions to locations`);
+  console.log(`⚠️ SIMPLIFIED COMMISSION: ${unmatchedCount} transactions unmatched with $${totalUnmatchedPayout.toLocaleString()} total payout`);
 
-  // If we have lots of unmatched transactions, DON'T distribute them - this likely means a data issue
-  if (unMatchedTransactions.length > transactions.length * 0.8) {
-    console.log(`🚨 COMMISSION CALC: Over 80% of transactions are unmatched - likely a data issue. Not distributing unmatched payouts.`);
-    console.log(`🚨 COMMISSION CALC: Please check transaction data structure and location matching logic.`);
-  } else if (unMatchedTransactions.length > 0) {
-    // Only distribute if we have some successful matches
-    const locationsWithAssignments = locations.filter(loc => 
-      assignments?.some(a => a.location_id === loc.id && a.is_active)
-    );
-
-    if (locationsWithAssignments.length > 0) {
-      const totalUnmatchedPayouts = unMatchedTransactions.reduce((sum, t) => {
-        return sum + (Number(t.agent_payout) || 0);
-      }, 0);
-
-      const payoutPerLocation = totalUnmatchedPayouts / locationsWithAssignments.length;
-
-      console.log(`📊 COMMISSION CALC: Distributing ${totalUnmatchedPayouts.toLocaleString()} unmatched payouts`);
-      console.log(`📊 COMMISSION CALC: ${payoutPerLocation.toLocaleString()} payout per location`);
-
-      locationsWithAssignments.forEach(location => {
-        if (!locationMap.has(location.id)) {
-          locationMap.set(location.id, {
-            totalVolume: 0,
-            totalAgentPayout: 0,
-            transactionCount: 0,
-            accountIds: new Set()
-          });
+  // If we have unmatched transactions and some successful matches, distribute proportionally
+  if (totalUnmatchedPayout > 0 && locationMap.size > 0) {
+    const totalMatchedPayout = Array.from(locationMap.values()).reduce((sum, data) => sum + data.totalAgentPayout, 0);
+    
+    if (totalMatchedPayout > 0) {
+      console.log(`📊 SIMPLIFIED COMMISSION: Distributing $${totalUnmatchedPayout.toLocaleString()} unmatched payout proportionally`);
+      
+      locationMap.forEach((locationData, locationId) => {
+        const proportion = locationData.totalAgentPayout / totalMatchedPayout;
+        const additionalPayout = totalUnmatchedPayout * proportion;
+        locationData.totalAgentPayout += additionalPayout;
+        
+        // Estimate volume based on existing ratio if we have volume data
+        if (locationData.totalVolume > 0) {
+          const volumeRatio = locationData.totalVolume / (locationData.totalAgentPayout - additionalPayout);
+          locationData.totalVolume += additionalPayout * volumeRatio;
         }
         
-        const locationData = locationMap.get(location.id)!;
-        locationData.totalAgentPayout += payoutPerLocation;
-        // Since we don't have volume data, we'll calculate it based on typical commission rates
-        // Assuming roughly 0.5% commission rate to estimate volume
-        const estimatedVolume = payoutPerLocation / 0.005;
-        locationData.totalVolume += estimatedVolume;
+        console.log(`📊 SIMPLIFIED COMMISSION: Added $${additionalPayout.toLocaleString()} to location ${locationId}`);
       });
     }
   }
@@ -242,7 +171,10 @@ export const calculateLocationCommissions = (
 
     const locationAssignments = assignments.filter(a => a.location_id === locationId && a.is_active);
     
-    console.log(`💼 COMMISSION CALC: Processing location: ${location.name} with $${locationData.totalAgentPayout.toLocaleString()} total payout`);
+    console.log(`💼 SIMPLIFIED COMMISSION: Processing location: ${location.name}`);
+    console.log(`💼 SIMPLIFIED COMMISSION: - Total Volume: $${locationData.totalVolume.toLocaleString()}`);
+    console.log(`💼 SIMPLIFIED COMMISSION: - Total Agent Payout: $${locationData.totalAgentPayout.toLocaleString()}`);
+    console.log(`💼 SIMPLIFIED COMMISSION: - Assigned Agents: ${locationAssignments.map(a => a.agent_name).join(', ')}`);
 
     const otherAgents = locationAssignments.filter(a => a.agent_name !== 'Merchant Hero');
     const merchantHeroAssignment = locationAssignments.find(a => a.agent_name === 'Merchant Hero');
@@ -253,12 +185,12 @@ export const calculateLocationCommissions = (
     otherAgents.forEach(assignment => {
       const bpsDecimal = assignment.commission_rate / 100;
       
-      // If we have volume, calculate based on volume; otherwise use proportional payout
+      // Calculate agent payout based on volume if available, otherwise proportional to their rate
       let agentPayout = 0;
       if (locationData.totalVolume > 0) {
         agentPayout = locationData.totalVolume * bpsDecimal;
       } else {
-        // If no volume, distribute the total payout proportionally based on commission rates
+        // If no volume, distribute based on commission rates
         const totalBPS = locationAssignments.reduce((sum, a) => sum + (a.commission_rate / 100), 0);
         if (totalBPS > 0) {
           agentPayout = locationData.totalAgentPayout * (bpsDecimal / totalBPS);
@@ -267,7 +199,7 @@ export const calculateLocationCommissions = (
       
       totalCommissionsPaid += agentPayout;
       
-      console.log(`💰 COMMISSION CALC: ${assignment.agent_name} → ${Math.round(assignment.commission_rate * 100)} BPS → $${agentPayout.toLocaleString()}`);
+      console.log(`💰 SIMPLIFIED COMMISSION: ${assignment.agent_name} → ${Math.round(assignment.commission_rate * 100)} BPS → $${agentPayout.toLocaleString()}`);
 
       commissions.push({
         locationId: location.id,
@@ -289,7 +221,7 @@ export const calculateLocationCommissions = (
         ? Math.round((merchantHeroPayout / locationData.totalVolume) * 10000)
         : 0;
       
-      console.log(`💰 COMMISSION CALC: Merchant Hero → Auto-calc ${merchantHeroBPS} BPS → $${merchantHeroPayout.toLocaleString()}`);
+      console.log(`💰 SIMPLIFIED COMMISSION: Merchant Hero → ${merchantHeroBPS} BPS → $${merchantHeroPayout.toLocaleString()}`);
 
       commissions.push({
         locationId: location.id,
@@ -305,8 +237,8 @@ export const calculateLocationCommissions = (
     }
   });
 
-  console.log('🚨 === COMMISSION CALC DEBUG END ===');
-  console.log(`🎉 COMMISSION CALC: Generated ${commissions.length} commission records`);
+  console.log('🎯 === SIMPLIFIED COMMISSION CALC END ===');
+  console.log(`🎉 SIMPLIFIED COMMISSION: Generated ${commissions.length} commission records`);
   
   return commissions;
 };

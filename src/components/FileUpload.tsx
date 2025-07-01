@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,15 +73,15 @@ const FileUpload = () => {
     }
   };
 
-  const ensureLocationExists = async (locationName: string, accountId?: string): Promise<string> => {
+  const ensureLocationExists = async (dbaName: string): Promise<string> => {
     try {
-      console.log('🔍 LOCATION MERGER: Checking for existing location with name:', locationName);
+      console.log('🔍 LOCATION: Checking for existing location with DBA name:', dbaName);
       
-      // First, check for exact name match (case-insensitive)
+      // Check for exact name match (case-insensitive)
       const { data: existingLocations, error: selectError } = await supabase
         .from('locations')
-        .select('id, name, account_id')
-        .ilike('name', locationName);
+        .select('id, name')
+        .ilike('name', dbaName);
 
       if (selectError && selectError.code !== 'PGRST116') {
         console.error('Error checking existing locations:', selectError);
@@ -90,22 +91,22 @@ const FileUpload = () => {
       // Check if we found an exact match
       if (existingLocations && existingLocations.length > 0) {
         const exactMatch = existingLocations.find(loc => 
-          loc.name?.toLowerCase() === locationName.toLowerCase()
+          loc.name?.toLowerCase() === dbaName.toLowerCase()
         );
 
         if (exactMatch) {
-          console.log('✅ LOCATION MERGER: Found exact match:', exactMatch.name);
+          console.log('✅ LOCATION: Found exact match:', exactMatch.name);
           return exactMatch.id;
         }
       }
 
       // If no exact match found, create new location
-      console.log('🆕 LOCATION MERGER: Creating new location:', locationName);
+      console.log('🆕 LOCATION: Creating new location:', dbaName);
       const { data: newLocation, error: insertError } = await supabase
         .from('locations')
         .insert([{ 
-          name: locationName,
-          account_id: accountId 
+          name: dbaName,
+          account_id: dbaName // Use DBA name as account_id for matching
         }])
         .select('id')
         .single();
@@ -115,7 +116,7 @@ const FileUpload = () => {
         throw insertError;
       }
 
-      console.log('✅ LOCATION MERGER: Created new location with ID:', newLocation.id);
+      console.log('✅ LOCATION: Created new location with ID:', newLocation.id);
       return newLocation.id;
     } catch (error) {
       console.error('Error in ensureLocationExists:', error);
@@ -154,128 +155,98 @@ const FileUpload = () => {
   };
 
   const normalizeTransactionData = (rawData: any[], uploadMonth?: string) => {
-    console.log('🔍 MAVERICK PARSER: Starting to normalize transaction data...');
-    console.log('🔍 MAVERICK PARSER: Raw data sample (first 3 rows):', rawData.slice(0, 3));
+    console.log('🎯 SIMPLIFIED PARSER: Focusing on DBA name, sales amount, and agent net revenue...');
+    console.log('🎯 SIMPLIFIED PARSER: Raw data sample (first 3 rows):', rawData.slice(0, 3));
     
     const normalized = rawData.map((row, index) => {
-      // Enhanced field mapping for Maverick data
-      console.log(`🔍 MAVERICK PARSER: Processing row ${index + 1}:`, row);
+      console.log(`🎯 SIMPLIFIED PARSER: Processing row ${index + 1}:`, row);
       
-      // Try multiple field names for date
-      const dateValue = row['Transaction Date'] || row['Date'] || row['TRANSACTION_DATE'] || 
-                       row['transaction_date'] || row['TXN_DATE'] || null;
+      // Find DBA/Business name - this is the most important field
+      const dbaFields = [
+        'DBA', 'DBA Name', 'Business Name', 'Business', 'Merchant Name', 'Merchant',
+        'Location', 'Store Name', 'Store', 'Company Name', 'Company', 'Name'
+      ];
       
-      // Try multiple field names for location/merchant
-      const locationName = row['Location'] || row['LOCATION'] || row['Merchant'] || 
-                          row['MERCHANT'] || row['merchant_name'] || row['MERCHANT_NAME'] ||
-                          row['Business Name'] || row['BUSINESS_NAME'] || 'Unknown Location';
+      let dbaName = null;
+      for (const field of dbaFields) {
+        const value = row[field];
+        if (value && typeof value === 'string' && value.trim() !== '') {
+          dbaName = value.trim();
+          console.log(`✅ SIMPLIFIED PARSER: Found DBA name '${dbaName}' in field '${field}'`);
+          break;
+        }
+      }
       
-      // Try multiple field names for account ID
-      const accountId = row['Account ID'] || row['ACCOUNT_ID'] || row['Account'] || 
-                       row['ACCOUNT'] || row['account_id'] || row['MID'] || 
-                       row['Merchant ID'] || row['MERCHANT_ID'] || null;
+      // Find Sales Amount/Volume
+      const salesFields = [
+        'Sales Amount', 'Sales', 'Volume', 'Total Sales', 'Revenue', 'Amount',
+        'Transaction Amount', 'Card Sales', 'Credit Card Sales', 'Gross Sales'
+      ];
       
-      // Enhanced volume parsing - try multiple field names and formats
-      let volume = 0;
-      const volumeFields = ['Volume', 'VOLUME', 'Bank Card Volume', 'BANK_CARD_VOLUME', 
-                           'Credit Volume', 'CREDIT_VOLUME', 'Transaction Amount', 
-                           'TRANSACTION_AMOUNT', 'Amount', 'AMOUNT', 'Sales Volume', 'SALES_VOLUME'];
-      
-      for (const field of volumeFields) {
-        if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
-          const parsedVolume = parseFloat(String(row[field]).replace(/[$,]/g, ''));
-          if (!isNaN(parsedVolume) && parsedVolume > 0) {
-            volume = parsedVolume;
-            console.log(`✅ MAVERICK PARSER: Found volume ${volume} in field '${field}'`);
+      let salesAmount = 0;
+      for (const field of salesFields) {
+        const value = row[field];
+        if (value !== undefined && value !== null && value !== '') {
+          const parsed = parseFloat(String(value).replace(/[$,]/g, ''));
+          if (!isNaN(parsed) && parsed > 0) {
+            salesAmount = parsed;
+            console.log(`✅ SIMPLIFIED PARSER: Found sales amount ${salesAmount} in field '${field}'`);
             break;
           }
         }
       }
       
-      // Enhanced debit volume parsing
-      let debitVolume = 0;
-      const debitFields = ['Debit Volume', 'DEBIT_VOLUME', 'Debit Card Volume', 
-                          'DEBIT_CARD_VOLUME', 'PIN Debit Volume', 'PIN_DEBIT_VOLUME'];
+      // Find Agent Net Revenue/Payout
+      const revenueFields = [
+        'Agent Net Revenue', 'Net Revenue', 'Agent Payout', 'Payout', 'Commission',
+        'Agent Commission', 'Net Payout', 'Revenue', 'Profit', 'Net Income'
+      ];
       
-      for (const field of debitFields) {
-        if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
-          const parsedDebit = parseFloat(String(row[field]).replace(/[$,]/g, ''));
-          if (!isNaN(parsedDebit) && parsedDebit >= 0) {
-            debitVolume = parsedDebit;
-            console.log(`✅ MAVERICK PARSER: Found debit volume ${debitVolume} in field '${field}'`);
+      let agentRevenue = 0;
+      for (const field of revenueFields) {
+        const value = row[field];
+        if (value !== undefined && value !== null && value !== '') {
+          const parsed = parseFloat(String(value).replace(/[$,]/g, ''));
+          if (!isNaN(parsed)) { // Allow negative values for agent revenue
+            agentRevenue = parsed;
+            console.log(`✅ SIMPLIFIED PARSER: Found agent revenue ${agentRevenue} in field '${field}'`);
             break;
           }
         }
       }
       
-      // Enhanced agent payout parsing
-      let agentPayout = 0;
-      const payoutFields = ['Agent Payout', 'AGENT_PAYOUT', 'Net Revenue', 'NET_REVENUE', 
-                           'Commission', 'COMMISSION', 'Payout', 'PAYOUT', 'Revenue', 'REVENUE'];
-      
-      for (const field of payoutFields) {
-        if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
-          const parsedPayout = parseFloat(String(row[field]).replace(/[$,]/g, ''));
-          if (!isNaN(parsedPayout) && parsedPayout >= 0) {
-            agentPayout = parsedPayout;
-            console.log(`✅ MAVERICK PARSER: Found agent payout ${agentPayout} in field '${field}'`);
-            break;
-          }
-        }
-      }
-      
-      // Use the upload month to create a transaction date (first day of the month)
+      // Use the upload month to create a transaction date
       let transactionDate = null;
       if (uploadMonth) {
         transactionDate = `${uploadMonth}-01`;
       }
-      // If no upload month is selected, fall back to parsing the date from the file
-      else if (dateValue) {
-        try {
-          // Handle Excel date serial numbers
-          if (typeof dateValue === 'number') {
-            const excelEpoch = new Date(1899, 11, 30);
-            const date = new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
-            transactionDate = date.toISOString().split('T')[0];
-          } 
-          // Handle string dates
-          else if (typeof dateValue === 'string') {
-            const date = new Date(dateValue);
-            if (!isNaN(date.getTime())) {
-              transactionDate = date.toISOString().split('T')[0];
-            }
-          }
-        } catch (error) {
-          console.error('Error parsing date:', dateValue, error);
-        }
-      }
       
       const normalizedRow = {
-        location_name: locationName,
-        account_id: accountId,
-        volume: volume,
-        debit_volume: debitVolume,
-        agent_payout: agentPayout,
+        dba_name: dbaName,
+        account_id: dbaName, // Use DBA name as account_id for matching
+        volume: salesAmount,
+        debit_volume: 0, // Not needed for this simplified approach
+        agent_payout: agentRevenue,
         transaction_date: transactionDate,
-        raw_data: row // Store original row for debugging
+        raw_data: { original_row: row } // Keep original for debugging
       };
       
-      console.log(`🔍 MAVERICK PARSER: Normalized row ${index + 1}:`, normalizedRow);
+      console.log(`🎯 SIMPLIFIED PARSER: Normalized row ${index + 1}:`, normalizedRow);
       
       return normalizedRow;
     }).filter(row => {
-      const isValid = row.transaction_date !== null && 
-                     (row.volume > 0 || row.debit_volume > 0 || row.agent_payout > 0);
+      const isValid = row.dba_name !== null && 
+                     row.transaction_date !== null && 
+                     (row.volume > 0 || Math.abs(row.agent_payout) > 0);
       
       if (!isValid) {
-        console.log('⚠️ MAVERICK PARSER: Filtered out invalid row:', row);
+        console.log('⚠️ SIMPLIFIED PARSER: Filtered out invalid row:', row);
       }
       
       return isValid;
     });
     
-    console.log(`🎉 MAVERICK PARSER: Normalized ${normalized.length} valid transactions from ${rawData.length} raw rows`);
-    console.log('🎉 MAVERICK PARSER: Sample normalized data:', normalized.slice(0, 3));
+    console.log(`🎉 SIMPLIFIED PARSER: Normalized ${normalized.length} valid transactions from ${rawData.length} raw rows`);
     
     return normalized;
   };
@@ -297,10 +268,10 @@ const FileUpload = () => {
     setUploadError(null);
     
     try {
-      const uploadMonth = selectedMonth; // Already in YYYY-MM format
+      const uploadMonth = selectedMonth;
       console.log('📅 Upload Month Selected:', uploadMonth);
 
-      // Record the upload in file_uploads table - using "Maverick" as processor
+      // Record the upload in file_uploads table
       const { data: uploadRecord, error: uploadRecordError } = await supabase
         .from('file_uploads')
         .insert([{
@@ -324,7 +295,7 @@ const FileUpload = () => {
         throw new Error('Unsupported file format. Please upload an Excel (.xlsx, .xls) or CSV file.');
       }
       
-      // Normalize the data to a consistent format with the selected month
+      // Normalize the data to focus on the 3 key fields
       const normalizedData = normalizeTransactionData(rawData as any[], uploadMonth);
       
       setProgress({
@@ -333,15 +304,15 @@ const FileUpload = () => {
         errors: []
       });
       
-      // Process in batches to avoid overwhelming the database
-      const batchSize = 100;
+      // Process in batches
+      const batchSize = 50;
       const batches = [];
       
       for (let i = 0; i < normalizedData.length; i += batchSize) {
         batches.push(normalizedData.slice(i, i + batchSize));
       }
       
-      console.log(`Processing ${normalizedData.length} transactions in ${batches.length} batches for month ${uploadMonth}`);
+      console.log(`🎯 SIMPLIFIED UPLOAD: Processing ${normalizedData.length} transactions in ${batches.length} batches for ${uploadMonth}`);
       
       let processedCount = 0;
       const errors = [];
@@ -356,31 +327,22 @@ const FileUpload = () => {
           const transaction = batch[j];
           
           try {
-            // Update progress
             setProgress(prev => ({
               ...prev,
               processed: processedCount,
               currentRow: processedCount + 1
             }));
             
-            // Ensure location exists and get its ID
-            if (transaction.location_name && transaction.location_name !== 'Unknown Location') {
-              const locationId = await ensureLocationExists(transaction.location_name, transaction.account_id);
-              // Remove location_name from transaction data and add location_id
-              const { location_name, ...transactionWithoutLocationName } = transaction;
-              batchWithLocations.push({
-                ...transactionWithoutLocationName,
-                location_id: locationId,
-                processor: 'Maverick' // Use "Maverick" instead of dynamic month
-              });
-            } else {
-              // Remove location_name from transaction data
-              const { location_name, ...transactionWithoutLocationName } = transaction;
-              batchWithLocations.push({
-                ...transactionWithoutLocationName,
-                processor: 'Maverick' // Use "Maverick" instead of dynamic month
-              });
-            }
+            // Ensure location exists using DBA name
+            const locationId = await ensureLocationExists(transaction.dba_name);
+            
+            // Remove dba_name from transaction data and add location_id
+            const { dba_name, ...transactionWithoutDbaName } = transaction;
+            batchWithLocations.push({
+              ...transactionWithoutDbaName,
+              location_id: locationId,
+              processor: 'Maverick'
+            });
             
             processedCount++;
           } catch (error: any) {
@@ -402,7 +364,6 @@ const FileUpload = () => {
           }
         }
         
-        // Update progress
         setProgress(prev => ({
           ...prev,
           processed: processedCount,
@@ -463,14 +424,14 @@ const FileUpload = () => {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground mb-2">Upload Transactions</h2>
-        <p className="text-muted-foreground">Upload transaction data from Excel or CSV files</p>
+        <p className="text-muted-foreground">Upload transaction data focusing on DBA name, sales amount, and agent net revenue</p>
       </div>
       
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Transaction Upload
+            Simplified Transaction Upload
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -587,33 +548,20 @@ const FileUpload = () => {
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4 flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-medium text-blue-800">Upload Instructions</h4>
+                <h4 className="font-medium text-blue-800">Simplified Upload Instructions</h4>
                 <p className="text-sm text-blue-700 mt-1">
-                  Select a month first, then upload Excel (.xlsx, .xls) or CSV files containing transaction data. 
-                  All transactions will be tagged with the selected month. The system will automatically map columns 
-                  like Transaction Date, Location, Account ID, Volume, and Agent Payout.
+                  This simplified parser focuses on the 3 essential fields: DBA/Business Name, Sales Amount, and Agent Net Revenue. 
+                  All other columns will be ignored. The system will automatically create locations based on DBA names.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                    Month Selection Required
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+                    DBA/Business Name (Required)
                   </Badge>
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                    Transaction Date
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+                    Sales Amount/Volume
                   </Badge>
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                    Location/Merchant
-                  </Badge>
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                    Account ID
-                  </Badge>
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                    Volume
-                  </Badge>
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                    Debit Volume
-                  </Badge>
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                    Agent Payout/Net Revenue
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+                    Agent Net Revenue/Payout
                   </Badge>
                 </div>
               </div>
