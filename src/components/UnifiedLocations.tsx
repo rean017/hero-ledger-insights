@@ -236,7 +236,16 @@ const UnifiedLocations = () => {
               totalDebitVolume: transactions.reduce((sum, t) => sum + (Number(t.debit_volume) || 0), 0),
               totalPayouts: transactions.reduce((sum, t) => sum + (Number(t.agent_payout) || 0), 0),
               transactionsWithVolume: transactions.filter(t => (Number(t.volume) || 0) > 0).length,
-              transactionsWithPayouts: transactions.filter(t => (Number(t.agent_payout) || 0) > 0).length
+              transactionsWithPayouts: transactions.filter(t => (Number(t.agent_payout) || 0) > 0).length,
+              transactionsWithAccountId: transactions.filter(t => t.account_id && t.account_id !== null).length,
+              transactionsWithRawData: transactions.filter(t => t.raw_data && Object.keys(t.raw_data).length > 0).length
+            });
+            
+            // Log raw data structure of first few transactions
+            const samplesWithRawData = transactions.filter(t => t.raw_data).slice(0, 3);
+            samplesWithRawData.forEach((t, i) => {
+              console.log(`📊 UNIFIED LOCATIONS: Sample raw_data ${i + 1}:`, Object.keys(t.raw_data || {}));
+              console.log(`📊 UNIFIED LOCATIONS: Raw data sample ${i + 1}:`, t.raw_data);
             });
           }
         }
