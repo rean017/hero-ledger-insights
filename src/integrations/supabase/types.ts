@@ -181,6 +181,7 @@ export type Database = {
           created_at: string
           debit_volume: number | null
           id: string
+          location_id: string | null
           processor: string
           raw_data: Json | null
           transaction_date: string | null
@@ -194,6 +195,7 @@ export type Database = {
           created_at?: string
           debit_volume?: number | null
           id?: string
+          location_id?: string | null
           processor: string
           raw_data?: Json | null
           transaction_date?: string | null
@@ -207,13 +209,22 @@ export type Database = {
           created_at?: string
           debit_volume?: number | null
           id?: string
+          location_id?: string | null
           processor?: string
           raw_data?: Json | null
           transaction_date?: string | null
           updated_at?: string
           volume?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "transactions_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
