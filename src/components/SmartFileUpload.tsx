@@ -200,9 +200,10 @@ const SmartFileUpload = () => {
                           </span>
                         </div>
                       )}
-                    </Alert>
-                  </div>
-                )}
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Select Processor</label>
