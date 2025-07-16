@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -329,8 +330,8 @@ const UnifiedLocations = () => {
     location.agentNames?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
-  const dataStatus = transactions && transactions.length > 0 ? 
-    `📊 Showing data for ${timeFrame.toUpperCase()} (${transactions.length} transactions)` :
+  const dataStatus = locations && locations.length > 0 ? 
+    `📊 Showing data for ${timeFrame.toUpperCase()} (${locations.length} locations)` :
     `⚠️ No data found for ${timeFrame.toUpperCase()}`;
 
   if (isLoading || isMonthlyDataLoading) {
