@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,7 +16,7 @@ import AgentPLReport from "./AgentPLReport";
 const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("");
   
-  // Use the unified system data hook instead of separate timeframe logic
+  // Use the unified system data hook
   const { data: systemData, isLoading: systemLoading } = useSystemData({
     timeFrame: selectedPeriod,
     enableRealtime: false
@@ -26,26 +27,7 @@ const PLReports = () => {
     setSelectedPeriod(systemData.effectiveTimeFrame);
   }
 
-  // Convert system data date range to legacy format for existing logic
-  const getDateRangeForLegacyFormat = () => {
-    if (!systemData?.dateRange) {
-      return {
-        start: '2025-04-01',
-        end: '2025-04-30',
-        label: 'April 2025'
-      };
-    }
-
-    return {
-      start: format(systemData.dateRange.from, 'yyyy-MM-dd'),
-      end: format(systemData.dateRange.to, 'yyyy-MM-dd'),
-      label: `${format(systemData.dateRange.from, 'MMM yyyy')} (Current Data)`
-    };
-  };
-
-  const legacyDateRange = getDateRangeForLegacyFormat();
-
-  // 12-month trailing history query - always call this hook
+  // 12-month trailing history query - fixed to only show months with actual data
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview'],
     queryFn: async () => {
@@ -54,6 +36,7 @@ const PLReports = () => {
       
       console.log('Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
 
+      // First, get all transactions to see which months actually have data
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id, transaction_date, agent_payout')
@@ -89,42 +72,33 @@ const PLReports = () => {
         return acc;
       }, {} as Record<string, any[]>);
 
+      // Only return months that actually have transaction data
       const history = [];
-      for (let i = 11; i >= 0; i--) {
-        const month = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-        const monthKey = format(month, 'yyyy-MM');
-        const monthTransactions = monthlyData?.[monthKey] || [];
+      const monthsWithData = Object.keys(monthlyData || {}).sort();
+      
+      for (const monthKey of monthsWithData) {
+        const monthTransactions = monthlyData[monthKey];
+        const month = new Date(monthKey + '-01');
         
-        // Only calculate commissions if there are actual transactions
-        if (monthTransactions.length > 0) {
-          const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
-          const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
-          const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
-          
-          history.push({
-            month: format(month, 'MMM yyyy'),
-            totalVolume,
-            totalCommissions,
-            netIncome: totalVolume - totalCommissions
-          });
-        } else {
-          // No transactions for this month, show zeros
-          history.push({
-            month: format(month, 'MMM yyyy'),
-            totalVolume: 0,
-            totalCommissions: 0,
-            netIncome: 0
-          });
-        }
+        const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
+        const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
+        const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
+        
+        history.push({
+          month: format(month, 'MMM yyyy'),
+          totalVolume,
+          totalCommissions,
+          netIncome: totalVolume - totalCommissions
+        });
       }
 
       return history;
     },
-    enabled: !systemLoading, // Only run when system data is loaded
+    enabled: !systemLoading,
     refetchOnWindowFocus: false
   });
 
-  // Top 10 performers query - always call this hook
+  // Top 10 performers query
   const { data: topPerformers, isLoading: performersLoading } = useQuery({
     queryKey: ['top-10-performers-overview'],
     queryFn: async () => {
@@ -192,11 +166,30 @@ const PLReports = () => {
           ...item
         }));
     },
-    enabled: !systemLoading, // Only run when system data is loaded
+    enabled: !systemLoading,
     refetchOnWindowFocus: false
   });
 
-  // Use system data for period summary instead of separate query
+  // Convert system data date range to legacy format for existing logic
+  const getDateRangeForLegacyFormat = () => {
+    if (!systemData?.dateRange) {
+      return {
+        start: '2025-04-01',
+        end: '2025-04-30',
+        label: 'April 2025'
+      };
+    }
+
+    return {
+      start: format(systemData.dateRange.from, 'yyyy-MM-dd'),
+      end: format(systemData.dateRange.to, 'yyyy-MM-dd'),
+      label: `${format(systemData.dateRange.from, 'MMM yyyy')} (Current Data)`
+    };
+  };
+
+  const legacyDateRange = getDateRangeForLegacyFormat();
+
+  // Use system data for period summary
   const periodSummary = systemData?.stats ? {
     totalVolume: systemData.stats.totalRevenue,
     totalExpenses: systemData.stats.totalAgentPayouts,
@@ -339,12 +332,12 @@ const PLReports = () => {
             </CardContent>
           </Card>
 
-          {/* 12-Month Trailing History */}
+          {/* 12-Month Trailing History - Now only shows months with actual data */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                12-Month Trailing History
+                Historical Data (Months with Transactions)
               </CardTitle>
             </CardHeader>
             <CardContent>
