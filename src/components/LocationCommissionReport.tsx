@@ -8,27 +8,52 @@ import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/c
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
-import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
 
 const LocationCommissionReport = () => {
-  // Get dynamic time frames and set default to current month
-  const timeFrames = getDynamicTimeFrames();
-  const [timeFrame, setTimeFrame] = useState(timeFrames[2].value); // Current month (3rd option)
+  // Changed default to march since that's where the data is
+  const [timeFrame, setTimeFrame] = useState("march");
+
+  const getDateRangeForTimeFrame = (frame: string) => {
+    switch (frame) {
+      case "march":
+        return { from: new Date("2025-03-01"), to: new Date("2025-03-31") };
+      case "april":
+        return { from: new Date("2025-04-01"), to: new Date("2025-04-30") };
+      case "may":
+        return { from: new Date("2025-05-01"), to: new Date("2025-05-31") };
+      case "june":
+        return { from: new Date("2025-06-01"), to: new Date("2025-06-30") };
+      default:
+        return { from: new Date("2025-03-01"), to: new Date("2025-03-31") };
+    }
+  };
+
+  const timeFrames = [
+    { value: "march", label: "March" },
+    { value: "april", label: "April" },
+    { value: "may", label: "May" },
+    { value: "june", label: "June" }
+  ];
 
   const dateRange = getDateRangeForTimeFrame(timeFrame);
 
   // Fetch transactions
   const { data: transactions = [] } = useQuery({
-    queryKey: ['transactions'],
+    queryKey: ['transactions', timeFrame],
     queryFn: async () => {
-      console.log('🔄 LocationCommissionReport: Fetching ALL transactions...');
+      console.log('🔄 LocationCommissionReport: Fetching transactions for', timeFrame);
+      const fromFormatted = dateRange.from.toISOString().split('T')[0];
+      const toFormatted = dateRange.to.toISOString().split('T')[0];
+      
       const { data, error } = await supabase
         .from('transactions')
-        .select('*');
+        .select('*')
+        .gte('transaction_date', fromFormatted)
+        .lte('transaction_date', toFormatted);
 
       if (error) throw error;
       
-      console.log('📊 LocationCommissionReport: Total transactions fetched:', data?.length || 0);
+      console.log('📊 LocationCommissionReport: Transactions fetched for', timeFrame, ':', data?.length || 0);
       return data;
     }
   });
@@ -60,57 +85,20 @@ const LocationCommissionReport = () => {
     }
   });
 
-  // Calculate base commissions
-  const commissions = calculateLocationCommissions(transactions, assignments, locations);
-  
-  // Apply date filtering - CONSISTENT with other components
-  const filteredTransactions = dateRange 
-    ? transactions.filter(t => {
-        if (!t.transaction_date) return false;
-        
-        // Parse transaction date using same logic as other components
-        const transactionDate = new Date(t.transaction_date + 'T00:00:00.000Z'); // Force UTC to avoid timezone issues
-        
-        // Ensure the transaction date is valid
-        if (isNaN(transactionDate.getTime())) {
-          console.log('⚠️ LocationCommissionReport: Invalid transaction date:', t.transaction_date);
-          return false;
-        }
-        
-        const isInRange = transactionDate >= dateRange.from && transactionDate <= dateRange.to;
-        
-        if (isInRange) {
-          console.log('✅ LocationCommissionReport: Transaction date in range:', {
-            transactionDate: transactionDate.toISOString(),
-            fromDate: dateRange.from.toISOString(),
-            toDate: dateRange.to.toISOString(),
-            accountId: t.account_id,
-            timeFrame: timeFrame
-          });
-        }
-        
-        return isInRange;
-      })
-    : transactions;
-
   console.log('📅 LocationCommissionReport: Date filtering for timeframe:', timeFrame);
   console.log('📅 LocationCommissionReport: Date range:', dateRange);
-  console.log('📅 LocationCommissionReport: Original transactions:', transactions.length);
-  console.log('📅 LocationCommissionReport: Filtered transactions:', filteredTransactions.length);
+  console.log('📅 LocationCommissionReport: Transactions:', transactions.length);
 
-  const filteredCommissions = dateRange 
-    ? calculateLocationCommissions(filteredTransactions, assignments, locations)
-    : commissions;
+  const commissions = calculateLocationCommissions(transactions, assignments, locations);
+  const agentSummaries = groupCommissionsByAgent(commissions);
 
-  const agentSummaries = groupCommissionsByAgent(filteredCommissions);
-
-  const totalCommissions = filteredCommissions.reduce((sum, c) => {
+  const totalCommissions = commissions.reduce((sum, c) => {
     // Sum both agent payouts and merchant hero payouts
     return sum + c.agentPayout + c.merchantHeroPayout;
   }, 0);
 
-  const totalVolume = filteredCommissions.reduce((sum, c) => sum + c.locationVolume, 0);
-  const totalNetPayout = filteredCommissions.reduce((sum, c) => sum + c.netAgentPayout, 0);
+  const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
+  const totalNetPayout = commissions.reduce((sum, c) => sum + c.netAgentPayout, 0);
 
   return (
     <div className="space-y-6">
@@ -244,7 +232,7 @@ const LocationCommissionReport = () => {
             
             {agentSummaries.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                No commission data available. Make sure agents are assigned to locations and transaction data is uploaded.
+                No commission data available for {timeFrame}. Make sure agents are assigned to locations and transaction data is uploaded.
               </div>
             )}
           </div>
@@ -255,7 +243,7 @@ const LocationCommissionReport = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            Detailed Revenue Breakdown (Your Exact Formula)
+            Detailed Revenue Breakdown
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -298,7 +286,7 @@ const LocationCommissionReport = () => {
           
           {commissions.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              No commission data to display. Upload transaction data and assign agents to locations.
+              No commission data to display for {timeFrame}. Upload transaction data and assign agents to locations.
             </div>
           )}
         </CardContent>

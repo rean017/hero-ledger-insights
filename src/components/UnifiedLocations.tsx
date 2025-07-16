@@ -49,11 +49,32 @@ const UnifiedLocations = () => {
   const [customDateRange, setCustomDateRange] = useState<{ from: Date; to: Date } | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   
-  // Get dynamic time frames and set default to April (first option) since that's what was uploaded
-  const timeFrames = getDynamicTimeFrames();
-  const [timeFrame, setTimeFrame] = useState(timeFrames[0].value); // April (first option)
+  // Changed default to march since that's where the data is
+  const timeFrames = [
+    { value: "march", label: "March" },
+    { value: "april", label: "April" },
+    { value: "may", label: "May" },
+    { value: "june", label: "June" },
+    { value: "custom", label: "Custom" }
+  ];
+  const [timeFrame, setTimeFrame] = useState("march");
   
   const { toast } = useToast();
+
+  const getDateRangeForTimeFrame = (frame: string) => {
+    switch (frame) {
+      case "march":
+        return { from: new Date("2025-03-01"), to: new Date("2025-03-31") };
+      case "april":
+        return { from: new Date("2025-04-01"), to: new Date("2025-04-30") };
+      case "may":
+        return { from: new Date("2025-05-01"), to: new Date("2025-05-31") };
+      case "june":
+        return { from: new Date("2025-06-01"), to: new Date("2025-06-30") };
+      default:
+        return null;
+    }
+  };
 
   // Get date range - use custom if selected and available, otherwise use timeframe
   const dateRange = React.useMemo(() => {
@@ -218,7 +239,6 @@ const UnifiedLocations = () => {
         const { data: transactionData, error: transError } = await supabase
           .from('transactions')
           .select('*')
-          .eq('processor', 'Maverick')
           .gte('transaction_date', fromFormatted)
           .lte('transaction_date', toFormatted);
 
@@ -226,27 +246,11 @@ const UnifiedLocations = () => {
           console.error('❌ UNIFIED LOCATIONS: Error fetching transactions:', transError);
         } else {
           transactions = transactionData || [];
-          console.log('📊 UNIFIED LOCATIONS: Found', transactions.length, 'Maverick transactions');
+          console.log('📊 UNIFIED LOCATIONS: Found', transactions.length, 'transactions');
           
           // Log sample transaction data for debugging
           if (transactions.length > 0) {
             console.log('📊 UNIFIED LOCATIONS: Sample transaction:', transactions[0]);
-            console.log('📊 UNIFIED LOCATIONS: Transaction volume stats:', {
-              totalVolume: transactions.reduce((sum, t) => sum + (Number(t.volume) || 0), 0),
-              totalDebitVolume: transactions.reduce((sum, t) => sum + (Number(t.debit_volume) || 0), 0),
-              totalPayouts: transactions.reduce((sum, t) => sum + (Number(t.agent_payout) || 0), 0),
-              transactionsWithVolume: transactions.filter(t => (Number(t.volume) || 0) > 0).length,
-              transactionsWithPayouts: transactions.filter(t => (Number(t.agent_payout) || 0) > 0).length,
-              transactionsWithAccountId: transactions.filter(t => t.account_id && t.account_id !== null).length,
-              transactionsWithRawData: transactions.filter(t => t.raw_data && Object.keys(t.raw_data).length > 0).length
-            });
-            
-            // Log raw data structure of first few transactions
-            const samplesWithRawData = transactions.filter(t => t.raw_data).slice(0, 3);
-            samplesWithRawData.forEach((t, i) => {
-              console.log(`📊 UNIFIED LOCATIONS: Sample raw_data ${i + 1}:`, Object.keys(t.raw_data || {}));
-              console.log(`📊 UNIFIED LOCATIONS: Raw data sample ${i + 1}:`, t.raw_data);
-            });
           }
         }
       }
@@ -325,8 +329,8 @@ const UnifiedLocations = () => {
     location.agentNames?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
-  const dataStatus = monthlyData && monthlyData.length > 0 ? 
-    `📊 Showing data for ${timeFrame.toUpperCase()} (${monthlyData.length} records)` :
+  const dataStatus = transactions && transactions.length > 0 ? 
+    `📊 Showing data for ${timeFrame.toUpperCase()} (${transactions.length} transactions)` :
     `⚠️ No data found for ${timeFrame.toUpperCase()}`;
 
   if (isLoading || isMonthlyDataLoading) {

@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, TrendingUp, Users, Building2 } from "lucide-react";
@@ -7,53 +8,58 @@ import { useState } from "react";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
 
 const Dashboard = () => {
-  const [timeFrame, setTimeFrame] = useState("last-month");
+  // Changed default to march since that's where the data is
+  const [timeFrame, setTimeFrame] = useState("march");
 
   const getDateRange = (period: string) => {
     const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth();
-
+    
     switch (period) {
+      case "march":
+        return {
+          start: "2025-03-01",
+          end: "2025-04-01",
+          label: "March 2025"
+        };
+      case "april":
+        return {
+          start: "2025-04-01",
+          end: "2025-05-01",
+          label: "April 2025"
+        };
+      case "may":
+        return {
+          start: "2025-05-01",
+          end: "2025-06-01",
+          label: "May 2025"
+        };
+      case "june":
+        return {
+          start: "2025-06-01",
+          end: "2025-07-01",
+          label: "June 2025"
+        };
       case "current-month":
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth();
         return {
           start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
           end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
           label: "Current month"
         };
       case "last-month":
-        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+        const lastMonth = currentDate.getMonth() === 0 ? 11 : currentDate.getMonth() - 1;
+        const lastMonthYear = currentDate.getMonth() === 0 ? currentDate.getFullYear() - 1 : currentDate.getFullYear();
         return {
           start: `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+          end: `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`,
           label: "Last month"
-        };
-      case "current-quarter":
-        const quarterStart = Math.floor(currentMonth / 3) * 3;
-        return {
-          start: `${currentYear}-${String(quarterStart + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(quarterStart + 4).padStart(2, '0')}-01`,
-          label: "Current quarter"
-        };
-      case "current-year":
-        return {
-          start: `${currentYear}-01-01`,
-          end: `${currentYear + 1}-01-01`,
-          label: "Current year"
-        };
-      case "last-12-months":
-        const twelveMonthsAgo = new Date(currentYear, currentMonth - 12, 1);
-        return {
-          start: `${twelveMonthsAgo.getFullYear()}-${String(twelveMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
-          label: "Last 12 months"
         };
       default:
         return {
-          start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
-          label: "Current month"
+          start: "2025-03-01",
+          end: "2025-04-01",
+          label: "March 2025"
         };
     }
   };
@@ -265,11 +271,12 @@ const Dashboard = () => {
                 <SelectValue placeholder="Select time frame" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="march">March 2025</SelectItem>
+                <SelectItem value="april">April 2025</SelectItem>
+                <SelectItem value="may">May 2025</SelectItem>
+                <SelectItem value="june">June 2025</SelectItem>
                 <SelectItem value="current-month">Current Month</SelectItem>
                 <SelectItem value="last-month">Last Month</SelectItem>
-                <SelectItem value="current-quarter">Current Quarter</SelectItem>
-                <SelectItem value="current-year">Current Year</SelectItem>
-                <SelectItem value="last-12-months">Last 12 Months</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -326,11 +333,12 @@ const Dashboard = () => {
               <SelectValue placeholder="Select time frame" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="march">March 2025</SelectItem>
+              <SelectItem value="april">April 2025</SelectItem>
+              <SelectItem value="may">May 2025</SelectItem>
+              <SelectItem value="june">June 2025</SelectItem>
               <SelectItem value="current-month">Current Month</SelectItem>
               <SelectItem value="last-month">Last Month</SelectItem>
-              <SelectItem value="current-quarter">Current Quarter</SelectItem>
-              <SelectItem value="current-year">Current Year</SelectItem>
-              <SelectItem value="last-12-months">Last 12 Months</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -11,52 +11,46 @@ export interface TimeFrameOption {
 }
 
 export const getDynamicTimeFrames = (): TimeFrameOption[] => {
-  const now = new Date();
+  // Fixed to show March 2025 first since that's where the data is
+  const march2025 = new Date("2025-03-01");
+  const april2025 = new Date("2025-04-01");
+  const may2025 = new Date("2025-05-01");
+  const june2025 = new Date("2025-06-01");
   
-  // Get the last 3 months - but we need to handle the current date properly
-  // Since we're in June 2025, we should show Apr, May, Jun
-  const currentMonth = now;
-  const lastMonth = subMonths(now, 1);
-  const twoMonthsAgo = subMonths(now, 2);
-  
-  console.log('🗓️ Dynamic timeframes being generated:', {
-    currentMonth: format(currentMonth, 'MMM yyyy'),
-    lastMonth: format(lastMonth, 'MMM yyyy'),
-    twoMonthsAgo: format(twoMonthsAgo, 'MMM yyyy')
-  });
+  console.log('🗓️ Dynamic timeframes being generated for March 2025 data');
   
   return [
     {
-      value: format(twoMonthsAgo, 'MMM').toLowerCase(),
-      label: format(twoMonthsAgo, 'MMM'),
+      value: "march",
+      label: "March",
       dateRange: {
-        // FIXED: Use consistent date parsing to match transaction date format
-        from: new Date(format(startOfMonth(twoMonthsAgo), 'yyyy-MM-dd') + 'T00:00:00.000Z'),
-        to: new Date(format(endOfMonth(twoMonthsAgo), 'yyyy-MM-dd') + 'T23:59:59.999Z')
+        from: new Date("2025-03-01T00:00:00.000Z"),
+        to: new Date("2025-03-31T23:59:59.999Z")
       }
     },
     {
-      value: format(lastMonth, 'MMM').toLowerCase(),
-      label: format(lastMonth, 'MMM'),
+      value: "april",
+      label: "April",
       dateRange: {
-        // FIXED: Use consistent date parsing to match transaction date format
-        from: new Date(format(startOfMonth(lastMonth), 'yyyy-MM-dd') + 'T00:00:00.000Z'),
-        to: new Date(format(endOfMonth(lastMonth), 'yyyy-MM-dd') + 'T23:59:59.999Z')
+        from: new Date("2025-04-01T00:00:00.000Z"),
+        to: new Date("2025-04-30T23:59:59.999Z")
       }
     },
     {
-      value: format(currentMonth, 'MMM').toLowerCase(),
-      label: format(currentMonth, 'MMM'),
+      value: "may",
+      label: "May",
       dateRange: {
-        // FIXED: Use consistent date parsing to match transaction date format
-        from: new Date(format(startOfMonth(currentMonth), 'yyyy-MM-dd') + 'T00:00:00.000Z'),
-        to: new Date(format(endOfMonth(currentMonth), 'yyyy-MM-dd') + 'T23:59:59.999Z')
+        from: new Date("2025-05-01T00:00:00.000Z"),
+        to: new Date("2025-05-31T23:59:59.999Z")
       }
     },
     {
-      value: 'custom',
-      label: 'Custom',
-      dateRange: null
+      value: "june",
+      label: "June",
+      dateRange: {
+        from: new Date("2025-06-01T00:00:00.000Z"),
+        to: new Date("2025-06-30T23:59:59.999Z")
+      }
     }
   ];
 };
@@ -82,17 +76,17 @@ export const getDateRangeForTimeFrame = (timeFrame: string): { from: Date; to: D
   return selectedFrame?.dateRange || null;
 };
 
-// ADDED: Helper function to ensure consistent date formatting for database queries
+// Helper function to ensure consistent date formatting for database queries
 export const formatDateForDatabase = (date: Date): string => {
   return format(date, 'yyyy-MM-dd');
 };
 
-// ADDED: Helper function to get month string in YYYY-MM format (same as FileUpload)
+// Helper function to get month string in YYYY-MM format (same as FileUpload)
 export const getMonthString = (date: Date): string => {
   return format(date, 'yyyy-MM');
 };
 
-// FIXED: Helper function to normalize custom date ranges to match transaction format with proper validation
+// Helper function to normalize custom date ranges to match transaction format with proper validation
 export const normalizeCustomDateRange = (range: { from: Date; to: Date }): { from: Date; to: Date } => {
   // Validate that both dates exist and are valid
   if (!range.from || !range.to) {
