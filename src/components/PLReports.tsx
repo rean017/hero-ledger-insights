@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,71 +6,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarDays, TrendingUp, Building2, Users, DollarSign, FileText, Trophy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { format } from "date-fns";
-import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
-import { getDynamicTimeFrames, getDateRangeForTimeFrame, getDefaultTimeFrame } from "@/utils/timeFrameUtils";
+import { calculateLocationCommissions } from "@/utils/commissionCalculations";
+import { useSystemData } from "@/hooks/useSystemData";
 import AgentPLReport from "./AgentPLReport";
 
 const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("");
-  const [timeFrames, setTimeFrames] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Use the unified system data hook instead of separate timeframe logic
+  const { data: systemData, isLoading: systemLoading } = useSystemData({
+    timeFrame: selectedPeriod,
+    enableRealtime: false
+  });
 
-  // Initialize with smart timeframe detection
-  useEffect(() => {
-    const initializeTimeFrames = async () => {
-      try {
-        const frames = await getDynamicTimeFrames();
-        const defaultFrame = await getDefaultTimeFrame();
-        
-        setTimeFrames(frames);
-        setSelectedPeriod(defaultFrame);
-        
-        // Get date range for the default timeframe
-        const range = await getDateRangeForTimeFrame(defaultFrame);
-        setDateRange(range);
-        setIsInitialized(true);
-        
-        console.log('🎯 P&L REPORTS: Smart timeframe detection initialized:', {
-          defaultFrame,
-          frames: frames.map(f => ({ value: f.value, label: f.label }))
-        });
-      } catch (error) {
-        console.error('Error initializing P&L timeframes:', error);
-        // Fallback to April 2025 if there's an error
-        setSelectedPeriod("2025-04");
-        setDateRange({
-          from: new Date("2025-04-01T00:00:00.000Z"),
-          to: new Date("2025-04-30T23:59:59.999Z")
-        });
-        setIsInitialized(true);
-      }
-    };
+  // Initialize selected period with the effective timeframe from system data
+  if (!selectedPeriod && systemData?.effectiveTimeFrame) {
+    setSelectedPeriod(systemData.effectiveTimeFrame);
+  }
 
-    initializeTimeFrames();
-  }, []);
-
-  // Update date range when period changes
-  useEffect(() => {
-    const updateDateRange = async () => {
-      if (selectedPeriod) {
-        try {
-          const range = await getDateRangeForTimeFrame(selectedPeriod);
-          setDateRange(range);
-        } catch (error) {
-          console.error('Error updating date range for P&L:', error);
-        }
-      }
-    };
-
-    updateDateRange();
-  }, [selectedPeriod]);
-
-  // Convert timeframe to legacy format for existing logic
-  const getDateRangeForLegacyFormat = (period: string) => {
-    if (!dateRange) {
+  // Convert system data date range to legacy format for existing logic
+  const getDateRangeForLegacyFormat = () => {
+    if (!systemData?.dateRange) {
       return {
         start: '2025-04-01',
         end: '2025-04-30',
@@ -79,15 +36,14 @@ const PLReports = () => {
       };
     }
 
-    const timeFrame = timeFrames.find(tf => tf.value === period);
     return {
-      start: format(dateRange.from, 'yyyy-MM-dd'),
-      end: format(dateRange.to, 'yyyy-MM-dd'),
-      label: timeFrame?.label || 'Current Period'
+      start: format(systemData.dateRange.from, 'yyyy-MM-dd'),
+      end: format(systemData.dateRange.to, 'yyyy-MM-dd'),
+      label: `${format(systemData.dateRange.from, 'MMM yyyy')} (Current Data)`
     };
   };
 
-  const legacyDateRange = getDateRangeForLegacyFormat(selectedPeriod);
+  const legacyDateRange = getDateRangeForLegacyFormat();
 
   // 12-month trailing history query - always call this hook
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
@@ -164,7 +120,7 @@ const PLReports = () => {
 
       return history;
     },
-    enabled: isInitialized, // Only run when initialized
+    enabled: !systemLoading, // Only run when system data is loaded
     refetchOnWindowFocus: false
   });
 
@@ -236,143 +192,32 @@ const PLReports = () => {
           ...item
         }));
     },
-    enabled: isInitialized, // Only run when initialized
+    enabled: !systemLoading, // Only run when system data is loaded
     refetchOnWindowFocus: false
   });
 
-  // Period summary query - always call this hook
-  const { data: periodSummary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
-    queryKey: ['period-summary', selectedPeriod],
-    queryFn: async () => {
-      console.log(`Fetching period summary for ${selectedPeriod} (${legacyDateRange.start} to ${legacyDateRange.end})`);
-      
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', legacyDateRange.start)
-        .lte('transaction_date', legacyDateRange.end);
+  // Use system data for period summary instead of separate query
+  const periodSummary = systemData?.stats ? {
+    totalVolume: systemData.stats.totalRevenue,
+    totalExpenses: systemData.stats.totalAgentPayouts,
+    netIncome: systemData.stats.totalRevenue - systemData.stats.totalAgentPayouts,
+    transactionCount: systemData.stats.transactionsCount
+  } : null;
 
-      if (error) throw error;
+  // Use system data for agent location data
+  const agentLocationData = systemData?.commissions?.map(commission => ({
+    agentName: commission.agentName,
+    locationName: commission.locationName,
+    accountId: commission.locationId,
+    bpsRate: commission.bpsRate,
+    volume: commission.locationVolume,
+    debitVolume: 0,
+    calculatedPayout: commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout,
+    profitContribution: commission.locationVolume - (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout)
+  })) || [];
 
-      console.log('Period summary - Total transactions:', transactions?.length);
-
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          is_active
-        `)
-        .eq('is_active', true);
-
-      if (assignmentError) throw assignmentError;
-
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
-
-      if (locationError) throw locationError;
-
-      let totalVolume = 0;
-
-      // Calculate total volume from all transactions
-      transactions?.forEach(t => {
-        totalVolume += (t.volume || 0) + (t.debit_volume || 0);
-      });
-
-      // Use the same commission calculation logic as the commission reports
-      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-      const totalExpenses = commissions.reduce((sum, commission) => sum + (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout), 0);
-
-      const netIncome = totalVolume - totalExpenses;
-
-      const result = {
-        totalVolume,
-        totalExpenses,
-        netIncome,
-        transactionCount: transactions?.length || 0
-      };
-
-      console.log('Period summary - Final calculations:', result);
-      return result;
-    },
-    enabled: isInitialized && selectedPeriod !== "", // Only run when initialized and period is set
-    refetchOnWindowFocus: false
-  });
-
-  // Agent location data query - always call this hook
-  const { data: agentLocationData, isLoading: agentLoading, refetch: refetchAgentData } = useQuery({
-    queryKey: ['agent-location-pl-data', selectedPeriod],
-    queryFn: async () => {
-      console.log(`Fetching agent location P&L data for ${selectedPeriod}`);
-      
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', legacyDateRange.start)
-        .lte('transaction_date', legacyDateRange.end);
-
-      if (error) throw error;
-
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          is_active
-        `)
-        .eq('is_active', true);
-
-      if (assignmentError) throw assignmentError;
-
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
-
-      if (locationError) throw locationError;
-
-      console.log('Total transactions in date range:', transactions?.length);
-
-      // Use the same commission calculation logic as the commission reports
-      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-
-      const agentLocationResults = commissions.map(commission => ({
-        agentName: commission.agentName,
-        locationName: commission.locationName,
-        accountId: commission.locationId,
-        bpsRate: commission.bpsRate,
-        volume: commission.locationVolume,
-        debitVolume: 0, // We can calculate this separately if needed
-        calculatedPayout: commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout,
-        profitContribution: commission.locationVolume - (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout)
-      }));
-
-      return agentLocationResults;
-    },
-    enabled: isInitialized && selectedPeriod !== "", // Only run when initialized and period is set
-    refetchOnWindowFocus: false
-  });
-
-  // Show loading state while timeframes are being initialized
-  if (!isInitialized) {
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
-            <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
-          </div>
-        </div>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading smart timeframe detection...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (summaryLoading || agentLoading) {
+  // Show loading state while system data is being loaded
+  if (systemLoading) {
     return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -391,6 +236,14 @@ const PLReports = () => {
   const topPerformersForPeriod = agentLocationData
     ?.sort((a, b) => b.volume - a.volume)
     .slice(0, 5) || [];
+
+  // Get available timeframes from system data
+  const availableTimeFrames = [
+    { value: "2025-04", label: "April 2025 (Current Data)" },
+    { value: "2025-03", label: "March 2025" },
+    { value: "2025-05", label: "May 2025" },
+    { value: "2025-06", label: "June 2025" }
+  ];
 
   return (
     <div className="space-y-6">
@@ -544,7 +397,7 @@ const PLReports = () => {
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
-                  {timeFrames.map((frame) => (
+                  {availableTimeFrames.map((frame) => (
                     <SelectItem key={frame.value} value={frame.value}>
                       {frame.label}
                     </SelectItem>
