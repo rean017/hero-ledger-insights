@@ -7,64 +7,101 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarDays, TrendingUp, Building2, Users, DollarSign, FileText, Trophy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
+import { getDynamicTimeFrames, getDateRangeForTimeFrame, getDefaultTimeFrame } from "@/utils/timeFrameUtils";
 import AgentPLReport from "./AgentPLReport";
 
 const PLReports = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState("current-month");
+  const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [timeFrames, setTimeFrames] = useState<any[]>([]);
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | null>(null);
 
-  const getDateRange = (period: string) => {
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth();
+  // Initialize with smart timeframe detection
+  useEffect(() => {
+    const initializeTimeFrames = async () => {
+      try {
+        const frames = await getDynamicTimeFrames();
+        const defaultFrame = await getDefaultTimeFrame();
+        
+        setTimeFrames(frames);
+        setSelectedPeriod(defaultFrame);
+        
+        // Get date range for the default timeframe
+        const range = await getDateRangeForTimeFrame(defaultFrame);
+        setDateRange(range);
+        
+        console.log('🎯 P&L REPORTS: Smart timeframe detection initialized:', {
+          defaultFrame,
+          frames: frames.map(f => ({ value: f.value, label: f.label }))
+        });
+      } catch (error) {
+        console.error('Error initializing P&L timeframes:', error);
+        // Fallback to April 2025 if there's an error
+        setSelectedPeriod("2025-04");
+        setDateRange({
+          from: new Date("2025-04-01T00:00:00.000Z"),
+          to: new Date("2025-04-30T23:59:59.999Z")
+        });
+      }
+    };
 
-    switch (period) {
-      case "current-month":
-        return {
-          start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
-          label: "Current month"
-        };
-      case "last-month":
-        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-        return {
-          start: `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
-          label: "Last month"
-        };
-      case "current-quarter":
-        const quarterStart = Math.floor(currentMonth / 3) * 3;
-        return {
-          start: `${currentYear}-${String(quarterStart + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(quarterStart + 4).padStart(2, '0')}-1`,
-          label: "Current quarter"
-        };
-      case "current-year":
-        return {
-          start: `${currentYear}-01-01`,
-          end: `${currentYear + 1}-01-01`,
-          label: "Current year"
-        };
-      case "last-12-months":
-        const twelveMonthsAgo = new Date(currentYear, currentMonth - 12, 1);
-        return {
-          start: `${twelveMonthsAgo.getFullYear()}-${String(twelveMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
-          label: "Last 12 months"
-        };
-      default:
-        return {
-          start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
-          end: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-01`,
-          label: "Current month"
-        };
+    initializeTimeFrames();
+  }, []);
+
+  // Update date range when period changes
+  useEffect(() => {
+    const updateDateRange = async () => {
+      if (selectedPeriod) {
+        try {
+          const range = await getDateRangeForTimeFrame(selectedPeriod);
+          setDateRange(range);
+        } catch (error) {
+          console.error('Error updating date range for P&L:', error);
+        }
+      }
+    };
+
+    updateDateRange();
+  }, [selectedPeriod]);
+
+  // Convert timeframe to legacy format for existing logic
+  const getDateRangeForLegacyFormat = (period: string) => {
+    if (!dateRange) {
+      return {
+        start: '2025-04-01',
+        end: '2025-04-30',
+        label: 'April 2025'
+      };
     }
+
+    const timeFrame = timeFrames.find(tf => tf.value === period);
+    return {
+      start: format(dateRange.from, 'yyyy-MM-dd'),
+      end: format(dateRange.to, 'yyyy-MM-dd'),
+      label: timeFrame?.label || 'Current Period'
+    };
   };
 
-  const dateRange = getDateRange(selectedPeriod);
+  const legacyDateRange = getDateRangeForLegacyFormat(selectedPeriod);
+
+  // Show loading state while timeframes are being initialized
+  if (timeFrames.length === 0 || !selectedPeriod || !dateRange) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
+            <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading smart timeframe detection...</p>
+        </div>
+      </div>
+    );
+  }
 
   // 12-month trailing history query
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
@@ -218,13 +255,13 @@ const PLReports = () => {
   const { data: periodSummary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
     queryKey: ['period-summary', selectedPeriod],
     queryFn: async () => {
-      console.log(`Fetching period summary for ${selectedPeriod} (${dateRange.start} to ${dateRange.end})`);
+      console.log(`Fetching period summary for ${selectedPeriod} (${legacyDateRange.start} to ${legacyDateRange.end})`);
       
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', dateRange.start)
-        .lt('transaction_date', dateRange.end);
+        .gte('transaction_date', legacyDateRange.start)
+        .lte('transaction_date', legacyDateRange.end);
 
       if (error) throw error;
 
@@ -282,8 +319,8 @@ const PLReports = () => {
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', dateRange.start)
-        .lt('transaction_date', dateRange.end);
+        .gte('transaction_date', legacyDateRange.start)
+        .lte('transaction_date', legacyDateRange.end);
 
       if (error) throw error;
 
@@ -498,11 +535,11 @@ const PLReports = () => {
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="current-month">Current Month</SelectItem>
-                  <SelectItem value="last-month">Last Month</SelectItem>
-                  <SelectItem value="current-quarter">Current Quarter</SelectItem>
-                  <SelectItem value="current-year">Current Year</SelectItem>
-                  <SelectItem value="last-12-months">Last 12 Months</SelectItem>
+                  {timeFrames.map((frame) => (
+                    <SelectItem key={frame.value} value={frame.value}>
+                      {frame.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -518,7 +555,7 @@ const PLReports = () => {
                 <div className="text-2xl font-bold text-emerald-600">
                   ${periodSummary?.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
+                <p className="text-xs text-muted-foreground mt-1">{legacyDateRange.label}</p>
               </CardContent>
             </Card>
 
@@ -531,7 +568,7 @@ const PLReports = () => {
                 <div className="text-2xl font-bold text-red-600">
                   ${periodSummary?.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
+                <p className="text-xs text-muted-foreground mt-1">{legacyDateRange.label}</p>
               </CardContent>
             </Card>
 
@@ -544,7 +581,7 @@ const PLReports = () => {
                 <div className="text-2xl font-bold text-blue-600">
                   ${periodSummary?.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
+                <p className="text-xs text-muted-foreground mt-1">{legacyDateRange.label}</p>
               </CardContent>
             </Card>
 
@@ -557,7 +594,7 @@ const PLReports = () => {
                 <div className="text-2xl font-bold">
                   {periodSummary?.transactionCount || 0}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{dateRange.label}</p>
+                <p className="text-xs text-muted-foreground mt-1">{legacyDateRange.label}</p>
               </CardContent>
             </Card>
           </div>
@@ -567,7 +604,7 @@ const PLReports = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
-                  Top Performing Locations ({dateRange.label})
+                  Top Performing Locations ({legacyDateRange.label})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -598,7 +635,7 @@ const PLReports = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Building2 className="h-5 w-5" />
-                  P&L Summary ({dateRange.label})
+                  P&L Summary ({legacyDateRange.label})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -635,7 +672,7 @@ const PLReports = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Detailed Agent & Location Performance ({dateRange.label})</CardTitle>
+              <CardTitle>Detailed Agent & Location Performance ({legacyDateRange.label})</CardTitle>
             </CardHeader>
             <CardContent>
               {agentLocationData && agentLocationData.length > 0 ? (
