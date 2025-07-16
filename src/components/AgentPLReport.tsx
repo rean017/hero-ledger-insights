@@ -8,10 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarIcon, Download, Printer, FileText, User, Building2, TrendingUp, Trophy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { calculateLocationCommissions } from "@/utils/commissionCalculations";
+import { getDefaultTimeFrame } from "@/utils/timeFrameUtils";
 
 const AgentPLReport = () => {
   const [selectedAgent, setSelectedAgent] = useState("");
@@ -21,12 +22,33 @@ const AgentPLReport = () => {
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
 
+  // Initialize with smart date detection
+  useEffect(() => {
+    const initializeSmartDates = async () => {
+      const defaultTimeFrame = await getDefaultTimeFrame();
+      console.log('🎯 AGENT P&L: Smart date detection initialized with:', defaultTimeFrame);
+      
+      // Set the period to show the detected month if it's available
+      if (defaultTimeFrame === "2025-04") {
+        setSelectedPeriod("detected-month");
+      }
+    };
+    
+    initializeSmartDates();
+  }, []);
+
   const getDateRange = (period: string) => {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth();
 
     switch (period) {
+      case "detected-month":
+        return {
+          start: '2025-04-01',
+          end: '2025-04-30',
+          label: "April 2025 (Detected Upload)"
+        };
       case "current-month":
         return {
           start: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
@@ -411,6 +433,7 @@ const AgentPLReport = () => {
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="detected-month">April 2025 (Detected Upload)</SelectItem>
                   <SelectItem value="current-month">Current Month</SelectItem>
                   <SelectItem value="last-month">Last Month</SelectItem>
                   <SelectItem value="current-quarter">Current Quarter</SelectItem>

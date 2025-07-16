@@ -3,43 +3,52 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateLocationCommissions } from "@/utils/commissionCalculations";
 import { format } from "date-fns";
+import { getDateRangeForTimeFrame, getDefaultTimeFrame } from "@/utils/timeFrameUtils";
 
 interface SystemDataOptions {
-  timeFrame: string;
+  timeFrame?: string;
   customDateRange?: { from: Date; to: Date };
   enableRealtime?: boolean;
 }
 
-export const useSystemData = (options: SystemDataOptions) => {
+export const useSystemData = (options: SystemDataOptions = {}) => {
   const { timeFrame, customDateRange, enableRealtime = false } = options;
   const queryClient = useQueryClient();
-
-  // Helper to get date range
-  const getDateRange = (frame: string) => {
-    if (frame === 'custom' && customDateRange) {
-      return {
-        from: format(customDateRange.from, 'yyyy-MM-dd'),
-        to: format(customDateRange.to, 'yyyy-MM-dd')
-      };
-    }
-    
-    const ranges = {
-      march: { from: '2025-03-01', to: '2025-03-31' },
-      april: { from: '2025-04-01', to: '2025-04-30' },
-      may: { from: '2025-05-01', to: '2025-05-31' },
-      june: { from: '2025-06-01', to: '2025-06-30' }
-    };
-    
-    return ranges[frame as keyof typeof ranges] || ranges.march;
-  };
-
-  const dateRange = getDateRange(timeFrame);
 
   // Fetch all system data in one optimized query
   const { data, isLoading, error } = useQuery({
     queryKey: ['system-data', timeFrame, customDateRange],
     queryFn: async () => {
-      console.log('🚀 SYSTEM DATA: Fetching unified data for', timeFrame, dateRange);
+      console.log('🚀 SYSTEM DATA: Starting unified data fetch');
+      
+      // Auto-detect timeframe if not provided
+      let effectiveTimeFrame = timeFrame;
+      if (!effectiveTimeFrame) {
+        effectiveTimeFrame = await getDefaultTimeFrame();
+        console.log('🎯 SYSTEM DATA: Auto-detected timeframe:', effectiveTimeFrame);
+      }
+      
+      // Get date range for the timeframe
+      let dateRange;
+      if (customDateRange) {
+        dateRange = {
+          from: format(customDateRange.from, 'yyyy-MM-dd'),
+          to: format(customDateRange.to, 'yyyy-MM-dd')
+        };
+      } else {
+        const range = await getDateRangeForTimeFrame(effectiveTimeFrame);
+        if (range) {
+          dateRange = {
+            from: format(range.from, 'yyyy-MM-dd'),
+            to: format(range.to, 'yyyy-MM-dd')
+          };
+        } else {
+          // Fallback to April 2025
+          dateRange = { from: '2025-04-01', to: '2025-04-30' };
+        }
+      }
+      
+      console.log('🚀 SYSTEM DATA: Fetching unified data for', effectiveTimeFrame, dateRange);
       
       // Fetch all data concurrently
       const [
@@ -60,6 +69,14 @@ export const useSystemData = (options: SystemDataOptions) => {
       if (assignmentsError) throw assignmentsError;
       if (transactionsError) throw transactionsError;
       if (agentsError) throw agentsError;
+
+      console.log('📊 SYSTEM DATA: Fetched data:', {
+        locations: locations?.length || 0,
+        assignments: assignments?.length || 0,
+        transactions: transactions?.length || 0,
+        agents: agents?.length || 0,
+        dateRange
+      });
 
       // Calculate commissions using optimized logic
       const commissions = calculateLocationCommissions(
@@ -101,7 +118,8 @@ export const useSystemData = (options: SystemDataOptions) => {
         locations: locations?.length,
         transactions: transactions?.length,
         commissions: commissions.length,
-        stats
+        stats,
+        effectiveTimeFrame
       });
 
       return {
@@ -110,7 +128,9 @@ export const useSystemData = (options: SystemDataOptions) => {
         transactions: transactions || [],
         agents: agents || [],
         commissions,
-        stats
+        stats,
+        effectiveTimeFrame,
+        dateRange: dateRange ? { from: new Date(dateRange.from), to: new Date(dateRange.to) } : null
       };
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -128,6 +148,7 @@ export const useSystemData = (options: SystemDataOptions) => {
     isLoading,
     error,
     invalidateCache,
-    dateRange: dateRange ? { from: new Date(dateRange.from), to: new Date(dateRange.to) } : null
+    effectiveTimeFrame: data?.effectiveTimeFrame,
+    dateRange: data?.dateRange
   };
 };
