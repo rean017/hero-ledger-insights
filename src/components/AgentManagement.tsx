@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,12 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, Edit2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
-import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
+import { getDynamicTimeFrames, getDateRangeForTimeFrame, getDefaultTimeFrame } from "@/utils/timeFrameUtils";
 
 const AgentManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -22,14 +23,54 @@ const AgentManagement = () => {
   const [newAgentName, setNewAgentName] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [agentNotes, setAgentNotes] = useState("");
-  
-  // Get dynamic time frames and set default to current month
-  const timeFrames = getDynamicTimeFrames();
-  const [timeFrame, setTimeFrame] = useState(timeFrames[2].value); // Current month (3rd option)
+  const [timeFrames, setTimeFrames] = useState<any[]>([]);
+  const [timeFrame, setTimeFrame] = useState("");
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | null>(null);
   
   const { toast } = useToast();
 
-  const dateRange = getDateRangeForTimeFrame(timeFrame);
+  // Initialize timeframes and default timeframe
+  useEffect(() => {
+    const initializeTimeFrames = async () => {
+      try {
+        const frames = await getDynamicTimeFrames();
+        const defaultFrame = await getDefaultTimeFrame();
+        
+        setTimeFrames(frames);
+        setTimeFrame(defaultFrame);
+        
+        // Get date range for the default timeframe
+        const range = await getDateRangeForTimeFrame(defaultFrame);
+        setDateRange(range);
+      } catch (error) {
+        console.error('Error initializing timeframes:', error);
+        // Fallback to April 2025 if there's an error
+        setTimeFrame("2025-04");
+        setDateRange({
+          from: new Date("2025-04-01T00:00:00.000Z"),
+          to: new Date("2025-04-30T23:59:59.999Z")
+        });
+      }
+    };
+
+    initializeTimeFrames();
+  }, []);
+
+  // Update date range when timeframe changes
+  useEffect(() => {
+    const updateDateRange = async () => {
+      if (timeFrame) {
+        try {
+          const range = await getDateRangeForTimeFrame(timeFrame);
+          setDateRange(range);
+        } catch (error) {
+          console.error('Error updating date range:', error);
+        }
+      }
+    };
+
+    updateDateRange();
+  }, [timeFrame]);
 
   // Fetch transactions
   const { data: transactions = [] } = useQuery({
@@ -293,6 +334,21 @@ const AgentManagement = () => {
   const filteredAgents = agents?.filter(agent =>
     agent.name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
+
+  // Show loading state while timeframes are being initialized
+  if (timeFrames.length === 0 || !timeFrame) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Agent Management</h2>
+          <p className="text-muted-foreground">Manage agent information and commission rates</p>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading timeframes...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (transactions.length === 0 && assignments.length === 0 && locations.length === 0) {
     return (
