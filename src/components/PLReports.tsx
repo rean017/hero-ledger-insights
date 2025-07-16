@@ -17,6 +17,7 @@ const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [timeFrames, setTimeFrames] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Initialize with smart timeframe detection
   useEffect(() => {
@@ -31,6 +32,7 @@ const PLReports = () => {
         // Get date range for the default timeframe
         const range = await getDateRangeForTimeFrame(defaultFrame);
         setDateRange(range);
+        setIsInitialized(true);
         
         console.log('🎯 P&L REPORTS: Smart timeframe detection initialized:', {
           defaultFrame,
@@ -44,6 +46,7 @@ const PLReports = () => {
           from: new Date("2025-04-01T00:00:00.000Z"),
           to: new Date("2025-04-30T23:59:59.999Z")
         });
+        setIsInitialized(true);
       }
     };
 
@@ -86,24 +89,7 @@ const PLReports = () => {
 
   const legacyDateRange = getDateRangeForLegacyFormat(selectedPeriod);
 
-  // Show loading state while timeframes are being initialized
-  if (timeFrames.length === 0 || !selectedPeriod || !dateRange) {
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
-            <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
-          </div>
-        </div>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading smart timeframe detection...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // 12-month trailing history query
+  // 12-month trailing history query - always call this hook
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview'],
     queryFn: async () => {
@@ -178,10 +164,11 @@ const PLReports = () => {
 
       return history;
     },
+    enabled: isInitialized, // Only run when initialized
     refetchOnWindowFocus: false
   });
 
-  // Top 10 performers query with unique locations
+  // Top 10 performers query - always call this hook
   const { data: topPerformers, isLoading: performersLoading } = useQuery({
     queryKey: ['top-10-performers-overview'],
     queryFn: async () => {
@@ -249,9 +236,11 @@ const PLReports = () => {
           ...item
         }));
     },
+    enabled: isInitialized, // Only run when initialized
     refetchOnWindowFocus: false
   });
 
+  // Period summary query - always call this hook
   const { data: periodSummary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
     queryKey: ['period-summary', selectedPeriod],
     queryFn: async () => {
@@ -308,9 +297,11 @@ const PLReports = () => {
       console.log('Period summary - Final calculations:', result);
       return result;
     },
+    enabled: isInitialized && selectedPeriod !== "", // Only run when initialized and period is set
     refetchOnWindowFocus: false
   });
 
+  // Agent location data query - always call this hook
   const { data: agentLocationData, isLoading: agentLoading, refetch: refetchAgentData } = useQuery({
     queryKey: ['agent-location-pl-data', selectedPeriod],
     queryFn: async () => {
@@ -360,8 +351,26 @@ const PLReports = () => {
 
       return agentLocationResults;
     },
+    enabled: isInitialized && selectedPeriod !== "", // Only run when initialized and period is set
     refetchOnWindowFocus: false
   });
+
+  // Show loading state while timeframes are being initialized
+  if (!isInitialized) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
+            <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading smart timeframe detection...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (summaryLoading || agentLoading) {
     return (
