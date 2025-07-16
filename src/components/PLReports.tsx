@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +26,31 @@ const PLReports = () => {
     setSelectedPeriod(systemData.effectiveTimeFrame);
   }
 
+  // Debug query to check actual transaction dates
+  const { data: debugData } = useQuery({
+    queryKey: ['debug-transaction-dates'],
+    queryFn: async () => {
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('transaction_date, volume, created_at')
+        .order('transaction_date', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      console.log('🔍 DEBUG: First 20 transactions with dates:', transactions?.map(t => ({
+        transaction_date: t.transaction_date,
+        volume: t.volume,
+        created_at: t.created_at,
+        parsed_date: t.transaction_date ? new Date(t.transaction_date).toISOString() : null,
+        month_key: t.transaction_date ? format(new Date(t.transaction_date), 'yyyy-MM') : null
+      })));
+
+      return transactions;
+    },
+    enabled: true
+  });
+
   // 12-month trailing history query - fixed to only show months with actual data
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview'],
@@ -34,15 +58,22 @@ const PLReports = () => {
       const currentDate = new Date();
       const twelveMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 12, 1);
       
-      console.log('Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+      console.log('📅 HISTORY: Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
 
-      // First, get all transactions to see which months actually have data
+      // Get all transactions to see which months actually have data
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id, transaction_date, agent_payout')
-        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'))
+        .order('transaction_date', { ascending: false });
 
       if (error) throw error;
+
+      console.log('📊 HISTORY: Retrieved transactions:', transactions?.length || 0);
+      console.log('🗓️ HISTORY: Transaction date range:', {
+        first: transactions?.[0]?.transaction_date,
+        last: transactions?.[transactions?.length - 1]?.transaction_date
+      });
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -64,6 +95,8 @@ const PLReports = () => {
 
       // Group transactions by month and calculate monthly totals
       const monthlyData = transactions?.reduce((acc, transaction) => {
+        if (!transaction.transaction_date) return acc;
+        
         const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
         if (!acc[monthKey]) {
           acc[monthKey] = [];
@@ -71,6 +104,8 @@ const PLReports = () => {
         acc[monthKey].push(transaction);
         return acc;
       }, {} as Record<string, any[]>);
+
+      console.log('📊 HISTORY: Monthly data grouping:', Object.keys(monthlyData || {}).sort());
 
       // Only return months that actually have transaction data
       const history = [];
@@ -84,15 +119,26 @@ const PLReports = () => {
         const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
         const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
         
+        console.log(`💰 HISTORY: ${monthKey} - Volume: ${totalVolume}, Commissions: ${totalCommissions}`);
+        
         history.push({
           month: format(month, 'MMM yyyy'),
           totalVolume,
           totalCommissions,
-          netIncome: totalVolume - totalCommissions
+          netIncome: totalVolume - totalCommissions,
+          monthKey,
+          transactionCount: monthTransactions.length
         });
       }
 
-      return history;
+      console.log('📈 HISTORY: Final history data:', history.map(h => ({
+        month: h.month,
+        monthKey: h.monthKey,
+        volume: h.totalVolume,
+        transactions: h.transactionCount
+      })));
+
+      return history.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
     },
     enabled: !systemLoading,
     refetchOnWindowFocus: false
@@ -105,7 +151,7 @@ const PLReports = () => {
       const currentDate = new Date();
       const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 3, 1);
       
-      console.log('Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
+      console.log('🏆 TOP PERFORMERS: Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
 
       const { data: transactions, error } = await supabase
         .from('transactions')
@@ -262,6 +308,26 @@ const PLReports = () => {
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-6">
+          {/* Debug Information Card */}
+          {debugData && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Debug: Recent Transaction Dates</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xs space-y-1">
+                  {debugData.slice(0, 5).map((tx, i) => (
+                    <div key={i} className="flex gap-4">
+                      <span>Date: {tx.transaction_date}</span>
+                      <span>Volume: ${tx.volume}</span>
+                      <span>Month: {tx.transaction_date ? format(new Date(tx.transaction_date), 'MMM yyyy') : 'N/A'}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Top 10 Performers with unique locations */}
           <Card>
             <CardHeader>
@@ -332,7 +398,7 @@ const PLReports = () => {
             </CardContent>
           </Card>
 
-          {/* 12-Month Trailing History - Now only shows months with actual data */}
+          {/* Historical Data - Now only shows months with actual data */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -354,6 +420,7 @@ const PLReports = () => {
                         <th className="text-right p-4 font-semibold">Total Volume</th>
                         <th className="text-right p-4 font-semibold">Total Commissions</th>
                         <th className="text-right p-4 font-semibold">Net Income</th>
+                        <th className="text-right p-4 font-semibold">Transactions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -368,6 +435,9 @@ const PLReports = () => {
                           </td>
                           <td className="p-4 text-right font-semibold text-blue-600">
                             ${month.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 text-right font-semibold text-muted-foreground">
+                            {month.transactionCount}
                           </td>
                         </tr>
                       ))}
