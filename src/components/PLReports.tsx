@@ -43,7 +43,7 @@ const PLReports = () => {
         volume: t.volume,
         created_at: t.created_at,
         parsed_date: t.transaction_date ? new Date(t.transaction_date).toISOString() : null,
-        month_key: t.transaction_date ? format(new Date(t.transaction_date), 'yyyy-MM') : null
+        month_key: t.transaction_date ? t.transaction_date.substring(0, 7) : null // FIXED: Direct string parsing
       })));
 
       return transactions;
@@ -51,7 +51,7 @@ const PLReports = () => {
     enabled: true
   });
 
-  // 12-month trailing history query - FIXED to prevent timezone issues
+  // 12-month trailing history query - COMPLETELY FIXED timezone issues
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview'],
     queryFn: async () => {
@@ -93,11 +93,13 @@ const PLReports = () => {
 
       if (locationError) throw locationError;
 
-      // Group transactions by month and calculate monthly totals
+      // Group transactions by month and calculate monthly totals - FIXED timezone issue
       const monthlyData = transactions?.reduce((acc, transaction) => {
         if (!transaction.transaction_date) return acc;
         
-        const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
+        // FIXED: Use direct string parsing to avoid timezone conversion
+        const monthKey = transaction.transaction_date.substring(0, 7); // Gets "2025-04" from "2025-04-01"
+        
         if (!acc[monthKey]) {
           acc[monthKey] = [];
         }
@@ -105,7 +107,7 @@ const PLReports = () => {
         return acc;
       }, {} as Record<string, any[]>);
 
-      console.log('📊 HISTORY: Monthly data grouping:', Object.keys(monthlyData || {}).sort());
+      console.log('📊 HISTORY: Monthly data grouping with FIXED parsing:', Object.keys(monthlyData || {}).sort());
 
       // Only return months that actually have transaction data
       const history = [];
@@ -118,7 +120,7 @@ const PLReports = () => {
         const [year, month] = monthKey.split('-').map(Number);
         const monthDate = new Date(year, month - 1, 1); // Create date in local timezone explicitly
         
-        console.log(`🔧 DATE FIX: Processing ${monthKey} -> Year: ${year}, Month: ${month}, Date: ${monthDate.toISOString()}`);
+        console.log(`🔧 COMPLETE DATE FIX: Processing ${monthKey} -> Year: ${year}, Month: ${month}, Date: ${monthDate.toISOString()}`);
         
         const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
         const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
@@ -126,7 +128,7 @@ const PLReports = () => {
         
         // FIXED: Use the correctly parsed date for formatting
         const monthLabel = format(monthDate, 'MMM yyyy');
-        console.log(`✅ DATE VALIDATION: ${monthKey} -> ${monthLabel} (Volume: ${totalVolume}, Commissions: ${totalCommissions})`);
+        console.log(`✅ FINAL DATE VALIDATION: ${monthKey} -> ${monthLabel} (Volume: ${totalVolume}, Commissions: ${totalCommissions})`);
         
         history.push({
           month: monthLabel,
@@ -138,7 +140,7 @@ const PLReports = () => {
         });
       }
 
-      console.log('📈 HISTORY: Final history data with corrected dates:', history.map(h => ({
+      console.log('📈 HISTORY: Final history data with COMPLETELY FIXED dates:', history.map(h => ({
         month: h.month,
         monthKey: h.monthKey,
         volume: h.totalVolume,
@@ -319,7 +321,7 @@ const PLReports = () => {
           {debugData && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm text-muted-foreground">Debug: Recent Transaction Dates</CardTitle>
+                <CardTitle className="text-sm text-muted-foreground">Debug: Recent Transaction Dates (FIXED PARSING)</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-xs space-y-1">
@@ -327,7 +329,8 @@ const PLReports = () => {
                     <div key={i} className="flex gap-4">
                       <span>Date: {tx.transaction_date}</span>
                       <span>Volume: ${tx.volume}</span>
-                      <span>Month: {tx.transaction_date ? format(new Date(tx.transaction_date), 'MMM yyyy') : 'N/A'}</span>
+                      <span>Month (Fixed): {tx.transaction_date ? tx.transaction_date.substring(0, 7) : 'N/A'}</span>
+                      <span>Label: {tx.transaction_date ? format(new Date(tx.transaction_date.split('-')[0], parseInt(tx.transaction_date.split('-')[1]) - 1, 1), 'MMM yyyy') : 'N/A'}</span>
                     </div>
                   ))}
                 </div>
@@ -405,12 +408,12 @@ const PLReports = () => {
             </CardContent>
           </Card>
 
-          {/* Historical Data - Now with FIXED date parsing */}
+          {/* Historical Data - Now with COMPLETELY FIXED date parsing */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                Historical Data (Months with Transactions) - FIXED DATE PARSING
+                Historical Data (Months with Transactions) - TIMEZONE ISSUE FIXED
               </CardTitle>
             </CardHeader>
             <CardContent>
