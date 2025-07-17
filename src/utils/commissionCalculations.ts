@@ -86,7 +86,7 @@ export const calculateLocationCommissions = (
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('🎯 === COMMISSION CALC WITH CORRECTED VOLUME LOGIC ===');
+  console.log('🎯 === COMMISSION CALC WITH REALISTIC VOLUME LOGIC ===');
   console.log('📊 INPUT DATA:');
   console.log('- Transactions:', transactions.length);
   console.log('- Assignments:', assignments.length);  
@@ -177,34 +177,42 @@ export const calculateLocationCommissions = (
     
     let totalCommissionsPaid = 0;
     
-    // CORRECTED VOLUME LOGIC: Use actual agent payout as the "volume" for commission calculation
-    // This assumes the agent_payout field represents the actual commission earned
-    const actualVolume = locationData.totalVolume > 0 ? locationData.totalVolume : 0;
+    // FIXED LOGIC: Calculate realistic volume from agent payouts
     const totalAgentCommissions = locationData.totalAgentPayout;
     
+    // If we have recorded volume, use it. Otherwise, estimate from payouts
+    let estimatedVolume = locationData.totalVolume;
+    
+    if (estimatedVolume === 0 && totalAgentCommissions > 0) {
+      // Estimate volume based on average commission rate
+      const averageRate = locationAssignments.reduce((sum, a) => sum + a.commission_rate, 0) / locationAssignments.length;
+      if (averageRate > 0) {
+        estimatedVolume = totalAgentCommissions / (averageRate / 100);
+      }
+    }
+    
     console.log(`🔍 Volume calculation for ${location.name}:`);
-    console.log(`   - Actual recorded volume: $${actualVolume.toLocaleString()}`);
+    console.log(`   - Recorded volume: $${locationData.totalVolume.toLocaleString()}`);
+    console.log(`   - Estimated volume: $${estimatedVolume.toLocaleString()}`);
     console.log(`   - Total agent commissions: $${totalAgentCommissions.toLocaleString()}`);
     
     // Calculate payouts for other agents based on their commission rates
     otherAgents.forEach(assignment => {
       const bpsDecimal = assignment.commission_rate / 100;
       
-      // For non-Merchant Hero agents, use the agent_payout directly as their commission
-      // and back-calculate the volume from their commission rate
+      // For non-Merchant Hero agents, distribute the total agent payout proportionally
       let agentCommission = 0;
-      let derivedVolume = 0;
+      let agentVolume = 0;
       
       if (totalAgentCommissions > 0 && otherAgents.length > 0) {
-        // Distribute the total agent payout among non-Merchant Hero agents
-        // proportionally based on their commission rates
+        // Distribute proportionally based on their commission rates
         const totalOtherAgentRates = otherAgents.reduce((sum, a) => sum + a.commission_rate, 0);
         const agentProportion = assignment.commission_rate / totalOtherAgentRates;
         agentCommission = totalAgentCommissions * agentProportion;
         
-        // Calculate what volume would generate this commission
+        // Calculate agent's volume based on their commission
         if (bpsDecimal > 0) {
-          derivedVolume = agentCommission / bpsDecimal;
+          agentVolume = agentCommission / bpsDecimal;
         }
       }
       
@@ -218,7 +226,7 @@ export const calculateLocationCommissions = (
         agentName: assignment.agent_name,
         bpsRate: Math.round(assignment.commission_rate * 100),
         decimalRate: bpsDecimal,
-        locationVolume: derivedVolume,
+        locationVolume: agentVolume,
         netAgentPayout: totalAgentCommissions,
         agentPayout: agentCommission,
         merchantHeroPayout: 0
@@ -252,7 +260,7 @@ export const calculateLocationCommissions = (
     }
   });
 
-  console.log('🎯 === COMMISSION CALC WITH CORRECTED VOLUME LOGIC END ===');
+  console.log('🎯 === COMMISSION CALC WITH REALISTIC VOLUME LOGIC END ===');
   console.log(`🎉 Generated ${commissions.length} commission records`);
   
   return commissions;
