@@ -21,12 +21,21 @@ interface ProcessingProgress {
   currentRow?: number;
 }
 
+interface ParsedPreview {
+  dbaName: string;
+  volume: number;
+  agentPayout: number;
+  originalRow: any;
+}
+
 const FileUpload = () => {
   const [file, setFile] = useState<File | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dataPreview, setDataPreview] = useState<ParsedPreview[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
   const [progress, setProgress] = useState<ProcessingProgress>({
     total: 0,
     processed: 0,
@@ -59,18 +68,137 @@ const FileUpload = () => {
 
   const monthOptions = generateMonthOptions();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
       setUploadSuccess(false);
       setUploadError(null);
+      setShowPreview(false);
       setProgress({
         total: 0,
         processed: 0,
         errors: []
       });
+
+      // Parse file and show preview
+      try {
+        let rawData;
+        if (selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls')) {
+          rawData = await processExcelFile(selectedFile);
+        } else if (selectedFile.name.endsWith('.csv')) {
+          rawData = await processCSVFile(selectedFile);
+        } else {
+          throw new Error('Unsupported file format');
+        }
+
+        const preview = analyzeAndPreviewData(rawData as any[]);
+        setDataPreview(preview);
+        setShowPreview(true);
+      } catch (error) {
+        console.error('Error previewing file:', error);
+        toast({
+          title: "Preview Failed",
+          description: "Could not preview file data. You can still try to upload.",
+          variant: "destructive"
+        });
+      }
     }
+  };
+
+  const analyzeAndPreviewData = (rawData: any[]): ParsedPreview[] => {
+    console.log('🔍 ENHANCED PARSER: Starting analysis of raw data');
+    console.log('📊 Raw data sample:', rawData.slice(0, 3));
+    
+    if (!rawData || rawData.length === 0) return [];
+
+    const firstRow = rawData[0];
+    const columns = Object.keys(firstRow);
+    console.log('📋 Available columns:', columns);
+
+    // Enhanced field matching with more comprehensive patterns
+    const fieldMappings = {
+      dba: [
+        'DBA', 'DBA Name', 'Business Name', 'Business', 'Merchant Name', 'Merchant',
+        'Location', 'Store Name', 'Store', 'Company Name', 'Company', 'Name',
+        'Account Name', 'Client Name', 'Client'
+      ],
+      volume: [
+        'Bankcard Volume', 'Bank Card Volume', 'Credit Card Volume', 'Volume', 'Sales Volume',
+        'Total Volume', 'Sales Amount', 'Sales', 'Revenue', 'Amount', 'Card Sales',
+        'Transaction Amount', 'Gross Sales', 'Processing Volume', 'CC Volume'
+      ],
+      agentPayout: [
+        'Commission', 'Net Commission', 'Gross Commission', 'Agent Commission',
+        'Agent Net Revenue', 'Net Revenue', 'Agent Payout', 'Payout', 'Residual',
+        'Agent Residual', 'Monthly Residual', 'Revenue', 'Profit', 'Net Income',
+        'Agent Income', 'Commission Earned'
+      ]
+    };
+
+    const findBestMatch = (fieldType: keyof typeof fieldMappings) => {
+      const patterns = fieldMappings[fieldType];
+      console.log(`🔍 Looking for ${fieldType} field in:`, patterns);
+      
+      for (const pattern of patterns) {
+        const exactMatch = columns.find(col => col === pattern);
+        if (exactMatch) {
+          console.log(`✅ Found exact match for ${fieldType}: ${exactMatch}`);
+          return exactMatch;
+        }
+      }
+      
+      // Try case-insensitive partial matches
+      for (const pattern of patterns) {
+        const partialMatch = columns.find(col => 
+          col.toLowerCase().includes(pattern.toLowerCase()) || 
+          pattern.toLowerCase().includes(col.toLowerCase())
+        );
+        if (partialMatch) {
+          console.log(`✅ Found partial match for ${fieldType}: ${partialMatch}`);
+          return partialMatch;
+        }
+      }
+      
+      console.log(`❌ No match found for ${fieldType}`);
+      return null;
+    };
+
+    const dbaField = findBestMatch('dba');
+    const volumeField = findBestMatch('volume');
+    const agentPayoutField = findBestMatch('agentPayout');
+
+    console.log('📊 FIELD MAPPING RESULTS:');
+    console.log(`- DBA Field: ${dbaField}`);
+    console.log(`- Volume Field: ${volumeField}`);
+    console.log(`- Agent Payout Field: ${agentPayoutField}`);
+
+    const preview = rawData.slice(0, 10).map((row, index) => {
+      const dbaValue = dbaField ? row[dbaField] : null;
+      const volumeValue = volumeField ? parseFloat(String(row[volumeField]).replace(/[$,]/g, '')) || 0 : 0;
+      const agentPayoutValue = agentPayoutField ? parseFloat(String(row[agentPayoutField]).replace(/[$,]/g, '')) || 0 : 0;
+
+      console.log(`📊 Row ${index + 1} parsed:`, {
+        dba: dbaValue,
+        volume: volumeValue,
+        agentPayout: agentPayoutValue,
+        originalFields: {
+          [dbaField || 'N/A']: dbaField ? row[dbaField] : 'N/A',
+          [volumeField || 'N/A']: volumeField ? row[volumeField] : 'N/A',
+          [agentPayoutField || 'N/A']: agentPayoutField ? row[agentPayoutField] : 'N/A'
+        }
+      });
+
+      return {
+        dbaName: dbaValue || 'UNKNOWN',
+        volume: volumeValue,
+        agentPayout: agentPayoutValue,
+        originalRow: row
+      };
+    });
+
+    console.log('📊 PREVIEW GENERATED:', preview);
+    return preview;
   };
 
   const ensureLocationExists = async (dbaName: string): Promise<string> => {
@@ -155,66 +283,67 @@ const FileUpload = () => {
   };
 
   const normalizeTransactionData = (rawData: any[], uploadMonth?: string) => {
-    console.log('🎯 SIMPLIFIED PARSER: Focusing on DBA name, sales amount, and agent net revenue...');
-    console.log('🎯 SIMPLIFIED PARSER: Raw data sample (first 3 rows):', rawData.slice(0, 3));
+    console.log('🎯 ENHANCED PARSER: Starting enhanced data normalization...');
+    console.log('📊 Raw data sample:', rawData.slice(0, 3));
     
-    const normalized = rawData.map((row, index) => {
-      console.log(`🎯 SIMPLIFIED PARSER: Processing row ${index + 1}:`, row);
-      
-      // Find DBA/Business name - this is the most important field
-      const dbaFields = [
+    const firstRow = rawData[0];
+    const columns = Object.keys(firstRow);
+    
+    // Enhanced field matching
+    const fieldMappings = {
+      dba: [
         'DBA', 'DBA Name', 'Business Name', 'Business', 'Merchant Name', 'Merchant',
-        'Location', 'Store Name', 'Store', 'Company Name', 'Company', 'Name'
-      ];
+        'Location', 'Store Name', 'Store', 'Company Name', 'Company', 'Name',
+        'Account Name', 'Client Name', 'Client'
+      ],
+      volume: [
+        'Bankcard Volume', 'Bank Card Volume', 'Credit Card Volume', 'Volume', 'Sales Volume',
+        'Total Volume', 'Sales Amount', 'Sales', 'Revenue', 'Amount', 'Card Sales',
+        'Transaction Amount', 'Gross Sales', 'Processing Volume', 'CC Volume'
+      ],
+      agentPayout: [
+        'Commission', 'Net Commission', 'Gross Commission', 'Agent Commission',
+        'Agent Net Revenue', 'Net Revenue', 'Agent Payout', 'Payout', 'Residual',
+        'Agent Residual', 'Monthly Residual', 'Revenue', 'Profit', 'Net Income',
+        'Agent Income', 'Commission Earned'
+      ]
+    };
+
+    const findBestMatch = (fieldType: keyof typeof fieldMappings) => {
+      const patterns = fieldMappings[fieldType];
       
-      let dbaName = null;
-      for (const field of dbaFields) {
-        const value = row[field];
-        if (value && typeof value === 'string' && value.trim() !== '') {
-          dbaName = value.trim();
-          console.log(`✅ SIMPLIFIED PARSER: Found DBA name '${dbaName}' in field '${field}'`);
-          break;
-        }
+      // Try exact matches first
+      for (const pattern of patterns) {
+        const exactMatch = columns.find(col => col === pattern);
+        if (exactMatch) return exactMatch;
       }
       
-      // Find Sales Amount/Volume
-      const salesFields = [
-        'Sales Amount', 'Sales', 'Volume', 'Total Sales', 'Revenue', 'Amount',
-        'Transaction Amount', 'Card Sales', 'Credit Card Sales', 'Gross Sales'
-      ];
-      
-      let salesAmount = 0;
-      for (const field of salesFields) {
-        const value = row[field];
-        if (value !== undefined && value !== null && value !== '') {
-          const parsed = parseFloat(String(value).replace(/[$,]/g, ''));
-          if (!isNaN(parsed) && parsed > 0) {
-            salesAmount = parsed;
-            console.log(`✅ SIMPLIFIED PARSER: Found sales amount ${salesAmount} in field '${field}'`);
-            break;
-          }
-        }
+      // Try case-insensitive partial matches
+      for (const pattern of patterns) {
+        const partialMatch = columns.find(col => 
+          col.toLowerCase().includes(pattern.toLowerCase()) || 
+          pattern.toLowerCase().includes(col.toLowerCase())
+        );
+        if (partialMatch) return partialMatch;
       }
       
-      // Find Agent Net Revenue/Payout
-      const revenueFields = [
-        'Agent Net Revenue', 'Net Revenue', 'Agent Payout', 'Payout', 'Commission',
-        'Agent Commission', 'Net Payout', 'Revenue', 'Profit', 'Net Income'
-      ];
-      
-      let agentRevenue = 0;
-      for (const field of revenueFields) {
-        const value = row[field];
-        if (value !== undefined && value !== null && value !== '') {
-          const parsed = parseFloat(String(value).replace(/[$,]/g, ''));
-          if (!isNaN(parsed)) { // Allow negative values for agent revenue
-            agentRevenue = parsed;
-            console.log(`✅ SIMPLIFIED PARSER: Found agent revenue ${agentRevenue} in field '${field}'`);
-            break;
-          }
-        }
-      }
-      
+      return null;
+    };
+
+    const dbaField = findBestMatch('dba');
+    const volumeField = findBestMatch('volume');
+    const agentPayoutField = findBestMatch('agentPayout');
+
+    console.log('📊 ENHANCED FIELD MAPPING:');
+    console.log(`- DBA Field: ${dbaField}`);
+    console.log(`- Volume Field: ${volumeField}`);
+    console.log(`- Agent Payout Field: ${agentPayoutField}`);
+
+    const normalized = rawData.map((row, index) => {
+      const dbaName = dbaField ? row[dbaField] : null;
+      const volumeValue = volumeField ? parseFloat(String(row[volumeField]).replace(/[$,]/g, '')) || 0 : 0;
+      const agentPayoutValue = agentPayoutField ? parseFloat(String(row[agentPayoutField]).replace(/[$,]/g, '')) || 0 : 0;
+
       // Use the upload month to create a transaction date
       let transactionDate = null;
       if (uploadMonth) {
@@ -223,15 +352,22 @@ const FileUpload = () => {
       
       const normalizedRow = {
         dba_name: dbaName,
-        account_id: dbaName, // Use DBA name as account_id for matching
-        volume: salesAmount,
-        debit_volume: 0, // Not needed for this simplified approach
-        agent_payout: agentRevenue,
+        account_id: dbaName,
+        volume: volumeValue,
+        debit_volume: 0,
+        agent_payout: agentPayoutValue,
         transaction_date: transactionDate,
-        raw_data: { original_row: row } // Keep original for debugging
+        raw_data: { 
+          original_row: row,
+          parsed_fields: {
+            dba_field: dbaField,
+            volume_field: volumeField,
+            agent_payout_field: agentPayoutField
+          }
+        }
       };
       
-      console.log(`🎯 SIMPLIFIED PARSER: Normalized row ${index + 1}:`, normalizedRow);
+      console.log(`🎯 Row ${index + 1} normalized:`, normalizedRow);
       
       return normalizedRow;
     }).filter(row => {
@@ -240,13 +376,13 @@ const FileUpload = () => {
                      (row.volume > 0 || Math.abs(row.agent_payout) > 0);
       
       if (!isValid) {
-        console.log('⚠️ SIMPLIFIED PARSER: Filtered out invalid row:', row);
+        console.log('⚠️ Filtered out invalid row:', row);
       }
       
       return isValid;
     });
     
-    console.log(`🎉 SIMPLIFIED PARSER: Normalized ${normalized.length} valid transactions from ${rawData.length} raw rows`);
+    console.log(`🎉 ENHANCED PARSER: Normalized ${normalized.length} valid transactions from ${rawData.length} raw rows`);
     
     return normalized;
   };
@@ -276,7 +412,7 @@ const FileUpload = () => {
         .from('file_uploads')
         .insert([{
           filename: file.name,
-          processor: 'Maverick',
+          processor: 'Enhanced-Maverick',
           status: 'processing'
         }])
         .select('id')
@@ -295,7 +431,7 @@ const FileUpload = () => {
         throw new Error('Unsupported file format. Please upload an Excel (.xlsx, .xls) or CSV file.');
       }
       
-      // Normalize the data to focus on the 3 key fields
+      // Normalize the data with enhanced parsing
       const normalizedData = normalizeTransactionData(rawData as any[], uploadMonth);
       
       setProgress({
@@ -312,7 +448,7 @@ const FileUpload = () => {
         batches.push(normalizedData.slice(i, i + batchSize));
       }
       
-      console.log(`🎯 SIMPLIFIED UPLOAD: Processing ${normalizedData.length} transactions in ${batches.length} batches for ${uploadMonth}`);
+      console.log(`🎯 ENHANCED UPLOAD: Processing ${normalizedData.length} transactions in ${batches.length} batches for ${uploadMonth}`);
       
       let processedCount = 0;
       const errors = [];
@@ -341,7 +477,7 @@ const FileUpload = () => {
             batchWithLocations.push({
               ...transactionWithoutDbaName,
               location_id: locationId,
-              processor: 'Maverick'
+              processor: 'Enhanced-Maverick'
             });
             
             processedCount++;
@@ -411,6 +547,8 @@ const FileUpload = () => {
     setSelectedMonth("");
     setUploadSuccess(false);
     setUploadError(null);
+    setShowPreview(false);
+    setDataPreview([]);
     setProgress({
       total: 0,
       processed: 0,
@@ -423,15 +561,15 @@ const FileUpload = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-foreground mb-2">Upload Transactions</h2>
-        <p className="text-muted-foreground">Upload transaction data focusing on DBA name, sales amount, and agent net revenue</p>
+        <h2 className="text-2xl font-bold text-foreground mb-2">Enhanced Upload Transactions</h2>
+        <p className="text-muted-foreground">Upload transaction data with enhanced field detection and data preview</p>
       </div>
       
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Simplified Transaction Upload
+            Enhanced Transaction Upload with Preview
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -492,6 +630,38 @@ const FileUpload = () => {
                 </p>
               )}
             </div>
+
+            {/* Data Preview */}
+            {showPreview && dataPreview.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-medium">Data Preview (First 10 rows)</h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="p-3 text-left">DBA Name</th>
+                          <th className="p-3 text-left">Volume</th>
+                          <th className="p-3 text-left">Agent Payout</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dataPreview.map((row, index) => (
+                          <tr key={index} className="border-t">
+                            <td className="p-3">{row.dbaName}</td>
+                            <td className="p-3">${row.volume.toLocaleString()}</td>
+                            <td className="p-3">${row.agentPayout.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Review the parsed data above. If the values look correct, proceed with the upload.
+                </p>
+              </div>
+            )}
             
             {isUploading && (
               <div className="space-y-2">
@@ -548,21 +718,24 @@ const FileUpload = () => {
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4 flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-medium text-blue-800">Simplified Upload Instructions</h4>
+                <h4 className="font-medium text-blue-800">Enhanced Upload with Field Detection</h4>
                 <p className="text-sm text-blue-700 mt-1">
-                  This simplified parser focuses on the 3 essential fields: DBA/Business Name, Sales Amount, and Agent Net Revenue. 
-                  All other columns will be ignored. The system will automatically create locations based on DBA names.
+                  This enhanced parser automatically detects DBA names, volume amounts, and agent payouts from various field names. 
+                  It will show you a preview of the parsed data before uploading to ensure accuracy.
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
-                    DBA/Business Name (Required)
-                  </Badge>
-                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
-                    Sales Amount/Volume
-                  </Badge>
-                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
-                    Agent Net Revenue/Payout
-                  </Badge>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div>
+                    <h5 className="font-medium text-blue-800 text-xs">DBA Names</h5>
+                    <p className="text-xs text-blue-700">Business Name, DBA, Merchant Name, etc.</p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-blue-800 text-xs">Volume Fields</h5>
+                    <p className="text-xs text-blue-700">Bankcard Volume, Sales Amount, Revenue, etc.</p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-blue-800 text-xs">Payout Fields</h5>
+                    <p className="text-xs text-blue-700">Commission, Net Revenue, Agent Payout, etc.</p>
+                  </div>
                 </div>
               </div>
             </div>
