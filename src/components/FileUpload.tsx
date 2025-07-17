@@ -1,747 +1,775 @@
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import React, { useState, useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, File, CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Upload, FileText, CheckCircle, AlertCircle, Eye, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
-import { getMonthString } from "@/utils/timeFrameUtils";
+import { validateTransactionData } from "@/utils/dataValidation";
 
-interface ProcessingProgress {
-  total: number;
-  processed: number;
-  errors: string[];
-  currentRow?: number;
-}
-
-interface ParsedPreview {
+interface ParsedData {
   dbaName: string;
   volume: number;
   agentPayout: number;
-  originalRow: any;
+  transactionDate: string;
+  rawData: any;
+}
+
+interface DataPreview {
+  headers: string[];
+  rows: any[][];
+  parsedData: ParsedData[];
 }
 
 const FileUpload = () => {
-  const [file, setFile] = useState<File | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [dataPreview, setDataPreview] = useState<ParsedPreview[]>([]);
-  const [showPreview, setShowPreview] = useState(false);
-  const [progress, setProgress] = useState<ProcessingProgress>({
-    total: 0,
-    processed: 0,
-    errors: []
-  });
+  const [uploadResult, setUploadResult] = useState<any>(null);
+  const [dataPreview, setDataPreview] = useState<DataPreview | null>(null);
+  const [selectedProcessor, setSelectedProcessor] = useState<string>('Maverick');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  // Generate month options for the current year and next year
-  const generateMonthOptions = () => {
-    const currentYear = new Date().getFullYear();
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+  const processors = [
+    { value: 'TRNXN', label: 'TRNXN' },
+    { value: 'Maverick', label: 'Maverick' },
+    { value: 'SignaPay', label: 'SignaPay' },
+    { value: 'Green Payments', label: 'Green Payments' },
+    { value: 'NUVEI', label: 'NUVEI' },
+    { value: 'PAYSAFE', label: 'PAYSAFE' },
+    { value: 'Generic', label: 'Generic' }
+  ];
+
+  // Enhanced field detection for volume
+  const detectVolumeField = (headers: string[]): string | null => {
+    const volumePatterns = [
+      /volume/i,
+      /total.*volume/i,
+      /gross.*volume/i,
+      /transaction.*volume/i,
+      /monthly.*volume/i,
+      /sales.*volume/i,
+      /amount/i,
+      /total.*amount/i,
+      /gross.*amount/i,
+      /transaction.*amount/i,
+      /monthly.*amount/i,
+      /sales.*amount/i,
+      /revenue/i,
+      /total.*revenue/i,
+      /gross.*revenue/i,
+      /monthly.*revenue/i,
+      /sales.*revenue/i,
+      /total/i,
+      /gross/i,
+      /net/i,
+      /monthly.*total/i,
+      /ytd.*volume/i,
+      /ytd.*amount/i,
+      /ytd.*total/i
     ];
+
+    console.log('🔍 VOLUME DETECTION: Available headers:', headers);
     
-    const options = [];
-    
-    // Add months for current year and next year
-    for (let year = currentYear; year <= currentYear + 1; year++) {
-      months.forEach((month, index) => {
-        const monthNumber = (index + 1).toString().padStart(2, '0');
-        const value = `${year}-${monthNumber}`;
-        const label = `${month} ${year}`;
-        options.push({ value, label });
-      });
+    for (const pattern of volumePatterns) {
+      const match = headers.find(header => pattern.test(header));
+      if (match) {
+        console.log('✅ VOLUME DETECTION: Found volume field:', match, 'using pattern:', pattern);
+        return match;
+      }
     }
     
-    return options;
+    console.log('❌ VOLUME DETECTION: No volume field found');
+    return null;
   };
 
-  const monthOptions = generateMonthOptions();
+  // Enhanced field detection for agent payout
+  const detectAgentPayoutField = (headers: string[]): string | null => {
+    const payoutPatterns = [
+      /agent.*payout/i,
+      /payout/i,
+      /commission/i,
+      /agent.*commission/i,
+      /agent.*fee/i,
+      /fee/i,
+      /earnings/i,
+      /agent.*earnings/i,
+      /payment/i,
+      /agent.*payment/i,
+      /compensation/i,
+      /agent.*compensation/i,
+      /bonus/i,
+      /agent.*bonus/i,
+      /incentive/i,
+      /agent.*incentive/i,
+      /residual/i,
+      /agent.*residual/i,
+      /override/i,
+      /agent.*override/i,
+      /split/i,
+      /agent.*split/i,
+      /share/i,
+      /agent.*share/i
+    ];
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setUploadSuccess(false);
-      setUploadError(null);
-      setShowPreview(false);
-      setProgress({
-        total: 0,
-        processed: 0,
-        errors: []
-      });
+    console.log('🔍 PAYOUT DETECTION: Available headers:', headers);
+    
+    for (const pattern of payoutPatterns) {
+      const match = headers.find(header => pattern.test(header));
+      if (match) {
+        console.log('✅ PAYOUT DETECTION: Found payout field:', match, 'using pattern:', pattern);
+        return match;
+      }
+    }
+    
+    console.log('❌ PAYOUT DETECTION: No payout field found');
+    return null;
+  };
 
-      // Parse file and show preview
-      try {
-        let rawData;
-        if (selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls')) {
-          rawData = await processExcelFile(selectedFile);
-        } else if (selectedFile.name.endsWith('.csv')) {
-          rawData = await processCSVFile(selectedFile);
-        } else {
-          throw new Error('Unsupported file format');
+  // Enhanced field detection for DBA name
+  const detectDBAField = (headers: string[]): string | null => {
+    const dbaPatterns = [
+      /dba/i,
+      /business.*name/i,
+      /merchant.*name/i,
+      /company.*name/i,
+      /store.*name/i,
+      /location.*name/i,
+      /client.*name/i,
+      /account.*name/i,
+      /name/i,
+      /business/i,
+      /merchant/i,
+      /company/i,
+      /store/i,
+      /location/i,
+      /client/i,
+      /account/i
+    ];
+
+    console.log('🔍 DBA DETECTION: Available headers:', headers);
+    
+    for (const pattern of dbaPatterns) {
+      const match = headers.find(header => pattern.test(header));
+      if (match) {
+        console.log('✅ DBA DETECTION: Found DBA field:', match, 'using pattern:', pattern);
+        return match;
+      }
+    }
+    
+    console.log('❌ DBA DETECTION: No DBA field found');
+    return null;
+  };
+
+  // Enhanced field detection for transaction date
+  const detectDateField = (headers: string[]): string | null => {
+    const datePatterns = [
+      /date/i,
+      /transaction.*date/i,
+      /month/i,
+      /period/i,
+      /reporting.*date/i,
+      /statement.*date/i,
+      /processing.*date/i,
+      /created.*date/i,
+      /effective.*date/i,
+      /settlement.*date/i,
+      /batch.*date/i,
+      /posting.*date/i,
+      /time/i,
+      /timestamp/i,
+      /created.*at/i,
+      /updated.*at/i,
+      /processed.*at/i
+    ];
+
+    console.log('🔍 DATE DETECTION: Available headers:', headers);
+    
+    for (const pattern of datePatterns) {
+      const match = headers.find(header => pattern.test(header));
+      if (match) {
+        console.log('✅ DATE DETECTION: Found date field:', match, 'using pattern:', pattern);
+        return match;
+      }
+    }
+    
+    console.log('❌ DATE DETECTION: No date field found');
+    return null;
+  };
+
+  // Smart data parsing with better number handling
+  const parseNumericValue = (value: any): number => {
+    if (typeof value === 'number') {
+      return value;
+    }
+    
+    if (typeof value === 'string') {
+      // Remove currency symbols, commas, and other formatting
+      const cleaned = value.replace(/[$,\s%]/g, '');
+      const parsed = parseFloat(cleaned);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    
+    return 0;
+  };
+
+  const parseDate = (value: any): string => {
+    if (!value) return new Date().toISOString().split('T')[0];
+    
+    try {
+      const date = new Date(value);
+      if (isNaN(date.getTime())) {
+        return new Date().toISOString().split('T')[0];
+      }
+      return date.toISOString().split('T')[0];
+    } catch (error) {
+      return new Date().toISOString().split('T')[0];
+    }
+  };
+
+  const parseFileData = (data: any[], headers: string[]): ParsedData[] => {
+    console.log('🔄 PARSING: Starting data parsing with', data.length, 'rows');
+    console.log('🔄 PARSING: Headers:', headers);
+    
+    const dbaField = detectDBAField(headers);
+    const volumeField = detectVolumeField(headers);
+    const payoutField = detectAgentPayoutField(headers);
+    const dateField = detectDateField(headers);
+    
+    console.log('🔄 PARSING: Detected fields:', {
+      dbaField,
+      volumeField,
+      payoutField,
+      dateField
+    });
+    
+    const parsedData: ParsedData[] = [];
+    
+    data.forEach((row, index) => {
+      // Skip empty rows
+      if (!row || Object.keys(row).length === 0) {
+        console.log(`⏭️ PARSING: Skipping empty row ${index}`);
+        return;
+      }
+      
+      const dbaName = dbaField ? String(row[dbaField] || '').trim() : `Unknown Location ${index + 1}`;
+      const volume = volumeField ? parseNumericValue(row[volumeField]) : 0;
+      const agentPayout = payoutField ? parseNumericValue(row[payoutField]) : 0;
+      const transactionDate = dateField ? parseDate(row[dateField]) : new Date().toISOString().split('T')[0];
+      
+      console.log(`📊 PARSING: Row ${index + 1}:`, {
+        dbaName,
+        volume,
+        agentPayout,
+        transactionDate,
+        rawValues: {
+          dba: dbaField ? row[dbaField] : 'N/A',
+          volume: volumeField ? row[volumeField] : 'N/A',
+          payout: payoutField ? row[payoutField] : 'N/A',
+          date: dateField ? row[dateField] : 'N/A'
         }
+      });
+      
+      if (dbaName && dbaName !== 'Unknown Location ' + (index + 1)) {
+        parsedData.push({
+          dbaName,
+          volume,
+          agentPayout,
+          transactionDate,
+          rawData: row
+        });
+      }
+    });
+    
+    console.log('✅ PARSING: Successfully parsed', parsedData.length, 'valid rows');
+    return parsedData;
+  };
 
-        const preview = analyzeAndPreviewData(rawData as any[]);
-        setDataPreview(preview);
-        setShowPreview(true);
+  const handleFileRead = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        let parsedData: any[] = [];
+        let headers: string[] = [];
+        
+        if (file.name.endsWith('.csv')) {
+          const result = Papa.parse(data as string, {
+            header: true,
+            skipEmptyLines: true,
+            transformHeader: (header) => header.trim()
+          });
+          parsedData = result.data;
+          headers = result.meta.fields || [];
+        } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          if (jsonData.length > 0) {
+            headers = (jsonData[0] as string[]).map(h => String(h).trim());
+            const dataRows = jsonData.slice(1);
+            parsedData = dataRows.map(row => {
+              const obj: any = {};
+              headers.forEach((header, index) => {
+                obj[header] = (row as any[])[index];
+              });
+              return obj;
+            });
+          }
+        }
+        
+        console.log('📁 FILE READ: Raw data sample:', parsedData.slice(0, 3));
+        console.log('📁 FILE READ: Headers found:', headers);
+        
+        const processedData = parseFileData(parsedData, headers);
+        
+        setDataPreview({
+          headers,
+          rows: parsedData.slice(0, 10).map(row => headers.map(h => row[h])),
+          parsedData: processedData
+        });
+        
+        console.log('📊 PREVIEW: Generated preview with', processedData.length, 'processed rows');
+        
       } catch (error) {
-        console.error('Error previewing file:', error);
+        console.error('❌ FILE READ ERROR:', error);
         toast({
-          title: "Preview Failed",
-          description: "Could not preview file data. You can still try to upload.",
+          title: "File parsing error",
+          description: "Unable to parse the uploaded file. Please check the file format.",
           variant: "destructive"
         });
       }
+    };
+    
+    if (file.name.endsWith('.csv')) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
     }
-  };
+  }, [toast]);
 
-  const analyzeAndPreviewData = (rawData: any[]): ParsedPreview[] => {
-    console.log('🔍 ENHANCED PARSER: Starting analysis of raw data');
-    console.log('📊 Raw data sample:', rawData.slice(0, 3));
-    
-    if (!rawData || rawData.length === 0) return [];
-
-    const firstRow = rawData[0];
-    const columns = Object.keys(firstRow);
-    console.log('📋 Available columns:', columns);
-
-    // Enhanced field matching with more comprehensive patterns
-    const fieldMappings = {
-      dba: [
-        'DBA', 'DBA Name', 'Business Name', 'Business', 'Merchant Name', 'Merchant',
-        'Location', 'Store Name', 'Store', 'Company Name', 'Company', 'Name',
-        'Account Name', 'Client Name', 'Client'
-      ],
-      volume: [
-        'Bankcard Volume', 'Bank Card Volume', 'Credit Card Volume', 'Volume', 'Sales Volume',
-        'Total Volume', 'Sales Amount', 'Sales', 'Revenue', 'Amount', 'Card Sales',
-        'Transaction Amount', 'Gross Sales', 'Processing Volume', 'CC Volume'
-      ],
-      agentPayout: [
-        'Commission', 'Net Commission', 'Gross Commission', 'Agent Commission',
-        'Agent Net Revenue', 'Net Revenue', 'Agent Payout', 'Payout', 'Residual',
-        'Agent Residual', 'Monthly Residual', 'Revenue', 'Profit', 'Net Income',
-        'Agent Income', 'Commission Earned'
-      ]
-    };
-
-    const findBestMatch = (fieldType: keyof typeof fieldMappings) => {
-      const patterns = fieldMappings[fieldType];
-      console.log(`🔍 Looking for ${fieldType} field in:`, patterns);
-      
-      for (const pattern of patterns) {
-        const exactMatch = columns.find(col => col === pattern);
-        if (exactMatch) {
-          console.log(`✅ Found exact match for ${fieldType}: ${exactMatch}`);
-          return exactMatch;
-        }
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: (acceptedFiles) => {
+      const file = acceptedFiles[0];
+      if (file) {
+        handleFileRead(file);
       }
-      
-      // Try case-insensitive partial matches
-      for (const pattern of patterns) {
-        const partialMatch = columns.find(col => 
-          col.toLowerCase().includes(pattern.toLowerCase()) || 
-          pattern.toLowerCase().includes(col.toLowerCase())
-        );
-        if (partialMatch) {
-          console.log(`✅ Found partial match for ${fieldType}: ${partialMatch}`);
-          return partialMatch;
-        }
-      }
-      
-      console.log(`❌ No match found for ${fieldType}`);
-      return null;
-    };
+    },
+    accept: {
+      'text/csv': ['.csv'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls']
+    },
+    multiple: false
+  });
 
-    const dbaField = findBestMatch('dba');
-    const volumeField = findBestMatch('volume');
-    const agentPayoutField = findBestMatch('agentPayout');
-
-    console.log('📊 FIELD MAPPING RESULTS:');
-    console.log(`- DBA Field: ${dbaField}`);
-    console.log(`- Volume Field: ${volumeField}`);
-    console.log(`- Agent Payout Field: ${agentPayoutField}`);
-
-    const preview = rawData.slice(0, 10).map((row, index) => {
-      const dbaValue = dbaField ? row[dbaField] : null;
-      const volumeValue = volumeField ? parseFloat(String(row[volumeField]).replace(/[$,]/g, '')) || 0 : 0;
-      const agentPayoutValue = agentPayoutField ? parseFloat(String(row[agentPayoutField]).replace(/[$,]/g, '')) || 0 : 0;
-
-      console.log(`📊 Row ${index + 1} parsed:`, {
-        dba: dbaValue,
-        volume: volumeValue,
-        agentPayout: agentPayoutValue,
-        originalFields: {
-          [dbaField || 'N/A']: dbaField ? row[dbaField] : 'N/A',
-          [volumeField || 'N/A']: volumeField ? row[volumeField] : 'N/A',
-          [agentPayoutField || 'N/A']: agentPayoutField ? row[agentPayoutField] : 'N/A'
-        }
-      });
-
-      return {
-        dbaName: dbaValue || 'UNKNOWN',
-        volume: volumeValue,
-        agentPayout: agentPayoutValue,
-        originalRow: row
-      };
-    });
-
-    console.log('📊 PREVIEW GENERATED:', preview);
-    return preview;
-  };
-
-  const ensureLocationExists = async (dbaName: string): Promise<string> => {
-    try {
-      console.log('🔍 LOCATION: Checking for existing location with DBA name:', dbaName);
-      
-      // Check for exact name match (case-insensitive)
-      const { data: existingLocations, error: selectError } = await supabase
-        .from('locations')
-        .select('id, name')
-        .ilike('name', dbaName);
-
-      if (selectError && selectError.code !== 'PGRST116') {
-        console.error('Error checking existing locations:', selectError);
-        throw selectError;
-      }
-
-      // Check if we found an exact match
-      if (existingLocations && existingLocations.length > 0) {
-        const exactMatch = existingLocations.find(loc => 
-          loc.name?.toLowerCase() === dbaName.toLowerCase()
-        );
-
-        if (exactMatch) {
-          console.log('✅ LOCATION: Found exact match:', exactMatch.name);
-          return exactMatch.id;
-        }
-      }
-
-      // If no exact match found, create new location
-      console.log('🆕 LOCATION: Creating new location:', dbaName);
-      const { data: newLocation, error: insertError } = await supabase
-        .from('locations')
-        .insert([{ 
-          name: dbaName,
-          account_id: dbaName // Use DBA name as account_id for matching
-        }])
-        .select('id')
-        .single();
-
-      if (insertError) {
-        console.error('Error creating location:', insertError);
-        throw insertError;
-      }
-
-      console.log('✅ LOCATION: Created new location with ID:', newLocation.id);
-      return newLocation.id;
-    } catch (error) {
-      console.error('Error in ensureLocationExists:', error);
-      throw error;
-    }
-  };
-
-  const processExcelFile = async (file: File) => {
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      
-      return jsonData;
-    } catch (error) {
-      console.error('Error processing Excel file:', error);
-      throw new Error('Failed to process Excel file. Please check the file format.');
-    }
-  };
-
-  const processCSVFile = async (file: File) => {
-    return new Promise((resolve, reject) => {
-      Papa.parse(file, {
-        header: true,
-        complete: (results) => {
-          resolve(results.data);
-        },
-        error: (error) => {
-          console.error('Error parsing CSV:', error);
-          reject(new Error('Failed to parse CSV file. Please check the file format.'));
-        }
-      });
-    });
-  };
-
-  const normalizeTransactionData = (rawData: any[], uploadMonth?: string) => {
-    console.log('🎯 ENHANCED PARSER: Starting enhanced data normalization...');
-    console.log('📊 Raw data sample:', rawData.slice(0, 3));
-    
-    const firstRow = rawData[0];
-    const columns = Object.keys(firstRow);
-    
-    // Enhanced field matching
-    const fieldMappings = {
-      dba: [
-        'DBA', 'DBA Name', 'Business Name', 'Business', 'Merchant Name', 'Merchant',
-        'Location', 'Store Name', 'Store', 'Company Name', 'Company', 'Name',
-        'Account Name', 'Client Name', 'Client'
-      ],
-      volume: [
-        'Bankcard Volume', 'Bank Card Volume', 'Credit Card Volume', 'Volume', 'Sales Volume',
-        'Total Volume', 'Sales Amount', 'Sales', 'Revenue', 'Amount', 'Card Sales',
-        'Transaction Amount', 'Gross Sales', 'Processing Volume', 'CC Volume'
-      ],
-      agentPayout: [
-        'Commission', 'Net Commission', 'Gross Commission', 'Agent Commission',
-        'Agent Net Revenue', 'Net Revenue', 'Agent Payout', 'Payout', 'Residual',
-        'Agent Residual', 'Monthly Residual', 'Revenue', 'Profit', 'Net Income',
-        'Agent Income', 'Commission Earned'
-      ]
-    };
-
-    const findBestMatch = (fieldType: keyof typeof fieldMappings) => {
-      const patterns = fieldMappings[fieldType];
-      
-      // Try exact matches first
-      for (const pattern of patterns) {
-        const exactMatch = columns.find(col => col === pattern);
-        if (exactMatch) return exactMatch;
-      }
-      
-      // Try case-insensitive partial matches
-      for (const pattern of patterns) {
-        const partialMatch = columns.find(col => 
-          col.toLowerCase().includes(pattern.toLowerCase()) || 
-          pattern.toLowerCase().includes(col.toLowerCase())
-        );
-        if (partialMatch) return partialMatch;
-      }
-      
-      return null;
-    };
-
-    const dbaField = findBestMatch('dba');
-    const volumeField = findBestMatch('volume');
-    const agentPayoutField = findBestMatch('agentPayout');
-
-    console.log('📊 ENHANCED FIELD MAPPING:');
-    console.log(`- DBA Field: ${dbaField}`);
-    console.log(`- Volume Field: ${volumeField}`);
-    console.log(`- Agent Payout Field: ${agentPayoutField}`);
-
-    const normalized = rawData.map((row, index) => {
-      const dbaName = dbaField ? row[dbaField] : null;
-      const volumeValue = volumeField ? parseFloat(String(row[volumeField]).replace(/[$,]/g, '')) || 0 : 0;
-      const agentPayoutValue = agentPayoutField ? parseFloat(String(row[agentPayoutField]).replace(/[$,]/g, '')) || 0 : 0;
-
-      // Use the upload month to create a transaction date
-      let transactionDate = null;
-      if (uploadMonth) {
-        transactionDate = `${uploadMonth}-01`;
-      }
-      
-      const normalizedRow = {
-        dba_name: dbaName,
-        account_id: dbaName,
-        volume: volumeValue,
-        debit_volume: 0,
-        agent_payout: agentPayoutValue,
-        transaction_date: transactionDate,
-        raw_data: { 
-          original_row: row,
-          parsed_fields: {
-            dba_field: dbaField,
-            volume_field: volumeField,
-            agent_payout_field: agentPayoutField
-          }
-        }
-      };
-      
-      console.log(`🎯 Row ${index + 1} normalized:`, normalizedRow);
-      
-      return normalizedRow;
-    }).filter(row => {
-      const isValid = row.dba_name !== null && 
-                     row.transaction_date !== null && 
-                     (row.volume > 0 || Math.abs(row.agent_payout) > 0);
-      
-      if (!isValid) {
-        console.log('⚠️ Filtered out invalid row:', row);
-      }
-      
-      return isValid;
-    });
-    
-    console.log(`🎉 ENHANCED PARSER: Normalized ${normalized.length} valid transactions from ${rawData.length} raw rows`);
-    
-    return normalized;
-  };
-
-  const uploadTransactions = async () => {
-    if (!file) return;
-    
-    if (!selectedMonth) {
+  const handleUpload = async () => {
+    if (!dataPreview?.parsedData || dataPreview.parsedData.length === 0) {
       toast({
-        title: "Month Required",
-        description: "Please select a month for this upload before proceeding.",
+        title: "No data to upload",
+        description: "Please select a file and review the data preview first.",
         variant: "destructive"
       });
       return;
     }
-    
-    setIsUploading(true);
-    setUploadSuccess(false);
-    setUploadError(null);
-    
-    try {
-      const uploadMonth = selectedMonth;
-      console.log('📅 Upload Month Selected:', uploadMonth);
 
-      // Record the upload in file_uploads table
-      const { data: uploadRecord, error: uploadRecordError } = await supabase
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadResult(null);
+
+    try {
+      console.log('🚀 UPLOAD: Starting upload process with', dataPreview.parsedData.length, 'records');
+      console.log('🚀 UPLOAD: Selected processor:', selectedProcessor);
+
+      // Validate data before upload
+      const validation = validateTransactionData(dataPreview.parsedData);
+      if (!validation.isValid) {
+        throw new Error(`Data validation failed: ${validation.errors.join(', ')}`);
+      }
+
+      if (validation.warnings.length > 0) {
+        console.log('⚠️ UPLOAD: Validation warnings:', validation.warnings);
+      }
+
+      // Create upload record
+      const { data: uploadRecord, error: uploadError } = await supabase
         .from('file_uploads')
-        .insert([{
-          filename: file.name,
-          processor: 'Enhanced-Maverick',
-          status: 'processing'
-        }])
-        .select('id')
+        .insert({
+          filename: `${selectedProcessor}_upload_${new Date().toISOString()}`,
+          processor: selectedProcessor,
+          status: 'processing',
+          rows_processed: 0
+        })
+        .select()
         .single();
 
-      if (uploadRecordError) {
-        throw uploadRecordError;
+      if (uploadError) {
+        console.error('❌ UPLOAD: Error creating upload record:', uploadError);
+        throw uploadError;
       }
 
-      let rawData;
-      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        rawData = await processExcelFile(file);
-      } else if (file.name.endsWith('.csv')) {
-        rawData = await processCSVFile(file);
-      } else {
-        throw new Error('Unsupported file format. Please upload an Excel (.xlsx, .xls) or CSV file.');
-      }
-      
-      // Normalize the data with enhanced parsing
-      const normalizedData = normalizeTransactionData(rawData as any[], uploadMonth);
-      
-      setProgress({
-        total: normalizedData.length,
-        processed: 0,
-        errors: []
-      });
-      
-      // Process in batches
-      const batchSize = 50;
-      const batches = [];
-      
-      for (let i = 0; i < normalizedData.length; i += batchSize) {
-        batches.push(normalizedData.slice(i, i + batchSize));
-      }
-      
-      console.log(`🎯 ENHANCED UPLOAD: Processing ${normalizedData.length} transactions in ${batches.length} batches for ${uploadMonth}`);
-      
-      let processedCount = 0;
+      console.log('✅ UPLOAD: Created upload record:', uploadRecord.id);
+
+      // Process each row
+      const processedRows = [];
       const errors = [];
-      
-      // Process each batch
-      for (let i = 0; i < batches.length; i++) {
-        const batch = batches[i];
-        const batchWithLocations = [];
-        
-        // For each transaction in the batch, ensure the location exists
-        for (let j = 0; j < batch.length; j++) {
-          const transaction = batch[j];
-          
-          try {
-            setProgress(prev => ({
-              ...prev,
-              processed: processedCount,
-              currentRow: processedCount + 1
-            }));
-            
-            // Ensure location exists using DBA name
-            const locationId = await ensureLocationExists(transaction.dba_name);
-            
-            // Remove dba_name from transaction data and add location_id
-            const { dba_name, ...transactionWithoutDbaName } = transaction;
-            batchWithLocations.push({
-              ...transactionWithoutDbaName,
-              location_id: locationId,
-              processor: 'Enhanced-Maverick'
-            });
-            
-            processedCount++;
-          } catch (error: any) {
-            console.error('Error processing transaction:', error);
-            errors.push(`Row ${processedCount + 1}: ${error.message || 'Unknown error'}`);
-            processedCount++;
+
+      for (let i = 0; i < dataPreview.parsedData.length; i++) {
+        const row = dataPreview.parsedData[i];
+        setUploadProgress(((i + 1) / dataPreview.parsedData.length) * 100);
+
+        try {
+          console.log(`🔄 UPLOAD: Processing row ${i + 1}/${dataPreview.parsedData.length}:`, {
+            dbaName: row.dbaName,
+            volume: row.volume,
+            agentPayout: row.agentPayout,
+            transactionDate: row.transactionDate
+          });
+
+          // Find or create location
+          let location = null;
+          if (row.dbaName && row.dbaName.trim() !== '') {
+            const { data: existingLocation } = await supabase
+              .from('locations')
+              .select('*')
+              .ilike('name', row.dbaName.trim())
+              .single();
+
+            if (existingLocation) {
+              location = existingLocation;
+              console.log(`📍 UPLOAD: Found existing location:`, location.name);
+            } else {
+              const { data: newLocation, error: locationError } = await supabase
+                .from('locations')
+                .insert({
+                  name: row.dbaName.trim(),
+                  account_type: 'Auto-Created'
+                })
+                .select()
+                .single();
+
+              if (locationError) {
+                console.error('❌ UPLOAD: Error creating location:', locationError);
+                errors.push(`Row ${i + 1}: Failed to create location - ${locationError.message}`);
+                continue;
+              }
+
+              location = newLocation;
+              console.log(`📍 UPLOAD: Created new location:`, location.name);
+            }
           }
-        }
-        
-        // Insert the batch into the database
-        if (batchWithLocations.length > 0) {
-          const { error } = await supabase
+
+          // Insert transaction
+          const transactionData = {
+            processor: selectedProcessor,
+            volume: row.volume || 0,
+            agent_payout: row.agentPayout || 0,
+            transaction_date: row.transactionDate,
+            location_id: location?.id || null,
+            raw_data: row.rawData
+          };
+
+          console.log(`💾 UPLOAD: Inserting transaction:`, transactionData);
+
+          const { error: transactionError } = await supabase
             .from('transactions')
-            .insert(batchWithLocations);
-          
-          if (error) {
-            console.error('Error inserting batch:', error);
-            errors.push(`Batch ${i + 1}: ${error.message}`);
+            .insert(transactionData);
+
+          if (transactionError) {
+            console.error('❌ UPLOAD: Transaction insert error:', transactionError);
+            errors.push(`Row ${i + 1}: Failed to insert transaction - ${transactionError.message}`);
+            continue;
           }
+
+          processedRows.push(row);
+          console.log(`✅ UPLOAD: Successfully processed row ${i + 1}`);
+
+        } catch (error: any) {
+          console.error(`❌ UPLOAD: Error processing row ${i + 1}:`, error);
+          errors.push(`Row ${i + 1}: ${error.message}`);
         }
-        
-        setProgress(prev => ({
-          ...prev,
-          processed: processedCount,
-          errors
-        }));
       }
 
-      // Update the upload record as completed
-      await supabase
+      // Update upload record
+      const { error: updateError } = await supabase
         .from('file_uploads')
         .update({
-          status: errors.length > 0 ? 'failed' : 'completed',
-          rows_processed: processedCount,
+          status: errors.length > 0 ? 'completed_with_errors' : 'completed',
+          rows_processed: processedRows.length,
           errors: errors.length > 0 ? errors : null
         })
         .eq('id', uploadRecord.id);
-      
-      const selectedMonthObj = monthOptions.find(opt => opt.value === selectedMonth);
-      const monthLabel = selectedMonthObj?.label || selectedMonth;
-      
-      if (errors.length > 0) {
-        setUploadError(`Uploaded with ${errors.length} errors. Check console for details.`);
-      } else {
-        setUploadSuccess(true);
-        toast({
-          title: "Upload Successful",
-          description: `Successfully processed ${processedCount} transactions for ${monthLabel}.`,
-        });
+
+      if (updateError) {
+        console.error('❌ UPLOAD: Error updating upload record:', updateError);
       }
-    } catch (error: any) {
-      console.error('Error uploading file:', error);
-      setUploadError(error.message || 'An unknown error occurred');
+
+      setUploadResult({
+        success: true,
+        processedRows: processedRows.length,
+        totalRows: dataPreview.parsedData.length,
+        errors: errors,
+        processor: selectedProcessor
+      });
+
+      console.log('🎉 UPLOAD: Upload completed successfully!', {
+        processedRows: processedRows.length,
+        totalRows: dataPreview.parsedData.length,
+        errors: errors.length
+      });
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['file-uploads'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['available-months'] });
+
       toast({
-        title: "Upload Failed",
-        description: error.message || 'An unknown error occurred',
+        title: "Upload completed",
+        description: `Successfully processed ${processedRows.length} of ${dataPreview.parsedData.length} rows`
+      });
+
+    } catch (error: any) {
+      console.error('❌ UPLOAD: Fatal error:', error);
+      setUploadResult({
+        success: false,
+        error: error.message,
+        processor: selectedProcessor
+      });
+      
+      toast({
+        title: "Upload failed",
+        description: error.message,
         variant: "destructive"
       });
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
-  const resetUpload = () => {
-    setFile(null);
-    setSelectedMonth("");
-    setUploadSuccess(false);
-    setUploadError(null);
-    setShowPreview(false);
-    setDataPreview([]);
-    setProgress({
-      total: 0,
-      processed: 0,
-      errors: []
-    });
+  const clearPreview = () => {
+    setDataPreview(null);
+    setUploadResult(null);
   };
-
-  const selectedMonthObj = monthOptions.find(opt => opt.value === selectedMonth);
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-foreground mb-2">Enhanced Upload Transactions</h2>
-        <p className="text-muted-foreground">Upload transaction data with enhanced field detection and data preview</p>
+        <h2 className="text-2xl font-bold text-foreground mb-2">Enhanced File Upload</h2>
+        <p className="text-muted-foreground">
+          Upload CSV or Excel files with transaction data. The system will automatically detect field names and parse the data.
+        </p>
       </div>
-      
+
+      {/* Processor Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Select Processor</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {processors.map((processor) => (
+              <Button
+                key={processor.value}
+                variant={selectedProcessor === processor.value ? "default" : "outline"}
+                onClick={() => setSelectedProcessor(processor.value)}
+                className="w-full"
+              >
+                {processor.label}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* File Upload */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Enhanced Transaction Upload with Preview
+            Upload File
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            {/* Month Selection */}
-            <div className="space-y-2">
-              <Label>Select Month for Upload</Label>
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pick a month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedMonth && (
-                <p className="text-sm text-muted-foreground">
-                  All transactions in this upload will be tagged for {selectedMonthObj?.label}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="file-upload">Select File</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="file-upload"
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileChange}
-                  disabled={isUploading}
-                  className="flex-1"
-                />
-                {file && !uploadSuccess && !isUploading && selectedMonth && (
-                  <Button onClick={uploadTransactions}>
-                    Upload
-                  </Button>
-                )}
-                {(uploadSuccess || uploadError) && (
-                  <Button variant="outline" onClick={resetUpload}>
-                    Reset
-                  </Button>
-                )}
-              </div>
-              {file && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <File className="h-4 w-4" />
-                  {file.name} ({(file.size / 1024).toFixed(2)} KB)
-                </div>
-              )}
-              {file && !selectedMonth && (
-                <p className="text-sm text-orange-600">
-                  Please select a month before uploading
-                </p>
-              )}
-            </div>
-
-            {/* Data Preview */}
-            {showPreview && dataPreview.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="font-medium">Data Preview (First 10 rows)</h3>
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted">
-                        <tr>
-                          <th className="p-3 text-left">DBA Name</th>
-                          <th className="p-3 text-left">Volume</th>
-                          <th className="p-3 text-left">Agent Payout</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dataPreview.map((row, index) => (
-                          <tr key={index} className="border-t">
-                            <td className="p-3">{row.dbaName}</td>
-                            <td className="p-3">${row.volume.toLocaleString()}</td>
-                            <td className="p-3">${row.agentPayout.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Review the parsed data above. If the values look correct, proceed with the upload.
-                </p>
-              </div>
-            )}
-            
-            {isUploading && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span>Processing transactions...</span>
-                  <span>{progress.processed} / {progress.total}</span>
-                </div>
-                <Progress value={(progress.processed / progress.total) * 100} />
-                {progress.currentRow && (
-                  <p className="text-xs text-muted-foreground">
-                    Processing row {progress.currentRow}...
-                  </p>
-                )}
-              </div>
-            )}
-            
-            {uploadSuccess && (
-              <div className="bg-green-50 border border-green-200 rounded-md p-4 flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-green-800">Upload Successful</h4>
-                  <p className="text-sm text-green-700 mt-1">
-                    Successfully processed {progress.processed} transactions for {selectedMonthObj?.label}.
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {uploadError && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start gap-3">
-                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-red-800">Upload Failed</h4>
-                  <p className="text-sm text-red-700 mt-1">{uploadError}</p>
-                  {progress.errors.length > 0 && (
-                    <details className="mt-2">
-                      <summary className="text-sm font-medium text-red-800 cursor-pointer">
-                        View {progress.errors.length} errors
-                      </summary>
-                      <ul className="mt-2 text-xs text-red-700 list-disc list-inside">
-                        {progress.errors.slice(0, 10).map((error, index) => (
-                          <li key={index}>{error}</li>
-                        ))}
-                        {progress.errors.length > 10 && (
-                          <li>...and {progress.errors.length - 10} more errors</li>
-                        )}
-                      </ul>
-                    </details>
-                  )}
-                </div>
-              </div>
-            )}
-            
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+              isDragActive ? 'border-primary bg-primary/10' : 'border-muted-foreground/25 hover:border-primary/50'
+            }`}
+          >
+            <input {...getInputProps()} />
+            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            {isDragActive ? (
+              <p className="text-primary">Drop the file here...</p>
+            ) : (
               <div>
-                <h4 className="font-medium text-blue-800">Enhanced Upload with Field Detection</h4>
-                <p className="text-sm text-blue-700 mt-1">
-                  This enhanced parser automatically detects DBA names, volume amounts, and agent payouts from various field names. 
-                  It will show you a preview of the parsed data before uploading to ensure accuracy.
-                </p>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <div>
-                    <h5 className="font-medium text-blue-800 text-xs">DBA Names</h5>
-                    <p className="text-xs text-blue-700">Business Name, DBA, Merchant Name, etc.</p>
-                  </div>
-                  <div>
-                    <h5 className="font-medium text-blue-800 text-xs">Volume Fields</h5>
-                    <p className="text-xs text-blue-700">Bankcard Volume, Sales Amount, Revenue, etc.</p>
-                  </div>
-                  <div>
-                    <h5 className="font-medium text-blue-800 text-xs">Payout Fields</h5>
-                    <p className="text-xs text-blue-700">Commission, Net Revenue, Agent Payout, etc.</p>
-                  </div>
-                </div>
+                <p className="text-foreground mb-2">Drag and drop a file here, or click to select</p>
+                <p className="text-sm text-muted-foreground">Supports CSV, Excel (.xlsx, .xls) files</p>
               </div>
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Data Preview */}
+      {dataPreview && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              Data Preview
+              <Badge variant="outline" className="ml-2">
+                {dataPreview.parsedData.length} rows detected
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearPreview}
+                className="ml-auto"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <strong>DBA/Location Field:</strong>
+                  <p className="text-muted-foreground">{detectDBAField(dataPreview.headers) || 'Not detected'}</p>
+                </div>
+                <div>
+                  <strong>Volume Field:</strong>
+                  <p className="text-muted-foreground">{detectVolumeField(dataPreview.headers) || 'Not detected'}</p>
+                </div>
+                <div>
+                  <strong>Agent Payout Field:</strong>
+                  <p className="text-muted-foreground">{detectAgentPayoutField(dataPreview.headers) || 'Not detected'}</p>
+                </div>
+                <div>
+                  <strong>Date Field:</strong>
+                  <p className="text-muted-foreground">{detectDateField(dataPreview.headers) || 'Not detected'}</p>
+                </div>
+              </div>
+              
+              {dataPreview.parsedData.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Parsed Data Sample (First 5 rows):</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>DBA/Location</TableHead>
+                        <TableHead>Volume</TableHead>
+                        <TableHead>Agent Payout</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dataPreview.parsedData.slice(0, 5).map((row, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{row.dbaName}</TableCell>
+                          <TableCell>${row.volume.toLocaleString()}</TableCell>
+                          <TableCell>${row.agentPayout.toLocaleString()}</TableCell>
+                          <TableCell>{row.transactionDate}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleUpload} 
+                  disabled={isUploading || dataPreview.parsedData.length === 0}
+                  className="flex-1"
+                >
+                  {isUploading ? 'Uploading...' : `Upload ${dataPreview.parsedData.length} Records`}
+                </Button>
+                <Button variant="outline" onClick={clearPreview}>
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upload Progress */}
+      {isUploading && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Uploading...</span>
+                <span>{Math.round(uploadProgress)}%</span>
+              </div>
+              <Progress value={uploadProgress} className="w-full" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upload Result */}
+      {uploadResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {uploadResult.success ? (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              )}
+              Upload {uploadResult.success ? 'Completed' : 'Failed'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {uploadResult.success ? (
+              <div className="space-y-2">
+                <p className="text-sm">
+                  Successfully processed <strong>{uploadResult.processedRows}</strong> out of{' '}
+                  <strong>{uploadResult.totalRows}</strong> rows for processor{' '}
+                  <Badge variant="outline">{uploadResult.processor}</Badge>
+                </p>
+                {uploadResult.errors && uploadResult.errors.length > 0 && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <details>
+                        <summary className="cursor-pointer">
+                          {uploadResult.errors.length} errors occurred during processing
+                        </summary>
+                        <ul className="mt-2 list-disc list-inside text-sm">
+                          {uploadResult.errors.map((error: string, index: number) => (
+                            <li key={index}>{error}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            ) : (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{uploadResult.error}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
