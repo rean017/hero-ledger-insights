@@ -132,26 +132,34 @@ export const getAvailableMonths = (transactions: any[]): string[] => {
   transactions.forEach(transaction => {
     if (transaction.transaction_date) {
       try {
-        // Handle both date string and Date object formats
+        // Parse the date string correctly
+        const dateStr = transaction.transaction_date;
+        console.log('🔍 Processing transaction date:', dateStr);
+        
         let dateObj: Date;
-        if (typeof transaction.transaction_date === 'string') {
-          // Parse date string - handle different formats
-          if (transaction.transaction_date.includes('T')) {
-            dateObj = new Date(transaction.transaction_date);
+        
+        if (typeof dateStr === 'string') {
+          // Handle YYYY-MM-DD format directly
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const [year, month, day] = dateStr.split('-');
+            dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          } else if (dateStr.includes('T')) {
+            // Handle ISO format
+            dateObj = new Date(dateStr);
           } else {
-            // Handle YYYY-MM-DD format
-            dateObj = new Date(transaction.transaction_date + 'T00:00:00.000Z');
+            // Fallback
+            dateObj = new Date(dateStr);
           }
         } else {
-          dateObj = new Date(transaction.transaction_date);
+          dateObj = new Date(dateStr);
         }
         
         if (!isNaN(dateObj.getTime())) {
           const monthString = getMonthString(dateObj);
           months.add(monthString);
-          console.log('✅ Added month:', monthString, 'from transaction date:', transaction.transaction_date);
+          console.log('✅ Added month:', monthString, 'from date:', dateStr, 'parsed as:', dateObj.toISOString());
         } else {
-          console.warn('❌ Invalid date found:', transaction.transaction_date);
+          console.warn('❌ Invalid date found:', dateStr);
         }
       } catch (error) {
         console.error('❌ Error parsing transaction date:', transaction.transaction_date, error);

@@ -68,7 +68,7 @@ const PLReports = () => {
 
   const dateRange = getDateRange(selectedPeriod);
 
-  // Data-driven 12-month trailing history query - FIXED MONTH GROUPING
+  // Data-driven 12-month trailing history query - FIXED VOLUME CALCULATION
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview', availableMonths],
     queryFn: async () => {
@@ -109,15 +109,20 @@ const PLReports = () => {
       // Group transactions by month using corrected date parsing
       const monthlyData = transactions?.reduce((acc, transaction) => {
         try {
+          const dateStr = transaction.transaction_date;
           let dateObj: Date;
-          if (typeof transaction.transaction_date === 'string') {
-            if (transaction.transaction_date.includes('T')) {
-              dateObj = new Date(transaction.transaction_date);
+          
+          if (typeof dateStr === 'string') {
+            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              const [year, month, day] = dateStr.split('-');
+              dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            } else if (dateStr.includes('T')) {
+              dateObj = new Date(dateStr);
             } else {
-              dateObj = new Date(transaction.transaction_date + 'T00:00:00.000Z');
+              dateObj = new Date(dateStr);
             }
           } else {
-            dateObj = new Date(transaction.transaction_date);
+            dateObj = new Date(dateStr);
           }
           
           const monthKey = format(dateObj, 'yyyy-MM');
@@ -129,7 +134,7 @@ const PLReports = () => {
           // Debug logging for first few transactions
           if (Object.keys(acc).length <= 3) {
             console.log('🔍 Transaction date processing:', {
-              original: transaction.transaction_date,
+              original: dateStr,
               parsed: dateObj.toISOString(),
               monthKey,
               volume: transaction.volume,
@@ -156,15 +161,24 @@ const PLReports = () => {
         if (monthTransactions.length > 0) {
           const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
           
-          // Calculate totals properly
-          const totalVolume = monthTransactions.reduce((sum, t) => sum + ((t.volume || 0) + (t.debit_volume || 0)), 0);
-          const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
+          // Calculate volume from the actual transactions, not commission calculations
+          const totalVolume = monthTransactions.reduce((sum, t) => {
+            const vol = (t.volume || 0) + (t.debit_volume || 0);
+            return sum + vol;
+          }, 0);
+          
+          // Calculate commissions from the commission calculation results
+          const totalCommissions = monthTransactions.reduce((sum, t) => {
+            const payout = t.agent_payout || 0;
+            return sum + payout;
+          }, 0);
           
           console.log(`📊 Month ${monthKey} totals:`, {
             totalVolume,
             totalCommissions,
             transactionCount: monthTransactions.length,
-            commissionCount: commissions.length
+            commissionCount: commissions.length,
+            firstTransactionSample: monthTransactions[0]
           });
           
           history.push({
