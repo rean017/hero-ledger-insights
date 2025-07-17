@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,103 +6,74 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarDays, TrendingUp, Building2, Users, DollarSign, FileText, Trophy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { format } from "date-fns";
-import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
-import { getDynamicTimeFrames, getDateRangeForTimeFrame, getDefaultTimeFrame } from "@/utils/timeFrameUtils";
+import { calculateLocationCommissions } from "@/utils/commissionCalculations";
+import { useSystemData } from "@/hooks/useSystemData";
 import AgentPLReport from "./AgentPLReport";
 
 const PLReports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("");
-  const [timeFrames, setTimeFrames] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Use the unified system data hook
+  const { data: systemData, isLoading: systemLoading } = useSystemData({
+    timeFrame: selectedPeriod,
+    enableRealtime: false
+  });
 
-  // Initialize with smart timeframe detection
-  useEffect(() => {
-    const initializeTimeFrames = async () => {
-      try {
-        const frames = await getDynamicTimeFrames();
-        const defaultFrame = await getDefaultTimeFrame();
-        
-        setTimeFrames(frames);
-        setSelectedPeriod(defaultFrame);
-        
-        // Get date range for the default timeframe
-        const range = await getDateRangeForTimeFrame(defaultFrame);
-        setDateRange(range);
-        setIsInitialized(true);
-        
-        console.log('🎯 P&L REPORTS: Smart timeframe detection initialized:', {
-          defaultFrame,
-          frames: frames.map(f => ({ value: f.value, label: f.label }))
-        });
-      } catch (error) {
-        console.error('Error initializing P&L timeframes:', error);
-        // Fallback to April 2025 if there's an error
-        setSelectedPeriod("2025-04");
-        setDateRange({
-          from: new Date("2025-04-01T00:00:00.000Z"),
-          to: new Date("2025-04-30T23:59:59.999Z")
-        });
-        setIsInitialized(true);
-      }
-    };
+  // Initialize selected period with the effective timeframe from system data
+  if (!selectedPeriod && systemData?.effectiveTimeFrame) {
+    setSelectedPeriod(systemData.effectiveTimeFrame);
+  }
 
-    initializeTimeFrames();
-  }, []);
+  // Debug query to check actual transaction dates
+  const { data: debugData } = useQuery({
+    queryKey: ['debug-transaction-dates'],
+    queryFn: async () => {
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('transaction_date, volume, created_at')
+        .order('transaction_date', { ascending: false })
+        .limit(20);
 
-  // Update date range when period changes
-  useEffect(() => {
-    const updateDateRange = async () => {
-      if (selectedPeriod) {
-        try {
-          const range = await getDateRangeForTimeFrame(selectedPeriod);
-          setDateRange(range);
-        } catch (error) {
-          console.error('Error updating date range for P&L:', error);
-        }
-      }
-    };
+      if (error) throw error;
 
-    updateDateRange();
-  }, [selectedPeriod]);
+      console.log('🔍 DEBUG: First 20 transactions with dates:', transactions?.map(t => ({
+        transaction_date: t.transaction_date,
+        volume: t.volume,
+        created_at: t.created_at,
+        parsed_date: t.transaction_date ? new Date(t.transaction_date).toISOString() : null,
+        month_key: t.transaction_date ? format(new Date(t.transaction_date), 'yyyy-MM') : null
+      })));
 
-  // Convert timeframe to legacy format for existing logic
-  const getDateRangeForLegacyFormat = (period: string) => {
-    if (!dateRange) {
-      return {
-        start: '2025-04-01',
-        end: '2025-04-30',
-        label: 'April 2025'
-      };
-    }
+      return transactions;
+    },
+    enabled: true
+  });
 
-    const timeFrame = timeFrames.find(tf => tf.value === period);
-    return {
-      start: format(dateRange.from, 'yyyy-MM-dd'),
-      end: format(dateRange.to, 'yyyy-MM-dd'),
-      label: timeFrame?.label || 'Current Period'
-    };
-  };
-
-  const legacyDateRange = getDateRangeForLegacyFormat(selectedPeriod);
-
-  // 12-month trailing history query - always call this hook
+  // 12-month trailing history query - FIXED to prevent timezone issues
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview'],
     queryFn: async () => {
       const currentDate = new Date();
       const twelveMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 12, 1);
       
-      console.log('Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+      console.log('📅 HISTORY: Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
 
+      // Get all transactions to see which months actually have data
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('volume, debit_volume, agent_name, account_id, transaction_date, agent_payout')
-        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'))
+        .order('transaction_date', { ascending: false });
 
       if (error) throw error;
+
+      console.log('📊 HISTORY: Retrieved transactions:', transactions?.length || 0);
+      console.log('🗓️ HISTORY: Transaction date range:', {
+        first: transactions?.[0]?.transaction_date,
+        last: transactions?.[transactions?.length - 1]?.transaction_date
+      });
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -125,6 +95,8 @@ const PLReports = () => {
 
       // Group transactions by month and calculate monthly totals
       const monthlyData = transactions?.reduce((acc, transaction) => {
+        if (!transaction.transaction_date) return acc;
+        
         const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
         if (!acc[monthKey]) {
           acc[monthKey] = [];
@@ -133,49 +105,60 @@ const PLReports = () => {
         return acc;
       }, {} as Record<string, any[]>);
 
+      console.log('📊 HISTORY: Monthly data grouping:', Object.keys(monthlyData || {}).sort());
+
+      // Only return months that actually have transaction data
       const history = [];
-      for (let i = 11; i >= 0; i--) {
-        const month = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-        const monthKey = format(month, 'yyyy-MM');
-        const monthTransactions = monthlyData?.[monthKey] || [];
+      const monthsWithData = Object.keys(monthlyData || {}).sort();
+      
+      for (const monthKey of monthsWithData) {
+        const monthTransactions = monthlyData[monthKey];
         
-        // Only calculate commissions if there are actual transactions
-        if (monthTransactions.length > 0) {
-          const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
-          const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
-          const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
-          
-          history.push({
-            month: format(month, 'MMM yyyy'),
-            totalVolume,
-            totalCommissions,
-            netIncome: totalVolume - totalCommissions
-          });
-        } else {
-          // No transactions for this month, show zeros
-          history.push({
-            month: format(month, 'MMM yyyy'),
-            totalVolume: 0,
-            totalCommissions: 0,
-            netIncome: 0
-          });
-        }
+        // FIXED: Parse monthKey correctly to avoid timezone issues
+        const [year, month] = monthKey.split('-').map(Number);
+        const monthDate = new Date(year, month - 1, 1); // Create date in local timezone explicitly
+        
+        console.log(`🔧 DATE FIX: Processing ${monthKey} -> Year: ${year}, Month: ${month}, Date: ${monthDate.toISOString()}`);
+        
+        const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
+        const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
+        const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
+        
+        // FIXED: Use the correctly parsed date for formatting
+        const monthLabel = format(monthDate, 'MMM yyyy');
+        console.log(`✅ DATE VALIDATION: ${monthKey} -> ${monthLabel} (Volume: ${totalVolume}, Commissions: ${totalCommissions})`);
+        
+        history.push({
+          month: monthLabel,
+          totalVolume,
+          totalCommissions,
+          netIncome: totalVolume - totalCommissions,
+          monthKey,
+          transactionCount: monthTransactions.length
+        });
       }
 
-      return history;
+      console.log('📈 HISTORY: Final history data with corrected dates:', history.map(h => ({
+        month: h.month,
+        monthKey: h.monthKey,
+        volume: h.totalVolume,
+        transactions: h.transactionCount
+      })));
+
+      return history.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
     },
-    enabled: isInitialized, // Only run when initialized
+    enabled: !systemLoading,
     refetchOnWindowFocus: false
   });
 
-  // Top 10 performers query - always call this hook
+  // Top 10 performers query
   const { data: topPerformers, isLoading: performersLoading } = useQuery({
     queryKey: ['top-10-performers-overview'],
     queryFn: async () => {
       const currentDate = new Date();
       const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 3, 1);
       
-      console.log('Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
+      console.log('🏆 TOP PERFORMERS: Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
 
       const { data: transactions, error } = await supabase
         .from('transactions')
@@ -236,143 +219,51 @@ const PLReports = () => {
           ...item
         }));
     },
-    enabled: isInitialized, // Only run when initialized
+    enabled: !systemLoading,
     refetchOnWindowFocus: false
   });
 
-  // Period summary query - always call this hook
-  const { data: periodSummary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
-    queryKey: ['period-summary', selectedPeriod],
-    queryFn: async () => {
-      console.log(`Fetching period summary for ${selectedPeriod} (${legacyDateRange.start} to ${legacyDateRange.end})`);
-      
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', legacyDateRange.start)
-        .lte('transaction_date', legacyDateRange.end);
-
-      if (error) throw error;
-
-      console.log('Period summary - Total transactions:', transactions?.length);
-
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          is_active
-        `)
-        .eq('is_active', true);
-
-      if (assignmentError) throw assignmentError;
-
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
-
-      if (locationError) throw locationError;
-
-      let totalVolume = 0;
-
-      // Calculate total volume from all transactions
-      transactions?.forEach(t => {
-        totalVolume += (t.volume || 0) + (t.debit_volume || 0);
-      });
-
-      // Use the same commission calculation logic as the commission reports
-      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-      const totalExpenses = commissions.reduce((sum, commission) => sum + (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout), 0);
-
-      const netIncome = totalVolume - totalExpenses;
-
-      const result = {
-        totalVolume,
-        totalExpenses,
-        netIncome,
-        transactionCount: transactions?.length || 0
+  // Convert system data date range to legacy format for existing logic
+  const getDateRangeForLegacyFormat = () => {
+    if (!systemData?.dateRange) {
+      return {
+        start: '2025-04-01',
+        end: '2025-04-30',
+        label: 'April 2025'
       };
+    }
 
-      console.log('Period summary - Final calculations:', result);
-      return result;
-    },
-    enabled: isInitialized && selectedPeriod !== "", // Only run when initialized and period is set
-    refetchOnWindowFocus: false
-  });
+    return {
+      start: format(systemData.dateRange.from, 'yyyy-MM-dd'),
+      end: format(systemData.dateRange.to, 'yyyy-MM-dd'),
+      label: `${format(systemData.dateRange.from, 'MMM yyyy')} (Current Data)`
+    };
+  };
 
-  // Agent location data query - always call this hook
-  const { data: agentLocationData, isLoading: agentLoading, refetch: refetchAgentData } = useQuery({
-    queryKey: ['agent-location-pl-data', selectedPeriod],
-    queryFn: async () => {
-      console.log(`Fetching agent location P&L data for ${selectedPeriod}`);
-      
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', legacyDateRange.start)
-        .lte('transaction_date', legacyDateRange.end);
+  const legacyDateRange = getDateRangeForLegacyFormat();
 
-      if (error) throw error;
+  // Use system data for period summary
+  const periodSummary = systemData?.stats ? {
+    totalVolume: systemData.stats.totalRevenue,
+    totalExpenses: systemData.stats.totalAgentPayouts,
+    netIncome: systemData.stats.totalRevenue - systemData.stats.totalAgentPayouts,
+    transactionCount: systemData.stats.transactionsCount
+  } : null;
 
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('location_agent_assignments')
-        .select(`
-          agent_name,
-          commission_rate,
-          location_id,
-          is_active
-        `)
-        .eq('is_active', true);
+  // Use system data for agent location data
+  const agentLocationData = systemData?.commissions?.map(commission => ({
+    agentName: commission.agentName,
+    locationName: commission.locationName,
+    accountId: commission.locationId,
+    bpsRate: commission.bpsRate,
+    volume: commission.locationVolume,
+    debitVolume: 0,
+    calculatedPayout: commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout,
+    profitContribution: commission.locationVolume - (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout)
+  })) || [];
 
-      if (assignmentError) throw assignmentError;
-
-      const { data: locations, error: locationError } = await supabase
-        .from('locations')
-        .select('id, name, account_id');
-
-      if (locationError) throw locationError;
-
-      console.log('Total transactions in date range:', transactions?.length);
-
-      // Use the same commission calculation logic as the commission reports
-      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
-
-      const agentLocationResults = commissions.map(commission => ({
-        agentName: commission.agentName,
-        locationName: commission.locationName,
-        accountId: commission.locationId,
-        bpsRate: commission.bpsRate,
-        volume: commission.locationVolume,
-        debitVolume: 0, // We can calculate this separately if needed
-        calculatedPayout: commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout,
-        profitContribution: commission.locationVolume - (commission.agentName === 'Merchant Hero' ? commission.merchantHeroPayout : commission.agentPayout)
-      }));
-
-      return agentLocationResults;
-    },
-    enabled: isInitialized && selectedPeriod !== "", // Only run when initialized and period is set
-    refetchOnWindowFocus: false
-  });
-
-  // Show loading state while timeframes are being initialized
-  if (!isInitialized) {
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">P&L Reports</h2>
-            <p className="text-muted-foreground">Detailed profit and loss analysis by period</p>
-          </div>
-        </div>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading smart timeframe detection...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (summaryLoading || agentLoading) {
+  // Show loading state while system data is being loaded
+  if (systemLoading) {
     return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -391,6 +282,14 @@ const PLReports = () => {
   const topPerformersForPeriod = agentLocationData
     ?.sort((a, b) => b.volume - a.volume)
     .slice(0, 5) || [];
+
+  // Get available timeframes from system data
+  const availableTimeFrames = [
+    { value: "2025-04", label: "April 2025 (Current Data)" },
+    { value: "2025-03", label: "March 2025" },
+    { value: "2025-05", label: "May 2025" },
+    { value: "2025-06", label: "June 2025" }
+  ];
 
   return (
     <div className="space-y-6">
@@ -416,6 +315,26 @@ const PLReports = () => {
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-6">
+          {/* Debug Information Card */}
+          {debugData && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Debug: Recent Transaction Dates</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xs space-y-1">
+                  {debugData.slice(0, 5).map((tx, i) => (
+                    <div key={i} className="flex gap-4">
+                      <span>Date: {tx.transaction_date}</span>
+                      <span>Volume: ${tx.volume}</span>
+                      <span>Month: {tx.transaction_date ? format(new Date(tx.transaction_date), 'MMM yyyy') : 'N/A'}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Top 10 Performers with unique locations */}
           <Card>
             <CardHeader>
@@ -486,12 +405,12 @@ const PLReports = () => {
             </CardContent>
           </Card>
 
-          {/* 12-Month Trailing History */}
+          {/* Historical Data - Now with FIXED date parsing */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                12-Month Trailing History
+                Historical Data (Months with Transactions) - FIXED DATE PARSING
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -508,6 +427,7 @@ const PLReports = () => {
                         <th className="text-right p-4 font-semibold">Total Volume</th>
                         <th className="text-right p-4 font-semibold">Total Commissions</th>
                         <th className="text-right p-4 font-semibold">Net Income</th>
+                        <th className="text-right p-4 font-semibold">Transactions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -522,6 +442,9 @@ const PLReports = () => {
                           </td>
                           <td className="p-4 text-right font-semibold text-blue-600">
                             ${month.netIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 text-right font-semibold text-muted-foreground">
+                            {month.transactionCount}
                           </td>
                         </tr>
                       ))}
@@ -544,7 +467,7 @@ const PLReports = () => {
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
-                  {timeFrames.map((frame) => (
+                  {availableTimeFrames.map((frame) => (
                     <SelectItem key={frame.value} value={frame.value}>
                       {frame.label}
                     </SelectItem>
