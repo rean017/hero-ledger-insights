@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CalendarIcon, Download, Printer, FileText, User, Building2, TrendingUp, Trophy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +11,8 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { calculateLocationCommissions } from "@/utils/commissionCalculations";
+import { getAvailableMonths, getTrailingMonths } from "@/utils/timeFrameUtils";
+import { useAvailableMonths } from "@/hooks/useAvailableMonths";
 
 const AgentPLReport = () => {
   const [selectedAgent, setSelectedAgent] = useState("");
@@ -20,6 +21,7 @@ const AgentPLReport = () => {
   const [customEndDate, setCustomEndDate] = useState<Date>();
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
+  const { data: availableMonths = [] } = useAvailableMonths();
 
   const getDateRange = (period: string) => {
     const currentDate = new Date();
@@ -154,19 +156,21 @@ const AgentPLReport = () => {
     refetchOnWindowFocus: false
   });
 
-  // 12-month trailing history query
+  // Data-driven 12-month trailing history query
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
-    queryKey: ['12-month-trailing-history'],
+    queryKey: ['12-month-trailing-history', availableMonths],
     queryFn: async () => {
-      const currentDate = new Date();
-      const twelveMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 12, 1);
-      
-      console.log('Fetching 12-month trailing history from', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+      if (!availableMonths || availableMonths.length === 0) {
+        console.log('📊 No available months, skipping trailing history');
+        return [];
+      }
+
+      const trailingMonths = getTrailingMonths(availableMonths, 12);
+      console.log('📊 Calculating trailing history for months:', trailingMonths);
 
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout, transaction_date')
-        .gte('transaction_date', format(twelveMonthsAgo, 'yyyy-MM-dd'));
+        .select('volume, debit_volume, agent_name, account_id, agent_payout, transaction_date');
 
       if (error) throw error;
 
@@ -188,7 +192,7 @@ const AgentPLReport = () => {
 
       if (locationError) throw locationError;
 
-      // Group transactions by month and calculate monthly totals
+      // Group transactions by month
       const monthlyData = transactions?.reduce((acc, transaction) => {
         const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
         if (!acc[monthKey]) {
@@ -199,27 +203,25 @@ const AgentPLReport = () => {
       }, {} as Record<string, any[]>);
 
       const history = [];
-      for (let i = 11; i >= 0; i--) {
-        const month = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-        const monthKey = format(month, 'yyyy-MM');
+      for (const monthKey of trailingMonths) {
         const monthTransactions = monthlyData?.[monthKey] || [];
+        const [year, month] = monthKey.split('-');
+        const monthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
         
-        // Only calculate commissions if there are actual transactions
         if (monthTransactions.length > 0) {
           const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
           const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
           const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
           
           history.push({
-            month: format(month, 'MMM yyyy'),
+            month: format(monthDate, 'MMM yyyy'),
             totalVolume,
             totalCommissions,
             netIncome: totalVolume - totalCommissions
           });
         } else {
-          // No transactions for this month, show zeros
           history.push({
-            month: format(month, 'MMM yyyy'),
+            month: format(monthDate, 'MMM yyyy'),
             totalVolume: 0,
             totalCommissions: 0,
             netIncome: 0
@@ -229,24 +231,33 @@ const AgentPLReport = () => {
 
       return history;
     },
+    enabled: availableMonths.length > 0,
     refetchOnWindowFocus: false
   });
 
-  // Top 10 performers query
+  // Data-driven top 10 performers query
   const { data: topPerformers, isLoading: performersLoading } = useQuery({
-    queryKey: ['top-10-performers'],
+    queryKey: ['top-10-performers', availableMonths],
     queryFn: async () => {
-      const currentDate = new Date();
-      const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 3, 1);
-      
-      console.log('Fetching top 10 performers data from', format(threeMonthsAgo, 'yyyy-MM-dd'));
+      if (!availableMonths || availableMonths.length === 0) {
+        console.log('📊 No available months, skipping top performers');
+        return [];
+      }
+
+      const recentMonths = getTrailingMonths(availableMonths, 3);
+      console.log('🏆 Calculating top performers for months:', recentMonths);
 
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, agent_payout')
-        .gte('transaction_date', format(threeMonthsAgo, 'yyyy-MM-dd'));
+        .select('volume, debit_volume, agent_name, account_id, agent_payout, transaction_date');
 
       if (error) throw error;
+
+      // Filter transactions for recent months
+      const recentTransactions = transactions?.filter(transaction => {
+        const transactionMonth = format(new Date(transaction.transaction_date), 'yyyy-MM');
+        return recentMonths.includes(transactionMonth);
+      }) || [];
 
       const { data: assignments, error: assignmentError } = await supabase
         .from('location_agent_assignments')
@@ -266,7 +277,7 @@ const AgentPLReport = () => {
 
       if (locationError) throw locationError;
 
-      const commissions = calculateLocationCommissions(transactions || [], assignments || [], locations || []);
+      const commissions = calculateLocationCommissions(recentTransactions, assignments || [], locations || []);
       
       // Sort by total volume and get top 10
       return commissions
@@ -278,6 +289,7 @@ const AgentPLReport = () => {
           commission: item.agentName === 'Merchant Hero' ? item.merchantHeroPayout : item.agentPayout
         }));
     },
+    enabled: availableMonths.length > 0,
     refetchOnWindowFocus: false
   });
 
@@ -586,12 +598,12 @@ const AgentPLReport = () => {
         </Card>
       )}
 
-      {/* 12-Month Trailing History */}
+      {/* Data-driven 12-Month Trailing History */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            12-Month Trailing History
+            12-Month Trailing History (Data-Driven)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -630,18 +642,18 @@ const AgentPLReport = () => {
             </div>
           ) : (
             <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No historical data available</p>
+              <p className="text-muted-foreground">No historical data available - upload some transaction data to see reports</p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Top 10 Performers */}
+      {/* Data-driven Top 10 Performers */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trophy className="h-5 w-5" />
-            Top 10 Performers (Last 3 Months by Volume)
+            Top 10 Performers (Last 3 Months by Volume - Data-Driven)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -697,7 +709,7 @@ const AgentPLReport = () => {
             </div>
           ) : (
             <div className="flex items-center justify-center h-32">
-              <p className="text-muted-foreground">No performance data available</p>
+              <p className="text-muted-foreground">No performance data available - upload some transaction data to see reports</p>
             </div>
           )}
         </CardContent>

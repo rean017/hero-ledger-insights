@@ -6,19 +6,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Upload, FileText, Calendar, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
+import { Upload, FileText, Calendar, TrendingUp, AlertTriangle, CheckCircle, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { analyzeFile, FileAnalysisResult } from "@/utils/fileAnalyzer";
 import { format } from "date-fns";
+import { useAvailableMonths } from "@/hooks/useAvailableMonths";
 
 const SmartFileUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedProcessor, setSelectedProcessor] = useState<string>("");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [analysis, setAnalysis] = useState<FileAnalysisResult | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadResult, setUploadResult] = useState<string | null>(null);
   const { toast } = useToast();
+  const { data: availableMonths = [] } = useAvailableMonths();
 
   const handleFileSelect = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -27,6 +31,7 @@ const SmartFileUpload = () => {
     console.log('📁 SMART UPLOAD: File selected:', file.name);
     setSelectedFile(file);
     setIsAnalyzing(true);
+    setUploadResult(null);
 
     try {
       const analysisResult = await analyzeFile(file);
@@ -35,6 +40,12 @@ const SmartFileUpload = () => {
       // Auto-select processor if confidence is high
       if (analysisResult.confidence > 70) {
         setSelectedProcessor(analysisResult.suggestedProcessor);
+      }
+      
+      // Auto-select month if detected from file
+      if (analysisResult.detectedDateRange) {
+        const detectedMonth = format(analysisResult.detectedDateRange.from, 'yyyy-MM');
+        setSelectedMonth(detectedMonth);
       }
       
       toast({
@@ -54,10 +65,18 @@ const SmartFileUpload = () => {
   }, [toast]);
 
   const handleUpload = async () => {
-    if (!selectedFile || !selectedProcessor) return;
+    if (!selectedFile || !selectedProcessor || !selectedMonth) {
+      toast({
+        title: "Missing Information",
+        description: "Please select file, processor, and month before uploading.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadResult(null);
 
     try {
       // Simulate upload progress
@@ -72,14 +91,20 @@ const SmartFileUpload = () => {
       clearInterval(progressInterval);
       setUploadProgress(100);
 
+      const monthLabel = format(new Date(selectedMonth + '-01'), 'MMMM yyyy');
+      const resultMessage = `File processed successfully with ${selectedProcessor} processor for ${monthLabel}`;
+      
+      setUploadResult(resultMessage);
+      
       toast({
         title: "Upload Successful",
-        description: `File processed successfully with ${selectedProcessor} processor`
+        description: resultMessage
       });
 
       // Reset form
       setSelectedFile(null);
       setSelectedProcessor("");
+      setSelectedMonth("");
       setAnalysis(null);
       setUploadProgress(0);
       
@@ -107,14 +132,62 @@ const SmartFileUpload = () => {
     return <AlertTriangle className="h-4 w-4 text-red-600" />;
   };
 
+  // Generate month options for the last 24 months
+  const generateMonthOptions = () => {
+    const options = [];
+    const currentDate = new Date();
+    
+    for (let i = 0; i < 24; i++) {
+      const monthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+      const monthValue = format(monthDate, 'yyyy-MM');
+      const monthLabel = format(monthDate, 'MMMM yyyy');
+      
+      options.push({
+        value: monthValue,
+        label: monthLabel,
+        hasData: availableMonths.includes(monthValue)
+      });
+    }
+    
+    return options;
+  };
+
+  const monthOptions = generateMonthOptions();
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground mb-2">Smart File Upload</h2>
         <p className="text-muted-foreground">
-          Upload your transaction files with automatic processor detection and date range analysis
+          Upload your transaction files with automatic processor detection and month selection
         </p>
       </div>
+
+      {availableMonths.length > 0 && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-medium">Available Data Months:</span>
+              <div className="flex flex-wrap gap-1">
+                {availableMonths.slice(0, 6).map(month => (
+                  <Badge key={month} variant="secondary" className="text-xs">
+                    {format(new Date(month + '-01'), 'MMM yyyy')}
+                  </Badge>
+                ))}
+                {availableMonths.length > 6 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{availableMonths.length - 6} more
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Data from these months will appear in your P&L reports and analytics.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>
@@ -205,34 +278,75 @@ const SmartFileUpload = () => {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Select Processor</label>
-                <Select value={selectedProcessor} onValueChange={setSelectedProcessor}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose processor type..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TRNXN">TRNXN</SelectItem>
-                    <SelectItem value="NUVEI">NUVEI</SelectItem>
-                    <SelectItem value="PAYSAFE">PAYSAFE</SelectItem>
-                    <SelectItem value="Generic">Generic</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select Processor</label>
+                  <Select value={selectedProcessor} onValueChange={setSelectedProcessor}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose processor type..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TRNXN">TRNXN</SelectItem>
+                      <SelectItem value="NUVEI">NUVEI</SelectItem>
+                      <SelectItem value="PAYSAFE">PAYSAFE</SelectItem>
+                      <SelectItem value="Generic">Generic</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select Month</label>
+                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose month..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {monthOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          <div className="flex items-center gap-2">
+                            {option.label}
+                            {option.hasData && (
+                              <Badge variant="secondary" className="text-xs">Has Data</Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
+              {selectedMonth && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <span className="font-medium">Upload Target:</span> Data will be stored for {format(new Date(selectedMonth + '-01'), 'MMMM yyyy')} and will appear in your P&L reports under this month.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {isUploading && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span>Uploading...</span>
+                    <span>Processing...</span>
                     <span>{uploadProgress}%</span>
                   </div>
                   <Progress value={uploadProgress} className="w-full" />
                 </div>
               )}
 
+              {uploadResult && (
+                <Alert>
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription>
+                    <span className="font-medium text-green-600">Success!</span> {uploadResult}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <Button
                 onClick={handleUpload}
-                disabled={!selectedProcessor || isAnalyzing || isUploading}
+                disabled={!selectedProcessor || !selectedMonth || isAnalyzing || isUploading}
                 className="w-full"
               >
                 {isUploading ? 'Processing...' : 'Upload & Process'}

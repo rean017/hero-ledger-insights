@@ -10,46 +10,65 @@ export interface TimeFrameOption {
   } | null;
 }
 
-export const getDynamicTimeFrames = (): TimeFrameOption[] => {
-  // Fixed to show March 2025 first since that's where the data is
+// Get dynamic time frames based on actual data in the database
+export const getDynamicTimeFrames = async (availableMonths: string[]): Promise<TimeFrameOption[]> => {
+  console.log('🗓️ Dynamic timeframes being generated from available months:', availableMonths);
+  
+  return availableMonths.map(monthString => {
+    const [year, month] = monthString.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    
+    return {
+      value: monthString,
+      label: format(date, 'MMMM yyyy'),
+      dateRange: {
+        from: startOfMonth(date),
+        to: endOfMonth(date)
+      }
+    };
+  }).sort((a, b) => b.value.localeCompare(a.value)); // Sort newest first
+};
+
+// Legacy function for backward compatibility - now uses fixed months
+export const getDynamicTimeFramesLegacy = (): TimeFrameOption[] => {
   const march2025 = new Date("2025-03-01");
   const april2025 = new Date("2025-04-01");
   const may2025 = new Date("2025-05-01");
   const june2025 = new Date("2025-06-01");
   
-  console.log('🗓️ Dynamic timeframes being generated for March 2025 data');
+  console.log('🗓️ Legacy dynamic timeframes being generated');
   
   return [
     {
-      value: "march",
-      label: "March",
+      value: "2025-03",
+      label: "March 2025",
       dateRange: {
-        from: new Date("2025-03-01T00:00:00.000Z"),
-        to: new Date("2025-03-31T23:59:59.999Z")
+        from: startOfMonth(march2025),
+        to: endOfMonth(march2025)
       }
     },
     {
-      value: "april",
-      label: "April",
+      value: "2025-04",
+      label: "April 2025",
       dateRange: {
-        from: new Date("2025-04-01T00:00:00.000Z"),
-        to: new Date("2025-04-30T23:59:59.999Z")
+        from: startOfMonth(april2025),
+        to: endOfMonth(april2025)
       }
     },
     {
-      value: "may",
-      label: "May",
+      value: "2025-05",
+      label: "May 2025",
       dateRange: {
-        from: new Date("2025-05-01T00:00:00.000Z"),
-        to: new Date("2025-05-31T23:59:59.999Z")
+        from: startOfMonth(may2025),
+        to: endOfMonth(may2025)
       }
     },
     {
-      value: "june",
-      label: "June",
+      value: "2025-06",
+      label: "June 2025",
       dateRange: {
-        from: new Date("2025-06-01T00:00:00.000Z"),
-        to: new Date("2025-06-30T23:59:59.999Z")
+        from: startOfMonth(june2025),
+        to: endOfMonth(june2025)
       }
     }
   ];
@@ -58,14 +77,32 @@ export const getDynamicTimeFrames = (): TimeFrameOption[] => {
 export const getDateRangeForTimeFrame = (timeFrame: string): { from: Date; to: Date } | null => {
   console.log('🎯 Getting date range for timeframe:', timeFrame);
   
-  const timeFrames = getDynamicTimeFrames();
-  const selectedFrame = timeFrames.find(frame => frame.value === timeFrame);
+  // Handle YYYY-MM format
+  if (timeFrame.match(/^\d{4}-\d{2}$/)) {
+    const [year, month] = timeFrame.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    
+    const result = {
+      from: startOfMonth(date),
+      to: endOfMonth(date)
+    };
+    
+    console.log('📊 Date range result:', {
+      from: result.from.toISOString(),
+      to: result.to.toISOString(),
+      fromFormatted: format(result.from, 'yyyy-MM-dd'),
+      toFormatted: format(result.to, 'yyyy-MM-dd')
+    });
+    
+    return result;
+  }
   
-  console.log('📅 Available timeframes:', timeFrames.map(tf => ({ value: tf.value, label: tf.label })));
-  console.log('🎯 Selected frame:', selectedFrame);
+  // Legacy handling for old format
+  const legacyFrames = getDynamicTimeFramesLegacy();
+  const selectedFrame = legacyFrames.find(frame => frame.value === timeFrame);
   
   if (selectedFrame?.dateRange) {
-    console.log('📊 Date range result:', {
+    console.log('📊 Legacy date range result:', {
       from: selectedFrame.dateRange.from.toISOString(),
       to: selectedFrame.dateRange.to.toISOString(),
       fromFormatted: format(selectedFrame.dateRange.from, 'yyyy-MM-dd'),
@@ -81,9 +118,23 @@ export const formatDateForDatabase = (date: Date): string => {
   return format(date, 'yyyy-MM-dd');
 };
 
-// Helper function to get month string in YYYY-MM format (same as FileUpload)
+// Helper function to get month string in YYYY-MM format
 export const getMonthString = (date: Date): string => {
   return format(date, 'yyyy-MM');
+};
+
+// Helper function to get available months from transaction data
+export const getAvailableMonths = (transactions: any[]): string[] => {
+  const months = new Set<string>();
+  
+  transactions.forEach(transaction => {
+    if (transaction.transaction_date) {
+      const monthString = getMonthString(new Date(transaction.transaction_date));
+      months.add(monthString);
+    }
+  });
+  
+  return Array.from(months).sort().reverse(); // Sort newest first
 };
 
 // Helper function to normalize custom date ranges to match transaction format with proper validation
@@ -112,4 +163,9 @@ export const normalizeCustomDateRange = (range: { from: Date; to: Date }): { fro
     console.error('Error normalizing custom date range:', error);
     throw new Error('Failed to normalize date range');
   }
+};
+
+// Helper function to calculate trailing months based on actual data
+export const getTrailingMonths = (availableMonths: string[], count: number = 12): string[] => {
+  return availableMonths.slice(0, count);
 };
