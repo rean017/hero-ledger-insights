@@ -51,7 +51,7 @@ const PLReports = () => {
     enabled: true
   });
 
-  // 12-month trailing history query - fixed to only show months with actual data
+  // 12-month trailing history query - FIXED to prevent timezone issues
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview'],
     queryFn: async () => {
@@ -113,16 +113,23 @@ const PLReports = () => {
       
       for (const monthKey of monthsWithData) {
         const monthTransactions = monthlyData[monthKey];
-        const month = new Date(monthKey + '-01');
+        
+        // FIXED: Parse monthKey correctly to avoid timezone issues
+        const [year, month] = monthKey.split('-').map(Number);
+        const monthDate = new Date(year, month - 1, 1); // Create date in local timezone explicitly
+        
+        console.log(`🔧 DATE FIX: Processing ${monthKey} -> Year: ${year}, Month: ${month}, Date: ${monthDate.toISOString()}`);
         
         const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
         const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
         const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
         
-        console.log(`💰 HISTORY: ${monthKey} - Volume: ${totalVolume}, Commissions: ${totalCommissions}`);
+        // FIXED: Use the correctly parsed date for formatting
+        const monthLabel = format(monthDate, 'MMM yyyy');
+        console.log(`✅ DATE VALIDATION: ${monthKey} -> ${monthLabel} (Volume: ${totalVolume}, Commissions: ${totalCommissions})`);
         
         history.push({
-          month: format(month, 'MMM yyyy'),
+          month: monthLabel,
           totalVolume,
           totalCommissions,
           netIncome: totalVolume - totalCommissions,
@@ -131,7 +138,7 @@ const PLReports = () => {
         });
       }
 
-      console.log('📈 HISTORY: Final history data:', history.map(h => ({
+      console.log('📈 HISTORY: Final history data with corrected dates:', history.map(h => ({
         month: h.month,
         monthKey: h.monthKey,
         volume: h.totalVolume,
@@ -398,12 +405,12 @@ const PLReports = () => {
             </CardContent>
           </Card>
 
-          {/* Historical Data - Now only shows months with actual data */}
+          {/* Historical Data - Now with FIXED date parsing */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                Historical Data (Months with Transactions)
+                Historical Data (Months with Transactions) - FIXED DATE PARSING
               </CardTitle>
             </CardHeader>
             <CardContent>
