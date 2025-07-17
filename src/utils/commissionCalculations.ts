@@ -1,4 +1,3 @@
-
 import { convertToDecimalRate } from './bpsCalculations';
 
 export interface LocationCommission {
@@ -86,18 +85,18 @@ export const calculateLocationCommissions = (
   assignments: Assignment[],
   locations: Location[]
 ): LocationCommission[] => {
-  console.log('🎯 === SIMPLIFIED COMMISSION CALC SESSION ===');
-  console.log('📊 SIMPLIFIED COMMISSION INPUT DATA:');
+  console.log('🎯 === COMMISSION CALC WITH VOLUME DERIVATION ===');
+  console.log('📊 INPUT DATA:');
   console.log('- Transactions:', transactions.length);
   console.log('- Assignments:', assignments.length);  
   console.log('- Locations:', locations.length);
 
   // Log sample transaction for debugging
   if (transactions.length > 0) {
-    console.log('📊 SIMPLIFIED COMMISSION: Sample transaction:', transactions[0]);
+    console.log('📊 Sample transaction:', transactions[0]);
   }
 
-  // Group transactions by location using simplified matching
+  // Group transactions by location
   const locationMap = new Map<string, LocationData>();
   let totalUnmatchedPayout = 0;
   let unmatchedCount = 0;
@@ -105,10 +104,12 @@ export const calculateLocationCommissions = (
   // First pass: match transactions to specific locations
   transactions.forEach((transaction, index) => {
     const agentPayout = Number(transaction.agent_payout) || 0;
-    const volume = Number(transaction.volume) || 0;
+    const recordedVolume = Number(transaction.volume) || 0;
+    const recordedDebitVolume = Number(transaction.debit_volume) || 0;
+    const totalRecordedVolume = recordedVolume + recordedDebitVolume;
     
     // Skip transactions with no meaningful data
-    if (agentPayout === 0 && volume === 0) return;
+    if (agentPayout === 0 && totalRecordedVolume === 0) return;
     
     const matchedLocation = findMatchingLocation(transaction, locations);
     
@@ -124,40 +125,34 @@ export const calculateLocationCommissions = (
       }
       
       const locationData = locationMap.get(locationId)!;
-      locationData.totalVolume += volume;
+      locationData.totalVolume += totalRecordedVolume;
       locationData.totalAgentPayout += agentPayout;
       locationData.transactionCount += 1;
       
-      console.log(`💰 SIMPLIFIED COMMISSION: Added transaction ${index + 1} to ${matchedLocation.name}: $${agentPayout.toLocaleString()} payout, $${volume.toLocaleString()} volume`);
+      console.log(`💰 Added transaction ${index + 1} to ${matchedLocation.name}: $${agentPayout.toLocaleString()} payout, $${totalRecordedVolume.toLocaleString()} volume`);
     } else {
       totalUnmatchedPayout += agentPayout;
       unmatchedCount++;
-      console.log(`⚠️ SIMPLIFIED COMMISSION: Unmatched transaction ${index + 1}: $${agentPayout.toLocaleString()} payout`);
+      console.log(`⚠️ Unmatched transaction ${index + 1}: $${agentPayout.toLocaleString()} payout`);
     }
   });
 
-  console.log(`📊 SIMPLIFIED COMMISSION: Matched ${transactions.length - unmatchedCount} transactions to locations`);
-  console.log(`⚠️ SIMPLIFIED COMMISSION: ${unmatchedCount} transactions unmatched with $${totalUnmatchedPayout.toLocaleString()} total payout`);
+  console.log(`📊 Matched ${transactions.length - unmatchedCount} transactions to locations`);
+  console.log(`⚠️ ${unmatchedCount} transactions unmatched with $${totalUnmatchedPayout.toLocaleString()} total payout`);
 
   // If we have unmatched transactions and some successful matches, distribute proportionally
   if (totalUnmatchedPayout > 0 && locationMap.size > 0) {
     const totalMatchedPayout = Array.from(locationMap.values()).reduce((sum, data) => sum + data.totalAgentPayout, 0);
     
     if (totalMatchedPayout > 0) {
-      console.log(`📊 SIMPLIFIED COMMISSION: Distributing $${totalUnmatchedPayout.toLocaleString()} unmatched payout proportionally`);
+      console.log(`📊 Distributing $${totalUnmatchedPayout.toLocaleString()} unmatched payout proportionally`);
       
       locationMap.forEach((locationData, locationId) => {
         const proportion = locationData.totalAgentPayout / totalMatchedPayout;
         const additionalPayout = totalUnmatchedPayout * proportion;
         locationData.totalAgentPayout += additionalPayout;
         
-        // Estimate volume based on existing ratio if we have volume data
-        if (locationData.totalVolume > 0) {
-          const volumeRatio = locationData.totalVolume / (locationData.totalAgentPayout - additionalPayout);
-          locationData.totalVolume += additionalPayout * volumeRatio;
-        }
-        
-        console.log(`📊 SIMPLIFIED COMMISSION: Added $${additionalPayout.toLocaleString()} to location ${locationId}`);
+        console.log(`📊 Added $${additionalPayout.toLocaleString()} to location ${locationId}`);
       });
     }
   }
@@ -171,35 +166,39 @@ export const calculateLocationCommissions = (
 
     const locationAssignments = assignments.filter(a => a.location_id === locationId && a.is_active);
     
-    console.log(`💼 SIMPLIFIED COMMISSION: Processing location: ${location.name}`);
-    console.log(`💼 SIMPLIFIED COMMISSION: - Total Volume: $${locationData.totalVolume.toLocaleString()}`);
-    console.log(`💼 SIMPLIFIED COMMISSION: - Total Agent Payout: $${locationData.totalAgentPayout.toLocaleString()}`);
-    console.log(`💼 SIMPLIFIED COMMISSION: - Assigned Agents: ${locationAssignments.map(a => a.agent_name).join(', ')}`);
+    console.log(`💼 Processing location: ${location.name}`);
+    console.log(`💼 - Recorded Volume: $${locationData.totalVolume.toLocaleString()}`);
+    console.log(`💼 - Total Agent Payout: $${locationData.totalAgentPayout.toLocaleString()}`);
+    console.log(`💼 - Assigned Agents: ${locationAssignments.map(a => a.agent_name).join(', ')}`);
 
     const otherAgents = locationAssignments.filter(a => a.agent_name !== 'Merchant Hero');
     const merchantHeroAssignment = locationAssignments.find(a => a.agent_name === 'Merchant Hero');
     
     let totalCommissionsPaid = 0;
+    let derivedVolume = locationData.totalVolume;
+    
+    // If we have no recorded volume but have payouts, derive volume from the highest commission rate
+    if (derivedVolume === 0 && locationData.totalAgentPayout > 0) {
+      if (otherAgents.length > 0) {
+        // Find the highest commission rate among other agents
+        const highestRate = Math.max(...otherAgents.map(a => a.commission_rate));
+        derivedVolume = locationData.totalAgentPayout / (highestRate / 100);
+        console.log(`🔍 Derived volume from highest rate (${highestRate}%): $${derivedVolume.toLocaleString()}`);
+      } else if (merchantHeroAssignment) {
+        // If only Merchant Hero, assume a reasonable rate (e.g., 10%)
+        derivedVolume = locationData.totalAgentPayout / 0.10;
+        console.log(`🔍 Derived volume assuming 10% rate: $${derivedVolume.toLocaleString()}`);
+      }
+    }
     
     // Calculate payouts for other agents based on their commission rates
     otherAgents.forEach(assignment => {
       const bpsDecimal = assignment.commission_rate / 100;
-      
-      // Calculate agent payout based on volume if available, otherwise proportional to their rate
-      let agentPayout = 0;
-      if (locationData.totalVolume > 0) {
-        agentPayout = locationData.totalVolume * bpsDecimal;
-      } else {
-        // If no volume, distribute based on commission rates
-        const totalBPS = locationAssignments.reduce((sum, a) => sum + (a.commission_rate / 100), 0);
-        if (totalBPS > 0) {
-          agentPayout = locationData.totalAgentPayout * (bpsDecimal / totalBPS);
-        }
-      }
+      const agentPayout = derivedVolume * bpsDecimal;
       
       totalCommissionsPaid += agentPayout;
       
-      console.log(`💰 SIMPLIFIED COMMISSION: ${assignment.agent_name} → ${Math.round(assignment.commission_rate * 100)} BPS → $${agentPayout.toLocaleString()}`);
+      console.log(`💰 ${assignment.agent_name} → ${Math.round(assignment.commission_rate * 100)} BPS → $${agentPayout.toLocaleString()}`);
 
       commissions.push({
         locationId: location.id,
@@ -207,29 +206,29 @@ export const calculateLocationCommissions = (
         agentName: assignment.agent_name,
         bpsRate: Math.round(assignment.commission_rate * 100),
         decimalRate: bpsDecimal,
-        locationVolume: locationData.totalVolume,
+        locationVolume: derivedVolume,
         netAgentPayout: locationData.totalAgentPayout,
         agentPayout,
         merchantHeroPayout: 0
       });
     });
 
-    // Calculate Merchant Hero's earnings (remainder)
+    // Calculate Merchant Hero's earnings (remainder from actual payouts)
     if (merchantHeroAssignment) {
       const merchantHeroPayout = Math.max(0, locationData.totalAgentPayout - totalCommissionsPaid);
-      const merchantHeroBPS = locationData.totalVolume > 0 
-        ? Math.round((merchantHeroPayout / locationData.totalVolume) * 10000)
+      const merchantHeroBPS = derivedVolume > 0 
+        ? Math.round((merchantHeroPayout / derivedVolume) * 10000)
         : 0;
       
-      console.log(`💰 SIMPLIFIED COMMISSION: Merchant Hero → ${merchantHeroBPS} BPS → $${merchantHeroPayout.toLocaleString()}`);
+      console.log(`💰 Merchant Hero → ${merchantHeroBPS} BPS → $${merchantHeroPayout.toLocaleString()}`);
 
       commissions.push({
         locationId: location.id,
         locationName: location.name,
         agentName: merchantHeroAssignment.agent_name,
         bpsRate: merchantHeroBPS,
-        decimalRate: locationData.totalVolume > 0 ? merchantHeroPayout / locationData.totalVolume : 0,
-        locationVolume: locationData.totalVolume,
+        decimalRate: derivedVolume > 0 ? merchantHeroPayout / derivedVolume : 0,
+        locationVolume: derivedVolume,
         netAgentPayout: locationData.totalAgentPayout,
         agentPayout: 0,
         merchantHeroPayout
@@ -237,8 +236,8 @@ export const calculateLocationCommissions = (
     }
   });
 
-  console.log('🎯 === SIMPLIFIED COMMISSION CALC END ===');
-  console.log(`🎉 SIMPLIFIED COMMISSION: Generated ${commissions.length} commission records`);
+  console.log('🎯 === COMMISSION CALC WITH VOLUME DERIVATION END ===');
+  console.log(`🎉 Generated ${commissions.length} commission records`);
   
   return commissions;
 };
