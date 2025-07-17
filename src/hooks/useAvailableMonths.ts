@@ -12,13 +12,16 @@ export const useAvailableMonths = () => {
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('transaction_date')
-        .not('transaction_date', 'is', null);
+        .not('transaction_date', 'is', null)
+        .order('transaction_date', { ascending: false });
 
       if (error) {
         console.error('❌ Error fetching transactions for months:', error);
         throw error;
       }
 
+      console.log('📊 Raw transaction dates from DB:', transactions?.slice(0, 5));
+      
       const months = getAvailableMonths(transactions || []);
       console.log('📅 Available months found:', months);
       

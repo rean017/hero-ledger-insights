@@ -68,7 +68,7 @@ const PLReports = () => {
 
   const dateRange = getDateRange(selectedPeriod);
 
-  // Data-driven 12-month trailing history query
+  // Data-driven 12-month trailing history query - FIXED MONTH GROUPING
   const { data: trailingHistory, isLoading: historyLoading } = useQuery({
     queryKey: ['12-month-trailing-history-overview', availableMonths],
     queryFn: async () => {
@@ -82,7 +82,9 @@ const PLReports = () => {
 
       const { data: transactions, error } = await supabase
         .from('transactions')
-        .select('volume, debit_volume, agent_name, account_id, transaction_date, agent_payout');
+        .select('volume, debit_volume, agent_name, account_id, transaction_date, agent_payout')
+        .not('transaction_date', 'is', null)
+        .order('transaction_date', { ascending: false });
 
       if (error) throw error;
 
@@ -104,15 +106,44 @@ const PLReports = () => {
 
       if (locationError) throw locationError;
 
-      // Group transactions by month
+      // Group transactions by month using corrected date parsing
       const monthlyData = transactions?.reduce((acc, transaction) => {
-        const monthKey = format(new Date(transaction.transaction_date), 'yyyy-MM');
-        if (!acc[monthKey]) {
-          acc[monthKey] = [];
+        try {
+          let dateObj: Date;
+          if (typeof transaction.transaction_date === 'string') {
+            if (transaction.transaction_date.includes('T')) {
+              dateObj = new Date(transaction.transaction_date);
+            } else {
+              dateObj = new Date(transaction.transaction_date + 'T00:00:00.000Z');
+            }
+          } else {
+            dateObj = new Date(transaction.transaction_date);
+          }
+          
+          const monthKey = format(dateObj, 'yyyy-MM');
+          if (!acc[monthKey]) {
+            acc[monthKey] = [];
+          }
+          acc[monthKey].push(transaction);
+          
+          // Debug logging for first few transactions
+          if (Object.keys(acc).length <= 3) {
+            console.log('🔍 Transaction date processing:', {
+              original: transaction.transaction_date,
+              parsed: dateObj.toISOString(),
+              monthKey,
+              volume: transaction.volume,
+              debit_volume: transaction.debit_volume,
+              agent_payout: transaction.agent_payout
+            });
+          }
+        } catch (error) {
+          console.error('❌ Error processing transaction date:', transaction.transaction_date, error);
         }
-        acc[monthKey].push(transaction);
         return acc;
       }, {} as Record<string, any[]>);
+
+      console.log('📊 Monthly data groups:', Object.keys(monthlyData || {}));
 
       const history = [];
       for (const monthKey of trailingMonths) {
@@ -120,10 +151,21 @@ const PLReports = () => {
         const [year, month] = monthKey.split('-');
         const monthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
         
+        console.log(`📊 Processing month ${monthKey}: ${monthTransactions.length} transactions`);
+        
         if (monthTransactions.length > 0) {
           const commissions = calculateLocationCommissions(monthTransactions, assignments || [], locations || []);
-          const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
+          
+          // Calculate totals properly
+          const totalVolume = monthTransactions.reduce((sum, t) => sum + ((t.volume || 0) + (t.debit_volume || 0)), 0);
           const totalCommissions = commissions.reduce((sum, c) => sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0);
+          
+          console.log(`📊 Month ${monthKey} totals:`, {
+            totalVolume,
+            totalCommissions,
+            transactionCount: monthTransactions.length,
+            commissionCount: commissions.length
+          });
           
           history.push({
             month: format(monthDate, 'MMM yyyy'),
@@ -141,6 +183,7 @@ const PLReports = () => {
         }
       }
 
+      console.log('📊 Final history result:', history);
       return history;
     },
     enabled: availableMonths.length > 0,

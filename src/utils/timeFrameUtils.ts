@@ -123,18 +123,45 @@ export const getMonthString = (date: Date): string => {
   return format(date, 'yyyy-MM');
 };
 
-// Helper function to get available months from transaction data
+// Helper function to get available months from transaction data - FIXED DATE PARSING
 export const getAvailableMonths = (transactions: any[]): string[] => {
   const months = new Set<string>();
   
+  console.log('🗓️ Processing transactions to find available months:', transactions.length);
+  
   transactions.forEach(transaction => {
     if (transaction.transaction_date) {
-      const monthString = getMonthString(new Date(transaction.transaction_date));
-      months.add(monthString);
+      try {
+        // Handle both date string and Date object formats
+        let dateObj: Date;
+        if (typeof transaction.transaction_date === 'string') {
+          // Parse date string - handle different formats
+          if (transaction.transaction_date.includes('T')) {
+            dateObj = new Date(transaction.transaction_date);
+          } else {
+            // Handle YYYY-MM-DD format
+            dateObj = new Date(transaction.transaction_date + 'T00:00:00.000Z');
+          }
+        } else {
+          dateObj = new Date(transaction.transaction_date);
+        }
+        
+        if (!isNaN(dateObj.getTime())) {
+          const monthString = getMonthString(dateObj);
+          months.add(monthString);
+          console.log('✅ Added month:', monthString, 'from transaction date:', transaction.transaction_date);
+        } else {
+          console.warn('❌ Invalid date found:', transaction.transaction_date);
+        }
+      } catch (error) {
+        console.error('❌ Error parsing transaction date:', transaction.transaction_date, error);
+      }
     }
   });
   
-  return Array.from(months).sort().reverse(); // Sort newest first
+  const result = Array.from(months).sort().reverse(); // Sort newest first
+  console.log('📅 Final available months:', result);
+  return result;
 };
 
 // Helper function to normalize custom date ranges to match transaction format with proper validation
