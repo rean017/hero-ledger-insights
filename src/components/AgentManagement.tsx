@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
 import { getDynamicTimeFrames, getDateRangeForTimeFrame } from "@/utils/timeFrameUtils";
+import { useAvailableMonths } from "@/hooks/useAvailableMonths";
 
 const AgentManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -23,13 +24,34 @@ const AgentManagement = () => {
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [agentNotes, setAgentNotes] = useState("");
   
-  // Get dynamic time frames and set default to current month
-  const timeFrames = getDynamicTimeFrames();
-  const [timeFrame, setTimeFrame] = useState(timeFrames[2].value); // Current month (3rd option)
-  
   const { toast } = useToast();
+  
+  // Get available months from database
+  const { data: availableMonths = [] } = useAvailableMonths();
+  
+  // Set default timeframe to most recent month
+  const [timeFrame, setTimeFrame] = useState(() => {
+    return availableMonths.length > 0 ? availableMonths[0] : new Date().toISOString().slice(0, 7);
+  });
 
   const dateRange = getDateRangeForTimeFrame(timeFrame);
+
+  // Generate time frames based on available data
+  const { data: timeFrames = [] } = useQuery({
+    queryKey: ['timeframes', availableMonths],
+    queryFn: async () => {
+      if (availableMonths.length === 0) return [];
+      return await getDynamicTimeFrames(availableMonths);
+    },
+    enabled: availableMonths.length > 0
+  });
+
+  // Update timeFrame when available months change
+  useState(() => {
+    if (availableMonths.length > 0 && !timeFrame) {
+      setTimeFrame(availableMonths[0]);
+    }
+  });
 
   // Fetch transactions
   const { data: transactions = [] } = useQuery({
@@ -361,22 +383,24 @@ const AgentManagement = () => {
               className="pl-10"
             />
           </div>
-          <ToggleGroup 
-            type="single" 
-            value={timeFrame} 
-            onValueChange={setTimeFrame} 
-            className="grid grid-cols-2 lg:grid-cols-4 bg-muted rounded-lg p-1 w-full sm:w-auto"
-          >
-            {timeFrames.map((frame) => (
-              <ToggleGroupItem 
-                key={frame.value}
-                value={frame.value} 
-                className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
-              >
-                {frame.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          {timeFrames.length > 0 && (
+            <ToggleGroup 
+              type="single" 
+              value={timeFrame} 
+              onValueChange={setTimeFrame} 
+              className="grid grid-cols-2 lg:grid-cols-4 bg-muted rounded-lg p-1 w-full sm:w-auto"
+            >
+              {timeFrames.map((frame) => (
+                <ToggleGroupItem 
+                  key={frame.value}
+                  value={frame.value} 
+                  className="px-3 py-2 text-xs lg:text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                >
+                  {frame.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          )}
         </div>
       </div>
 
