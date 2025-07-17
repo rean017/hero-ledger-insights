@@ -7,46 +7,33 @@ import { MapPin, DollarSign, TrendingUp, Calculator } from "lucide-react";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useEffect } from "react";
-import { getDynamicTimeFrames, getDefaultTimeFrame } from "@/utils/timeFrameUtils";
+import { useState } from "react";
 
 const LocationCommissionReport = () => {
-  const [timeFrame, setTimeFrame] = useState<string>("");
-  const [timeFrames, setTimeFrames] = useState<Array<{value: string, label: string}>>([]);
-
-  // Initialize with smart timeframe detection
-  useEffect(() => {
-    const initializeTimeFrames = async () => {
-      const [dynamicFrames, defaultFrame] = await Promise.all([
-        getDynamicTimeFrames(),
-        getDefaultTimeFrame()
-      ]);
-      
-      const frameOptions = dynamicFrames.map(tf => ({
-        value: tf.value,
-        label: tf.label
-      }));
-      
-      setTimeFrames(frameOptions);
-      setTimeFrame(defaultFrame);
-      
-      console.log('🎯 COMMISSION REPORT: Initialized with timeframe:', defaultFrame);
-      console.log('🎯 COMMISSION REPORT: Available timeframes:', frameOptions);
-    };
-    
-    initializeTimeFrames();
-  }, []);
+  // Changed default to march since that's where the data is
+  const [timeFrame, setTimeFrame] = useState("march");
 
   const getDateRangeForTimeFrame = (frame: string) => {
-    const ranges: Record<string, { from: Date; to: Date }> = {
-      "2025-03": { from: new Date("2025-03-01"), to: new Date("2025-03-31") },
-      "2025-04": { from: new Date("2025-04-01"), to: new Date("2025-04-30") },
-      "2025-05": { from: new Date("2025-05-01"), to: new Date("2025-05-31") },
-      "2025-06": { from: new Date("2025-06-01"), to: new Date("2025-06-30") }
-    };
-    
-    return ranges[frame] || ranges["2025-04"];
+    switch (frame) {
+      case "march":
+        return { from: new Date("2025-03-01"), to: new Date("2025-03-31") };
+      case "april":
+        return { from: new Date("2025-04-01"), to: new Date("2025-04-30") };
+      case "may":
+        return { from: new Date("2025-05-01"), to: new Date("2025-05-31") };
+      case "june":
+        return { from: new Date("2025-06-01"), to: new Date("2025-06-30") };
+      default:
+        return { from: new Date("2025-03-01"), to: new Date("2025-03-31") };
+    }
   };
+
+  const timeFrames = [
+    { value: "march", label: "March" },
+    { value: "april", label: "April" },
+    { value: "may", label: "May" },
+    { value: "june", label: "June" }
+  ];
 
   const dateRange = getDateRangeForTimeFrame(timeFrame);
 
@@ -54,8 +41,6 @@ const LocationCommissionReport = () => {
   const { data: transactions = [] } = useQuery({
     queryKey: ['transactions', timeFrame],
     queryFn: async () => {
-      if (!timeFrame) return [];
-      
       console.log('🔄 LocationCommissionReport: Fetching transactions for', timeFrame);
       const fromFormatted = dateRange.from.toISOString().split('T')[0];
       const toFormatted = dateRange.to.toISOString().split('T')[0];
@@ -70,8 +55,7 @@ const LocationCommissionReport = () => {
       
       console.log('📊 LocationCommissionReport: Transactions fetched for', timeFrame, ':', data?.length || 0);
       return data;
-    },
-    enabled: !!timeFrame
+    }
   });
 
   // Fetch assignments
@@ -116,26 +100,12 @@ const LocationCommissionReport = () => {
   const totalVolume = commissions.reduce((sum, c) => sum + c.locationVolume, 0);
   const totalNetPayout = commissions.reduce((sum, c) => sum + c.netAgentPayout, 0);
 
-  // Don't render until timeframes are loaded
-  if (!timeFrame || timeFrames.length === 0) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-center h-32">
-          <p className="text-muted-foreground">Loading smart timeframe detection...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Commission Reports</h2>
-          <p className="text-muted-foreground">
-            Detailed commission breakdown by location and agent
-            {timeFrame && ` - ${timeFrames.find(tf => tf.value === timeFrame)?.label}`}
-          </p>
+          <p className="text-muted-foreground">Detailed commission breakdown by location and agent</p>
         </div>
         <ToggleGroup 
           type="single" 

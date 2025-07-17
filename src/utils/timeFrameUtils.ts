@@ -10,122 +10,43 @@ export interface TimeFrameOption {
   } | null;
 }
 
-// Helper function to detect the most recent upload month from transaction data
-export const detectUploadMonth = async () => {
-  const { supabase } = await import("@/integrations/supabase/client");
+export const getDynamicTimeFrames = (): TimeFrameOption[] => {
+  // Fixed to show March 2025 first since that's where the data is
+  const march2025 = new Date("2025-03-01");
+  const april2025 = new Date("2025-04-01");
+  const may2025 = new Date("2025-05-01");
+  const june2025 = new Date("2025-06-01");
   
-  try {
-    // Get the most recent transaction date to determine which month has data
-    const { data: recentTransaction } = await supabase
-      .from('transactions')
-      .select('transaction_date')
-      .order('transaction_date', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (recentTransaction?.transaction_date) {
-      const date = new Date(recentTransaction.transaction_date);
-      const monthKey = format(date, 'yyyy-MM');
-      console.log('🎯 SMART DATE DETECTION: Most recent transaction date:', recentTransaction.transaction_date);
-      console.log('🎯 SMART DATE DETECTION: Detected month:', monthKey);
-      return monthKey;
-    }
-  } catch (error) {
-    console.error('Error detecting upload month:', error);
-  }
+  console.log('🗓️ Dynamic timeframes being generated for March 2025 data');
   
-  return null;
-};
-
-export const getDynamicTimeFrames = async (): Promise<TimeFrameOption[]> => {
-  const detectedMonth = await detectUploadMonth();
-  
-  console.log('🗓️ SMART TIMEFRAMES: Auto-detected upload month:', detectedMonth);
-  
-  // If we detected a month, prioritize it and show surrounding months
-  if (detectedMonth) {
-    const [year, month] = detectedMonth.split('-').map(Number);
-    const detectedDate = new Date(year, month - 1, 1);
-    
-    // Create timeframes around the detected month
-    const timeframes = [];
-    
-    // Add previous month
-    const prevMonth = new Date(year, month - 2, 1);
-    timeframes.push({
-      value: format(prevMonth, 'yyyy-MM'),
-      label: format(prevMonth, 'MMM yyyy'),
-      dateRange: {
-        from: startOfMonth(prevMonth),
-        to: endOfMonth(prevMonth)
-      }
-    });
-    
-    // Add detected month (current data)
-    timeframes.push({
-      value: detectedMonth,
-      label: `${format(detectedDate, 'MMM yyyy')} (Current Data)`,
-      dateRange: {
-        from: startOfMonth(detectedDate),
-        to: endOfMonth(detectedDate)
-      }
-    });
-    
-    // Add next month
-    const nextMonth = new Date(year, month, 1);
-    timeframes.push({
-      value: format(nextMonth, 'yyyy-MM'),
-      label: format(nextMonth, 'MMM yyyy'),
-      dateRange: {
-        from: startOfMonth(nextMonth),
-        to: endOfMonth(nextMonth)
-      }
-    });
-    
-    // Add one more future month
-    const futureMonth = new Date(year, month + 1, 1);
-    timeframes.push({
-      value: format(futureMonth, 'yyyy-MM'),
-      label: format(futureMonth, 'MMM yyyy'),
-      dateRange: {
-        from: startOfMonth(futureMonth),
-        to: endOfMonth(futureMonth)
-      }
-    });
-    
-    console.log('🎯 SMART TIMEFRAMES: Generated dynamic timeframes:', timeframes);
-    return timeframes;
-  }
-  
-  // Fallback to static timeframes if no data detected
   return [
     {
-      value: "2025-03",
-      label: "March 2025",
+      value: "march",
+      label: "March",
       dateRange: {
         from: new Date("2025-03-01T00:00:00.000Z"),
         to: new Date("2025-03-31T23:59:59.999Z")
       }
     },
     {
-      value: "2025-04",
-      label: "April 2025",
+      value: "april",
+      label: "April",
       dateRange: {
         from: new Date("2025-04-01T00:00:00.000Z"),
         to: new Date("2025-04-30T23:59:59.999Z")
       }
     },
     {
-      value: "2025-05",
-      label: "May 2025",
+      value: "may",
+      label: "May",
       dateRange: {
         from: new Date("2025-05-01T00:00:00.000Z"),
         to: new Date("2025-05-31T23:59:59.999Z")
       }
     },
     {
-      value: "2025-06",
-      label: "June 2025",
+      value: "june",
+      label: "June",
       dateRange: {
         from: new Date("2025-06-01T00:00:00.000Z"),
         to: new Date("2025-06-30T23:59:59.999Z")
@@ -134,10 +55,10 @@ export const getDynamicTimeFrames = async (): Promise<TimeFrameOption[]> => {
   ];
 };
 
-export const getDateRangeForTimeFrame = async (timeFrame: string): Promise<{ from: Date; to: Date } | null> => {
+export const getDateRangeForTimeFrame = (timeFrame: string): { from: Date; to: Date } | null => {
   console.log('🎯 Getting date range for timeframe:', timeFrame);
   
-  const timeFrames = await getDynamicTimeFrames();
+  const timeFrames = getDynamicTimeFrames();
   const selectedFrame = timeFrames.find(frame => frame.value === timeFrame);
   
   console.log('📅 Available timeframes:', timeFrames.map(tf => ({ value: tf.value, label: tf.label })));
@@ -153,19 +74,6 @@ export const getDateRangeForTimeFrame = async (timeFrame: string): Promise<{ fro
   }
   
   return selectedFrame?.dateRange || null;
-};
-
-// Helper function to get the default timeframe (should be the detected upload month)
-export const getDefaultTimeFrame = async (): Promise<string> => {
-  const detectedMonth = await detectUploadMonth();
-  if (detectedMonth) {
-    console.log('🎯 DEFAULT TIMEFRAME: Using detected month:', detectedMonth);
-    return detectedMonth;
-  }
-  
-  // Fallback to April 2025 if no data detected
-  console.log('🎯 DEFAULT TIMEFRAME: Using fallback (April 2025)');
-  return "2025-04";
 };
 
 // Helper function to ensure consistent date formatting for database queries
