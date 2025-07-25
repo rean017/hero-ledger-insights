@@ -41,11 +41,8 @@ const FileUpload = () => {
   const processors = [
     { value: 'TRNXN', label: 'TRNXN' },
     { value: 'Maverick', label: 'Maverick' },
-    { value: 'SignaPay', label: 'SignaPay' },
-    { value: 'Green Payments', label: 'Green Payments' },
-    { value: 'NUVEI', label: 'NUVEI' },
-    { value: 'PAYSAFE', label: 'PAYSAFE' },
-    { value: 'Generic', label: 'Generic' }
+    { value: 'Signa Pay', label: 'Signa Pay' },
+    { value: 'Green Payments', label: 'Green Payments' }
   ];
 
   // Enhanced field detection for volume

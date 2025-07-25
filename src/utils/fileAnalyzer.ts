@@ -130,9 +130,9 @@ const calculateConfidence = (columns: string[], processor: string): number => {
   
   const processorPatterns = {
     'TRNXN': ['dba name', 'bank card volume', 'debit card volume', 'agent payout'],
-    'NUVEI': ['merchant name', 'total volume', 'commission'],
-    'PAYSAFE': ['account name', 'processing volume', 'fees'],
-    'Generic': ['volume', 'amount', 'total']
+    'Maverick': ['merchant name', 'total volume', 'commission'],
+    'Signa Pay': ['account name', 'processing volume', 'fees'],
+    'Green Payments': ['business name', 'transaction volume', 'payout']
   };
   
   const patterns = processorPatterns[processor as keyof typeof processorPatterns] || [];

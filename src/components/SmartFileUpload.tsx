@@ -287,9 +287,9 @@ const SmartFileUpload = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="TRNXN">TRNXN</SelectItem>
-                      <SelectItem value="NUVEI">NUVEI</SelectItem>
-                      <SelectItem value="PAYSAFE">PAYSAFE</SelectItem>
-                      <SelectItem value="Generic">Generic</SelectItem>
+                      <SelectItem value="Maverick">Maverick</SelectItem>
+                      <SelectItem value="Signa Pay">Signa Pay</SelectItem>
+                      <SelectItem value="Green Payments">Green Payments</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
