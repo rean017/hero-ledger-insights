@@ -170,8 +170,8 @@ const AuthPage = () => {
         console.warn('Cleanup signout failed:', err);
       }
 
-      const adminEmail = 'admin@example.com';
-      const adminPassword = 'admin123';
+      const adminEmail = 'test@test.com';
+      const adminPassword = 'test123';
 
       // Try to sign in first
       let { data, error } = await supabase.auth.signInWithPassword({
