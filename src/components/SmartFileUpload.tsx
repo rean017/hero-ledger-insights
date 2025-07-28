@@ -321,16 +321,22 @@ const SmartFileUpload = () => {
               // Map the row data to transaction format based on processor
               let transactionData: any = {};
               
+              // Find any field containing "volume" and sum them up
+              const volumeFields = Object.keys(row).filter(key => 
+                key.toLowerCase().includes('volume')
+              );
+              
+              const totalVolume = volumeFields.reduce((sum, field) => {
+                const value = parseFloat(row[field]?.toString().replace(/[,$]/g, '') || '0') || 0;
+                return sum + value;
+              }, 0);
+              
               if (selectedProcessor === 'TRNXN') {
-                const bankcardVolume = parseFloat(row['Bankcard Volume']?.replace(/[,$]/g, '') || '0') || 0;
-                const debitVolume = parseFloat(row['Debit Volume']?.replace(/[,$]/g, '') || '0') || 0;
-                const totalVolume = bankcardVolume + debitVolume;
-                
                 transactionData = {
                   processor: selectedProcessor,
                   transaction_date: new Date(selectedMonth + '-01'),
                   volume: totalVolume,
-                  debit_volume: 0, // Not using debit_volume field as per user request
+                  debit_volume: 0,
                   agent_payout: parseFloat(row['Commission']?.replace(/[,$]/g, '') || '0') || 0,
                   agent_name: row['Partner'] || 'Unknown',
                   account_id: row['MID'] || null,
@@ -341,8 +347,8 @@ const SmartFileUpload = () => {
                 transactionData = {
                   processor: selectedProcessor,
                   transaction_date: new Date(selectedMonth + '-01'),
-                  volume: parseFloat(Object.values(row)[0]?.toString().replace(/[,$]/g, '') || '0') || 0,
-                  debit_volume: parseFloat(Object.values(row)[1]?.toString().replace(/[,$]/g, '') || '0') || 0,
+                  volume: totalVolume,
+                  debit_volume: 0,
                   agent_payout: parseFloat(Object.values(row)[2]?.toString().replace(/[,$]/g, '') || '0') || 0,
                   agent_name: Object.values(row)[3]?.toString() || 'Unknown',
                   account_id: Object.values(row)[4]?.toString() || null,
