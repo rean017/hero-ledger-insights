@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { analyzeFile, FileAnalysisResult } from "@/utils/fileAnalyzer";
 import { format } from "date-fns";
 import { useAvailableMonths } from "@/hooks/useAvailableMonths";
+import { supabase } from "@/integrations/supabase/client";
 
 const SmartFileUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -79,14 +80,41 @@ const SmartFileUpload = () => {
     setUploadResult(null);
 
     try {
-      // Simulate upload progress
+      // Start upload progress simulation
       const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 10, 90));
+        setUploadProgress(prev => Math.min(prev + 10, 80));
       }, 200);
 
-      // Here you would implement the actual file upload logic
-      // For now, we'll simulate the upload
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Create file upload record
+      const { data: uploadRecord, error: uploadError } = await supabase
+        .from('file_uploads')
+        .insert({
+          filename: selectedFile.name,
+          processor: selectedProcessor,
+          status: 'processing'
+        })
+        .select()
+        .single();
+
+      if (uploadError) {
+        throw new Error(`Failed to create upload record: ${uploadError.message}`);
+      }
+
+      // Simulate file processing
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Update upload record as completed
+      const { error: updateError } = await supabase
+        .from('file_uploads')
+        .update({
+          status: 'completed',
+          rows_processed: analysis?.rowCount || 0
+        })
+        .eq('id', uploadRecord.id);
+
+      if (updateError) {
+        console.warn('Failed to update upload status:', updateError);
+      }
       
       clearInterval(progressInterval);
       setUploadProgress(100);
