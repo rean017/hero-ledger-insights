@@ -155,6 +155,10 @@ const AuthPage = () => {
     setLoading(true);
     setError('');
 
+    // Clear any existing form validation errors
+    setEmail('');
+    setPassword('');
+
     try {
       // Clean up existing auth state
       cleanupAuthState();
@@ -166,7 +170,7 @@ const AuthPage = () => {
         console.warn('Cleanup signout failed:', err);
       }
 
-      const adminEmail = 'admin@test.com';
+      const adminEmail = 'admin@example.com';
       const adminPassword = 'admin123';
 
       // Try to sign in first
