@@ -325,11 +325,11 @@ const SmartFileUpload = () => {
                 transactionData = {
                   processor: selectedProcessor,
                   transaction_date: new Date(selectedMonth + '-01'),
-                  volume: parseFloat(row['Total Volume']?.replace(/[,$]/g, '') || '0') || 0,
+                  volume: parseFloat(row['Bankcard Volume']?.replace(/[,$]/g, '') || '0') || 0,
                   debit_volume: parseFloat(row['Debit Volume']?.replace(/[,$]/g, '') || '0') || 0,
-                  agent_payout: parseFloat(row['Agent Payout']?.replace(/[,$]/g, '') || '0') || 0,
-                  agent_name: row['Agent Name'] || 'Unknown',
-                  account_id: row['Account ID'] || row['Merchant ID'] || null,
+                  agent_payout: parseFloat(row['Commission']?.replace(/[,$]/g, '') || '0') || 0,
+                  agent_name: row['Partner'] || 'Unknown',
+                  account_id: row['MID'] || null,
                   raw_data: row
                 };
               } else {
