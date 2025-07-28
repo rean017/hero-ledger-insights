@@ -11,16 +11,11 @@ import PLReports from "./components/PLReports";
 import UploadManagement from "./components/UploadManagement";
 import LocationCommissionReport from "./components/LocationCommissionReport";
 import Settings from "./components/Settings";
-import AuthPage from "./components/AuthPage";
-import { useAuth } from "./hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { LogOut, Shield } from "lucide-react";
 
 const queryClient = new QueryClient();
 
 function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const { user, profile, loading, signOut, isAuthenticated } = useAuth();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -45,56 +40,20 @@ function App() {
     }
   };
 
-  // Show loading screen while checking auth
-  if (loading) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <div className="flex h-screen bg-background items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading...</p>
-          </div>
-        </div>
-        <Toaster />
-      </QueryClientProvider>
-    );
-  }
-
-  // Check for bypass flag
-  const bypassAuth = localStorage.getItem('bypass_auth') === 'true';
-  
-  // Show auth page if not authenticated and not bypassed
-  if (!isAuthenticated && !bypassAuth) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <AuthPage />
-        <Toaster />
-      </QueryClientProvider>
-    );
-  }
 
   return (
     <QueryClientProvider client={queryClient}>
       <div className="flex h-screen bg-background">
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
         <main className="flex-1 flex flex-col">
-          {/* Header with user info and logout */}
+          {/* Header */}
           <header className="flex items-center justify-between p-4 border-b bg-card">
             <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              <span className="font-medium">
-                Welcome, {bypassAuth ? 'Test User (Bypassed)' : (profile?.full_name || user?.email)}
-              </span>
-              {profile?.role === 'admin' && (
-                <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
-                  Admin
-                </span>
-              )}
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                <span className="text-primary-foreground font-bold text-sm">CT</span>
+              </div>
+              <span className="font-medium">Commission Tracker - Internal Tool</span>
             </div>
-            <Button variant="outline" size="sm" onClick={signOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
           </header>
           <div className="flex-1 p-6 overflow-auto">
             {renderContent()}
