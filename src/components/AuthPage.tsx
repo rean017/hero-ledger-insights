@@ -152,107 +152,7 @@ const AuthPage = () => {
   };
 
   const handleTempAdminLogin = async () => {
-    setLoading(true);
-    setError('');
-
-    // Clear any existing form validation errors
-    setEmail('');
-    setPassword('');
-
-    try {
-      // Clean up existing auth state
-      cleanupAuthState();
-      
-      // Attempt global sign out first
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        console.warn('Cleanup signout failed:', err);
-      }
-
-      const adminEmail = 'admin@gmail.com';
-      const adminPassword = 'admin123';
-
-      // Try to sign in first
-      let { data, error } = await supabase.auth.signInWithPassword({
-        email: adminEmail,
-        password: adminPassword,
-      });
-
-      // If sign in fails, create the admin account automatically
-      if (error && error.message.includes('Invalid login credentials')) {
-        console.log('Admin account not found, creating it...');
-        
-        // Create admin account with email confirmation disabled
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: adminEmail,
-          password: adminPassword,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`,
-            data: {
-              full_name: 'Admin User'
-            }
-          }
-        });
-
-        if (signUpError) {
-          throw signUpError;
-        }
-
-        // If account was created but needs confirmation, try to handle it
-        if (signUpData.user && !signUpData.user.email_confirmed_at) {
-          // Account created but not confirmed - try signing in anyway
-          // Sometimes Supabase allows login even without email confirmation in dev
-          const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
-            email: adminEmail,
-            password: adminPassword,
-          });
-          
-          if (retryError) {
-            // If still can't sign in, show helpful message
-            toast({
-              title: "Admin account created",
-              description: "Please check Supabase settings to disable email confirmation or confirm the email.",
-              variant: "destructive"
-            });
-            setError('Admin account created but email confirmation is required. Please disable email confirmation in Supabase Auth settings.');
-            return;
-          }
-          
-          data = retryData;
-        } else {
-          data = signUpData;
-        }
-
-        // Set user as admin after successful creation
-        if (data.user) {
-          try {
-            await supabase.rpc('set_user_admin', { user_email: adminEmail });
-          } catch (rpcError) {
-            console.warn('Could not set admin role immediately:', rpcError);
-          }
-        }
-      } else if (error) {
-        throw error;
-      }
-
-      if (data.user) {
-        toast({
-          title: "Admin access granted",
-          description: "Signed in successfully with admin privileges.",
-        });
-        window.location.href = '/';
-      }
-    } catch (error: any) {
-      console.error('Admin login error:', error);
-      if (error.message?.includes('Email not confirmed')) {
-        setError('Please disable email confirmation in Supabase Auth settings for quick admin access.');
-      } else {
-        setError(`Error: ${error.message || 'Failed to create admin access. Please check Supabase configuration.'}`);
-      }
-    } finally {
-      setLoading(false);
-    }
+    // Removed - use regular sign up instead
   };
 
   return (
@@ -385,22 +285,6 @@ const AuthPage = () => {
               </form>
             </TabsContent>
           </Tabs>
-          
-          {/* Temporary Admin Login Button */}
-          <div className="mt-6 pt-4 border-t border-border">
-            <Button 
-              variant="outline" 
-              className="w-full" 
-              onClick={handleTempAdminLogin}
-              disabled={loading}
-            >
-              <Shield className="h-4 w-4 mr-2" />
-              {loading ? 'Signing In...' : 'Quick Admin Login (Temp)'}
-            </Button>
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              For testing only - will be removed
-            </p>
-          </div>
         </CardContent>
       </Card>
     </div>
