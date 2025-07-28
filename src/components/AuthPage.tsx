@@ -152,27 +152,8 @@ const AuthPage = () => {
   };
 
   const handleBypassLogin = () => {
-    // Set fake auth state to bypass useAuth checks
-    const fakeSession = {
-      access_token: 'fake-token',
-      refresh_token: 'fake-refresh',
-      expires_in: 3600,
-      token_type: 'bearer',
-      user: {
-        id: 'fake-user-id',
-        email: 'test@bypass.com',
-        email_confirmed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        app_metadata: {},
-        user_metadata: { full_name: 'Test User' }
-      }
-    };
-    
-    // Store fake session in localStorage to trick useAuth
-    localStorage.setItem('supabase.auth.token', JSON.stringify(fakeSession));
-    
-    // Redirect to dashboard
+    // Store bypass flag and redirect
+    localStorage.setItem('bypass_auth', 'true');
     window.location.href = '/dashboard';
   };
 

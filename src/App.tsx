@@ -60,8 +60,11 @@ function App() {
     );
   }
 
-  // Show auth page if not authenticated
-  if (!isAuthenticated) {
+  // Check for bypass flag
+  const bypassAuth = localStorage.getItem('bypass_auth') === 'true';
+  
+  // Show auth page if not authenticated and not bypassed
+  if (!isAuthenticated && !bypassAuth) {
     return (
       <QueryClientProvider client={queryClient}>
         <AuthPage />
@@ -80,7 +83,7 @@ function App() {
             <div className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
               <span className="font-medium">
-                Welcome, {profile?.full_name || user?.email}
+                Welcome, {bypassAuth ? 'Test User (Bypassed)' : (profile?.full_name || user?.email)}
               </span>
               {profile?.role === 'admin' && (
                 <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
