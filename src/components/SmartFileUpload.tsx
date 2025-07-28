@@ -14,6 +14,7 @@ import { useAvailableMonths } from "@/hooks/useAvailableMonths";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Papa from 'papaparse';
 
 const SmartFileUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -296,34 +297,125 @@ const SmartFileUpload = () => {
         throw new Error(`Failed to create upload record: ${uploadError.message}`);
       }
 
-      // Simulate file processing
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Update upload record as completed
-      const { error: updateError } = await supabase
-        .from('file_uploads')
-        .update({
-          status: 'completed',
-          rows_processed: analysis?.rowCount || 0
-        })
-        .eq('id', uploadRecord.id);
+      // Process the actual CSV file
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const csvContent = e.target?.result as string;
+          const result = Papa.parse(csvContent, {
+            header: true,
+            skipEmptyLines: true,
+            transformHeader: (header) => header.trim()
+          });
+          
+          const rows = result.data as any[];
+          console.log(`📊 SMART UPLOAD: Processing ${rows.length} rows`);
+          
+          const processedTransactions = [];
+          const errors = [];
+          
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            
+            try {
+              // Map the row data to transaction format based on processor
+              let transactionData: any = {};
+              
+              if (selectedProcessor === 'TRNXN') {
+                transactionData = {
+                  processor: selectedProcessor,
+                  transaction_date: new Date(selectedMonth + '-01'),
+                  volume: parseFloat(row['Total Volume']?.replace(/[,$]/g, '') || '0') || 0,
+                  debit_volume: parseFloat(row['Debit Volume']?.replace(/[,$]/g, '') || '0') || 0,
+                  agent_payout: parseFloat(row['Agent Payout']?.replace(/[,$]/g, '') || '0') || 0,
+                  agent_name: row['Agent Name'] || 'Unknown',
+                  account_id: row['Account ID'] || row['Merchant ID'] || null,
+                  raw_data: row
+                };
+              } else {
+                // Generic mapping for other processors
+                transactionData = {
+                  processor: selectedProcessor,
+                  transaction_date: new Date(selectedMonth + '-01'),
+                  volume: parseFloat(Object.values(row)[0]?.toString().replace(/[,$]/g, '') || '0') || 0,
+                  debit_volume: parseFloat(Object.values(row)[1]?.toString().replace(/[,$]/g, '') || '0') || 0,
+                  agent_payout: parseFloat(Object.values(row)[2]?.toString().replace(/[,$]/g, '') || '0') || 0,
+                  agent_name: Object.values(row)[3]?.toString() || 'Unknown',
+                  account_id: Object.values(row)[4]?.toString() || null,
+                  raw_data: row
+                };
+              }
+              
+              const { error: transactionError } = await supabase
+                .from('transactions')
+                .insert(transactionData);
+              
+              if (transactionError) {
+                console.error('❌ Transaction insert error:', transactionError);
+                errors.push(`Row ${i + 1}: ${transactionError.message}`);
+                continue;
+              }
+              
+              processedTransactions.push(transactionData);
+              
+            } catch (error: any) {
+              console.error(`❌ Error processing row ${i + 1}:`, error);
+              errors.push(`Row ${i + 1}: ${error.message}`);
+            }
+          }
+          
+          // Update upload record with results
+          const { error: updateError } = await supabase
+            .from('file_uploads')
+            .update({
+              status: 'completed',
+              rows_processed: processedTransactions.length,
+              errors: errors.length > 0 ? errors : null
+            })
+            .eq('id', uploadRecord.id);
 
-      if (updateError) {
-        console.warn('Failed to update upload status:', updateError);
-      }
-      
-      clearInterval(progressInterval);
-      setUploadProgress(100);
+          if (updateError) {
+            console.warn('Failed to update upload status:', updateError);
+          }
+          
+          clearInterval(progressInterval);
+          setUploadProgress(100);
 
-      const monthLabel = format(new Date(selectedMonth + '-01'), 'MMMM yyyy');
-      const resultMessage = `File processed successfully with ${selectedProcessor} processor for ${monthLabel}`;
+          const monthLabel = format(new Date(selectedMonth + '-01'), 'MMMM yyyy');
+          const resultMessage = `Successfully processed ${processedTransactions.length} transactions for ${monthLabel}${errors.length > 0 ? ` (${errors.length} errors)` : ''}`;
+          
+          setUploadResult(resultMessage);
+          
+          toast({
+            title: "Upload Successful",
+            description: resultMessage
+          });
+
+          // Trigger real-time updates
+          queryClient.invalidateQueries({ queryKey: ['transactions'] });
+          queryClient.invalidateQueries({ queryKey: ['monthlyData'] });
+          queryClient.invalidateQueries({ queryKey: ['systemData'] });
+
+        } catch (parseError: any) {
+          console.error('❌ CSV parsing error:', parseError);
+          
+          const { error: updateError } = await supabase
+            .from('file_uploads')
+            .update({
+              status: 'failed',
+              errors: [`Failed to parse CSV: ${parseError.message}`]
+            })
+            .eq('id', uploadRecord.id);
+
+          toast({
+            title: "Upload Failed",
+            description: `Failed to parse CSV file: ${parseError.message}`,
+            variant: "destructive"
+          });
+        }
+      };
       
-      setUploadResult(resultMessage);
-      
-      toast({
-        title: "Upload Successful",
-        description: resultMessage
-      });
+      reader.readAsText(selectedFile);
 
       // Reset form
       setSelectedFile(null);
