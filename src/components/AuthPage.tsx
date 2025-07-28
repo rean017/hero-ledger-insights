@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Shield } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const AuthPage = () => {
@@ -151,6 +151,46 @@ const AuthPage = () => {
     }
   };
 
+  const handleTempAdminLogin = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      // Clean up existing auth state
+      cleanupAuthState();
+      
+      // Attempt global sign out first
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        console.warn('Cleanup signout failed:', err);
+      }
+
+      // Sign in with temp admin credentials
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: 'admin@test.com',
+        password: 'admin123',
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.user) {
+        toast({
+          title: "Admin access granted",
+          description: "Signed in as temporary admin.",
+        });
+        window.location.href = '/';
+      }
+    } catch (error: any) {
+      console.error('Admin login error:', error);
+      setError('Temp admin account not found. Please create it first.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
@@ -281,6 +321,22 @@ const AuthPage = () => {
               </form>
             </TabsContent>
           </Tabs>
+          
+          {/* Temporary Admin Login Button */}
+          <div className="mt-6 pt-4 border-t border-border">
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={handleTempAdminLogin}
+              disabled={loading}
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              {loading ? 'Signing In...' : 'Quick Admin Login (Temp)'}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              For testing only - will be removed
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
