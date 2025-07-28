@@ -12,6 +12,7 @@ import { analyzeFile, FileAnalysisResult } from "@/utils/fileAnalyzer";
 import { format } from "date-fns";
 import { useAvailableMonths } from "@/hooks/useAvailableMonths";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 const SmartFileUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -24,12 +25,93 @@ const SmartFileUpload = () => {
   const [uploadResult, setUploadResult] = useState<string | null>(null);
   const { toast } = useToast();
   const { data: availableMonths = [] } = useAvailableMonths();
+  const { isAuthenticated, isAdmin } = useAuth();
+
+  // Security constants
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
+  const ALLOWED_MIME_TYPES = [
+    'text/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/csv'
+  ];
+
+  // Security validation function
+  const validateFile = (file: File): { isValid: boolean; error?: string } => {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return { 
+        isValid: false, 
+        error: `File size exceeds limit. Maximum allowed size is ${MAX_FILE_SIZE / 1024 / 1024}MB.` 
+      };
+    }
+
+    // Check file extension
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    if (!ALLOWED_EXTENSIONS.includes(fileExtension)) {
+      return { 
+        isValid: false, 
+        error: `Invalid file type. Only ${ALLOWED_EXTENSIONS.join(', ')} files are allowed.` 
+      };
+    }
+
+    // Check MIME type
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      return { 
+        isValid: false, 
+        error: 'Invalid file format. Please upload a valid CSV or Excel file.' 
+      };
+    }
+
+    // Check filename for potential security issues
+    if (file.name.includes('../') || file.name.includes('..\\') || file.name.includes('<') || file.name.includes('>')) {
+      return { 
+        isValid: false, 
+        error: 'Invalid filename. Please rename the file and try again.' 
+      };
+    }
+
+    return { isValid: true };
+  };
+
+  // Input sanitization function
+  const sanitizeInput = (input: string): string => {
+    return input
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove script tags
+      .replace(/[<>]/g, '') // Remove angle brackets
+      .trim();
+  };
 
   const handleFileSelect = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     console.log('📁 SMART UPLOAD: File selected:', file.name);
+
+    // Security validation
+    const validation = validateFile(file);
+    if (!validation.isValid) {
+      toast({
+        title: "Invalid File",
+        description: validation.error,
+        variant: "destructive"
+      });
+      event.target.value = ''; // Clear the input
+      return;
+    }
+
+    // Check admin permissions for file uploads
+    if (!isAdmin) {
+      toast({
+        title: "Permission Denied",
+        description: "Only administrators can upload files.",
+        variant: "destructive"
+      });
+      event.target.value = '';
+      return;
+    }
+
     setSelectedFile(file);
     setIsAnalyzing(true);
     setUploadResult(null);
