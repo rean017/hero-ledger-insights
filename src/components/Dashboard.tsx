@@ -1,8 +1,9 @@
 
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, TrendingUp, Users, Building2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
@@ -10,6 +11,57 @@ import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/c
 const Dashboard = () => {
   // Changed default to march since that's where the data is
   const [timeFrame, setTimeFrame] = useState("march");
+  const queryClient = useQueryClient();
+
+  // Set up real-time subscriptions for dashboard data
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions'
+        },
+        () => {
+          // Invalidate dashboard queries when transactions change
+          queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['top-agents'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'location_agent_assignments'
+        },
+        () => {
+          // Invalidate when assignments change
+          queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['top-agents'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'locations'
+        },
+        () => {
+          // Invalidate when locations change
+          queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['top-agents'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const getDateRange = (period: string) => {
     const currentDate = new Date();

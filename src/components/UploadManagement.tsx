@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,6 +12,41 @@ import { format } from "date-fns";
 const UploadManagement = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Set up real-time subscription for file uploads
+  useEffect(() => {
+    const channel = supabase
+      .channel('upload-management-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'file_uploads'
+        },
+        () => {
+          // Refetch uploads when any changes occur
+          queryClient.invalidateQueries({ queryKey: ['file-uploads'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions'
+        },
+        () => {
+          // Refetch when transactions change (affects row counts, etc.)
+          queryClient.invalidateQueries({ queryKey: ['file-uploads'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const { data: uploads, refetch } = useQuery({
     queryKey: ['file-uploads'],

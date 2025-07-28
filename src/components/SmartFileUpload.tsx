@@ -1,18 +1,19 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Upload, FileText, Calendar, TrendingUp, AlertTriangle, CheckCircle, Info } from "lucide-react";
+import { Upload, FileText, Calendar, TrendingUp, AlertTriangle, CheckCircle, Info, Trash2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { analyzeFile, FileAnalysisResult } from "@/utils/fileAnalyzer";
 import { format } from "date-fns";
 import { useAvailableMonths } from "@/hooks/useAvailableMonths";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const SmartFileUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -26,6 +27,130 @@ const SmartFileUpload = () => {
   const { toast } = useToast();
   const { data: availableMonths = [] } = useAvailableMonths();
   const { isAuthenticated, isAdmin } = useAuth();
+  const queryClient = useQueryClient();
+  const [isClearingUploads, setIsClearingUploads] = useState(false);
+
+  // Query to fetch existing uploads for the clear functionality
+  const { data: existingUploads, refetch: refetchUploads } = useQuery({
+    queryKey: ['file-uploads'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('file_uploads')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // Set up real-time subscription for file uploads
+  useEffect(() => {
+    const channel = supabase
+      .channel('file-uploads-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'file_uploads'
+        },
+        () => {
+          // Invalidate and refetch all related queries when uploads change
+          queryClient.invalidateQueries({ queryKey: ['file-uploads'] });
+          queryClient.invalidateQueries({ queryKey: ['transactions'] });
+          queryClient.invalidateQueries({ queryKey: ['location_agent_assignments'] });
+          queryClient.invalidateQueries({ queryKey: ['locations'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['unified-locations'] });
+          queryClient.invalidateQueries({ queryKey: ['available-months'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  // Function to clear all past uploads and their data
+  const handleClearAllPastUploads = async () => {
+    if (!existingUploads || existingUploads.length === 0) {
+      toast({
+        title: "No Uploads Found",
+        description: "There are no past uploads to clear.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsClearingUploads(true);
+
+    try {
+      console.log('🗑️ Clearing all past uploads and related data...');
+
+      // Delete all transactions first (cascade delete)
+      const { error: transactionError } = await supabase
+        .from('transactions')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+
+      if (transactionError) {
+        console.error('Error deleting transactions:', transactionError);
+        throw transactionError;
+      }
+
+      // Delete all location agent assignments
+      const { error: assignmentError } = await supabase
+        .from('location_agent_assignments')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+
+      if (assignmentError) {
+        console.error('Error deleting assignments:', assignmentError);
+        throw assignmentError;
+      }
+
+      // Delete all P&L data
+      const { error: plError } = await supabase
+        .from('pl_data')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+
+      if (plError) {
+        console.error('Error deleting P&L data:', plError);
+        throw plError;
+      }
+
+      // Delete all upload records
+      const { error: uploadError } = await supabase
+        .from('file_uploads')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+
+      if (uploadError) {
+        console.error('Error deleting upload records:', uploadError);
+        throw uploadError;
+      }
+
+      toast({
+        title: "All Data Cleared Successfully",
+        description: `Deleted ${existingUploads.length} uploads and all related transaction data. The system is now ready for fresh data.`
+      });
+
+      // Invalidate all queries to refresh the entire app
+      queryClient.invalidateQueries();
+      
+    } catch (error: any) {
+      console.error('Error clearing uploads:', error);
+      toast({
+        title: "Clear Failed",
+        description: error.message || "Failed to clear past uploads",
+        variant: "destructive"
+      });
+    } finally {
+      setIsClearingUploads(false);
+    }
+  };
 
   // Security constants
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -295,6 +420,55 @@ const SmartFileUpload = () => {
             <p className="text-sm text-muted-foreground">
               Data from these months will appear in your P&L reports and analytics.
             </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Existing Uploads Management Section */}
+      {existingUploads && existingUploads.length > 0 && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <span className="font-medium text-orange-600">Past Uploads Detected</span>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Found {existingUploads.length} previous upload{existingUploads.length !== 1 ? 's' : ''}. 
+                  Clear them before uploading new data to avoid conflicts.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleClearAllPastUploads}
+                disabled={isClearingUploads || isUploading}
+                className="ml-4"
+              >
+                {isClearingUploads ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                    Clearing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear All Past Data
+                  </>
+                )}
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {existingUploads.slice(0, 5).map(upload => (
+                <Badge key={upload.id} variant="outline" className="text-xs">
+                  {upload.processor} - {upload.filename}
+                </Badge>
+              ))}
+              {existingUploads.length > 5 && (
+                <Badge variant="secondary" className="text-xs">
+                  +{existingUploads.length - 5} more
+                </Badge>
+              )}
+            </div>
           </AlertDescription>
         </Alert>
       )}
