@@ -151,8 +151,9 @@ const AuthPage = () => {
     }
   };
 
-  const handleTempAdminLogin = async () => {
-    // Removed - use regular sign up instead
+  const handleBypassLogin = () => {
+    // Just redirect - bypass all auth
+    window.location.href = '/dashboard';
   };
 
   return (
@@ -285,6 +286,21 @@ const AuthPage = () => {
               </form>
             </TabsContent>
           </Tabs>
+          
+          {/* Testing Bypass Button */}
+          <div className="mt-6 pt-4 border-t border-border">
+            <Button 
+              variant="destructive" 
+              className="w-full" 
+              onClick={handleBypassLogin}
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              BYPASS LOGIN (TESTING ONLY)
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Skips all auth - for testing only
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
