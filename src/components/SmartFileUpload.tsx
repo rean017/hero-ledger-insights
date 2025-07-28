@@ -226,17 +226,6 @@ const SmartFileUpload = () => {
       return;
     }
 
-    // Check admin permissions for file uploads
-    if (!isAdmin) {
-      toast({
-        title: "Permission Denied",
-        description: "Only administrators can upload files.",
-        variant: "destructive"
-      });
-      event.target.value = '';
-      return;
-    }
-
     setSelectedFile(file);
     setIsAnalyzing(true);
     setUploadResult(null);
