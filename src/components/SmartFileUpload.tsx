@@ -332,10 +332,15 @@ const SmartFileUpload = () => {
               }, 0);
               
               if (selectedProcessor === 'TRNXN') {
+                // For TRNXN: specifically map Bankcard Volume + Debit Volume
+                const bankcardVolume = parseFloat(row['Bankcard Volume']?.replace(/[,$]/g, '') || '0') || 0;
+                const debitVolume = parseFloat(row['Debit Volume']?.replace(/[,$]/g, '') || '0') || 0;
+                const combinedVolume = bankcardVolume + debitVolume;
+                
                 transactionData = {
                   processor: selectedProcessor,
                   transaction_date: new Date(selectedMonth + '-01'),
-                  volume: totalVolume,
+                  volume: combinedVolume,
                   debit_volume: 0,
                   agent_payout: parseFloat(row['Commission']?.replace(/[,$]/g, '') || '0') || 0,
                   agent_name: row['Partner'] || 'Unknown',
