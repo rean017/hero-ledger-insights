@@ -271,7 +271,7 @@ const UnifiedLocations = () => {
           });
         }
         const locationData = commissionMap.get(commission.locationId);
-        locationData.totalVolume = commission.locationVolume;
+        locationData.totalVolume += commission.locationVolume;
         locationData.totalCommission = commission.netAgentPayout;
         locationData.commissions.push(commission);
       });
