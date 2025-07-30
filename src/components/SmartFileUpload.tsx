@@ -333,9 +333,25 @@ const SmartFileUpload = () => {
               
               if (selectedProcessor === 'TRNXN') {
                 // For TRNXN: specifically map Bankcard Volume + Debit Volume
-                const bankcardVolume = parseFloat(row['Bankcard Volume']?.replace(/[,$]/g, '') || '0') || 0;
-                const debitVolume = parseFloat(row['Debit Volume']?.replace(/[,$]/g, '') || '0') || 0;
+                // Handle potential comma formatting issues by preserving original string parsing
+                const bankcardVolumeStr = row['Bankcard Volume']?.toString() || '0';
+                const debitVolumeStr = row['Debit Volume']?.toString() || '0';
+                
+                console.log('🔍 TRNXN Volume parsing:', {
+                  bankcardVolumeStr,
+                  debitVolumeStr,
+                  rawRow: row
+                });
+                
+                const bankcardVolume = parseFloat(bankcardVolumeStr.replace(/[,$]/g, '')) || 0;
+                const debitVolume = parseFloat(debitVolumeStr.replace(/[,$]/g, '')) || 0;
                 const combinedVolume = bankcardVolume + debitVolume;
+                
+                console.log('💰 TRNXN Combined Volume:', {
+                  bankcardVolume,
+                  debitVolume,
+                  combinedVolume
+                });
                 
                 transactionData = {
                   processor: selectedProcessor,
