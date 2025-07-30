@@ -81,7 +81,19 @@ export const useSystemData = (options: SystemDataOptions) => {
         const locationAssignments = assignments?.filter(a => a.location_id === location.id) || [];
         const locationCommissions = commissions.filter(c => c.locationId === location.id);
         
-        const totalVolume = locationCommissions.reduce((sum, c) => sum + c.locationVolume, 0);
+        // Calculate actual volume from transactions for this location
+        const locationTransactions = transactions?.filter(t => 
+          t.location_id === location.id || t.account_id === location.account_id
+        ) || [];
+        
+        const totalVolume = locationTransactions.reduce((sum, t) => {
+          const bankCardVolume = Number(t.volume) || 0;
+          const debitCardVolume = Number(t.debit_volume) || 0;
+          // For TRNXN, volume already contains combined amount, debit_volume is 0
+          // For others, need to add them
+          return sum + (t.processor === 'TRNXN' ? bankCardVolume : bankCardVolume + debitCardVolume);
+        }, 0);
+        
         const totalCommission = locationCommissions.reduce((sum, c) => 
           sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0
         );
