@@ -347,6 +347,20 @@ const SmartFileUpload = () => {
                   account_id: row['MID'] || null,
                   raw_data: row
                 };
+              } else if (selectedProcessor === 'GREEN' || selectedProcessor === 'MAVERICK') {
+                // For Green Payments and Maverick: Sales Amount is the volume
+                const salesAmount = parseFloat(row['Sales Amount']?.replace(/[,$]/g, '') || '0') || 0;
+                
+                transactionData = {
+                  processor: selectedProcessor,
+                  transaction_date: new Date(selectedMonth + '-01'),
+                  volume: salesAmount,
+                  debit_volume: 0,
+                  agent_payout: parseFloat(row['Commission']?.replace(/[,$]/g, '') || '0') || 0,
+                  agent_name: row['Partner'] || row['Agent'] || 'Unknown',
+                  account_id: row['MID'] || row['Account ID'] || null,
+                  raw_data: row
+                };
               } else {
                 // Generic mapping for other processors
                 transactionData = {
