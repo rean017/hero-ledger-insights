@@ -175,10 +175,13 @@ const Dashboard = () => {
       const processorBreakdown: Record<string, { count: number; totalVolume: number; totalBankCard: number; totalDebit: number }> = {};
       
       transactions?.forEach(t => {
-        // For all processors, volume and debit_volume should be added together
+        // For TRNXN uploads, volume already contains the combined bankcard + debit volume (stored as volume, debit_volume is 0)
+        // For other processors, we need to add volume + debit_volume
         const bankCardVolume = Number(t.volume) || 0;
         const debitCardVolume = Number(t.debit_volume) || 0;
-        const totalTransactionVolume = bankCardVolume + debitCardVolume;
+        const totalTransactionVolume = t.processor === 'TRNXN' 
+          ? bankCardVolume  // Already combined during upload
+          : bankCardVolume + debitCardVolume;  // Need to combine for other processors
         
         totalRevenue += totalTransactionVolume;
         

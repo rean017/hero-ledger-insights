@@ -109,8 +109,11 @@ export const calculateLocationCommissions = (
     const recordedVolume = Number(transaction.volume) || 0;
     const recordedDebitVolume = Number(transaction.debit_volume) || 0;
     
-    // For all processors, bankcard volume (volume) and debit volume should be added together
-    const totalRecordedVolume = recordedVolume + recordedDebitVolume;
+    // For TRNXN uploads, volume already contains the combined bankcard + debit volume (stored as volume, debit_volume is 0)
+    // For other processors, we need to add volume + debit_volume
+    const totalRecordedVolume = transaction.processor === 'TRNXN' 
+      ? recordedVolume  // Already combined during upload
+      : recordedVolume + recordedDebitVolume;
     
     // Skip transactions with no meaningful data
     if (agentPayout === 0 && totalRecordedVolume === 0) return;
