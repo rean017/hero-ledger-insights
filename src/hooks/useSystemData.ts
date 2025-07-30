@@ -89,9 +89,7 @@ export const useSystemData = (options: SystemDataOptions) => {
         const totalVolume = locationTransactions.reduce((sum, t) => {
           const bankCardVolume = Number(t.volume) || 0;
           const debitCardVolume = Number(t.debit_volume) || 0;
-          // For TRNXN, volume already contains combined amount, debit_volume is 0
-          // For others, need to add them
-          return sum + (t.processor === 'TRNXN' ? bankCardVolume : bankCardVolume + debitCardVolume);
+          return sum + bankCardVolume + debitCardVolume;
         }, 0);
         
         const totalCommission = locationCommissions.reduce((sum, c) => 
