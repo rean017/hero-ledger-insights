@@ -32,6 +32,7 @@ interface Transaction {
   agent_payout: number;
   transaction_date?: string;
   location_id?: string;
+  processor?: string;
   raw_data?: any;
 }
 
@@ -107,7 +108,12 @@ export const calculateLocationCommissions = (
     const agentPayout = Number(transaction.agent_payout) || 0;
     const recordedVolume = Number(transaction.volume) || 0;
     const recordedDebitVolume = Number(transaction.debit_volume) || 0;
-    const totalRecordedVolume = recordedVolume + recordedDebitVolume;
+    
+    // For TRNXN uploads, volume already contains combined bankcard + debit volume
+    // For other processors, we still need to add debit_volume to volume
+    const totalRecordedVolume = transaction.processor === 'TRNXN' 
+      ? recordedVolume  // Already combined
+      : recordedVolume + recordedDebitVolume;
     
     // Skip transactions with no meaningful data
     if (agentPayout === 0 && totalRecordedVolume === 0) return;
