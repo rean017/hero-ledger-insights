@@ -41,6 +41,7 @@ export const useSystemData = (options: SystemDataOptions) => {
     queryKey: ['system-data', timeFrame, customDateRange],
     queryFn: async () => {
       console.log('🚀 SYSTEM DATA: Fetching unified data for', timeFrame, dateRange);
+      console.log('📅 IMPORTANT: TRNXN transactions are dated 2025-06-01. Current timeframe may not include TRNXN data!');
       
       // Fetch all data concurrently
       const [
@@ -82,6 +83,19 @@ export const useSystemData = (options: SystemDataOptions) => {
         const locationAssignments = assignments?.filter(a => a.location_id === location.id) || [];
         const locationCommissions = commissions.filter(c => c.locationId === location.id);
         
+        // Enhanced debugging for raw transactions before volume calculation
+        const allMatchingTransactions = transactions?.filter(t => 
+          t.location_id === location.id || t.account_id === location.account_id
+        ) || [];
+        
+        console.log(`🔍 VOLUME DEBUG - ${location.name}:`, {
+          locationId: location.id,
+          accountId: location.account_id,
+          matchingTransactions: allMatchingTransactions.length,
+          sampleTransaction: allMatchingTransactions[0],
+          dateRange: { from: dateRange.from, to: dateRange.to }
+        });
+        
         // Calculate actual volume using standardized utility
         const totalVolume = calculateLocationVolume(
           transactions || [], 
@@ -89,15 +103,22 @@ export const useSystemData = (options: SystemDataOptions) => {
           location.account_id
         );
         
-        // Debug volume calculation per location
-        if (location.name.toLowerCase().includes('brick')) {
-          console.log(`🚨 BRICK & BREW DEBUG - Location: ${location.name}`, {
+        // Enhanced debugging for TRNXN locations specifically
+        if (allMatchingTransactions.some(t => t.processor === 'TRNXN') || location.name.toLowerCase().includes('brick')) {
+          console.log(`🚨 TRNXN LOCATION DEBUG - ${location.name}:`, {
             locationId: location.id,
             accountId: location.account_id,
             calculatedVolume: totalVolume,
-            matchingTransactions: transactions?.filter(t => 
-              t.location_id === location.id || t.account_id === location.account_id
-            ).length || 0
+            expectedVolume: 177088.88, // What we expect for Brick & Brew
+            rawTransactions: allMatchingTransactions.map(t => ({
+              processor: t.processor,
+              volume: t.volume,
+              debit_volume: t.debit_volume,
+              transaction_date: t.transaction_date,
+              account_id: t.account_id,
+              location_id: t.location_id,
+              calculatedVolume: t.processor === 'TRNXN' ? Number(t.volume) : (Number(t.volume) || 0) + (Number(t.debit_volume) || 0)
+            }))
           });
         }
         
@@ -117,9 +138,13 @@ export const useSystemData = (options: SystemDataOptions) => {
       }) || [];
 
       // Enhanced debugging for volume calculations
+      const trnxnTransactionCount = transactions?.filter(t => t.processor === 'TRNXN').length || 0;
       console.log('📊 VOLUME CALCULATION DEBUG:', {
         timeFrame,
+        dateRange,
         totalSystemRevenue: stats.totalRevenue,
+        totalTransactions: transactions?.length || 0,
+        trnxnTransactions: trnxnTransactionCount,
         sampleLocationVolumes: enrichedLocations.slice(0, 3).map(l => ({
           name: l.name,
           totalVolume: l.totalVolume,
@@ -128,6 +153,10 @@ export const useSystemData = (options: SystemDataOptions) => {
           ).length || 0
         }))
       });
+      
+      if (trnxnTransactionCount === 0) {
+        console.log('⚠️ WARNING: No TRNXN transactions found in current date range. All TRNXN data is dated 2025-06-01 - switch to June timeframe to see TRNXN volumes!');
+      }
 
       console.log('✅ SYSTEM DATA: Successfully processed', {
         locations: locations?.length,

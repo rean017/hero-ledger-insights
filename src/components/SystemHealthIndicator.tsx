@@ -47,6 +47,10 @@ const SystemHealthIndicator: React.FC<SystemHealthProps> = ({
       case 'warning':
         return `No data available for ${timeFrame.toUpperCase()}`;
       case 'healthy':
+        const trnxnCount = data?.transactions.filter(t => t.processor === 'TRNXN').length || 0;
+        if (trnxnCount === 0 && timeFrame !== 'june') {
+          return `System Healthy: ${data?.stats.transactionsCount || 0} transactions loaded • ⚠️ TRNXN data only available in JUNE`;
+        }
         return `System Healthy: ${data?.stats.transactionsCount || 0} transactions loaded`;
       default:
         return 'System status unknown';
