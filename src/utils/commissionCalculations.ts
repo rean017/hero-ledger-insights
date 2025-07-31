@@ -1,5 +1,6 @@
 
 import { convertToDecimalRate } from './bpsCalculations';
+import { calculateTransactionVolume } from './volumeCalculations';
 
 export interface LocationCommission {
   locationId: string;
@@ -106,14 +107,9 @@ export const calculateLocationCommissions = (
   // First pass: match transactions to specific locations
   transactions.forEach((transaction, index) => {
     const agentPayout = Number(transaction.agent_payout) || 0;
-    const recordedVolume = Number(transaction.volume) || 0;
-    const recordedDebitVolume = Number(transaction.debit_volume) || 0;
     
-    // For TRNXN uploads, volume already contains the combined bankcard + debit volume (stored as volume, debit_volume is 0)
-    // For other processors, we need to add volume + debit_volume
-    const totalRecordedVolume = transaction.processor === 'TRNXN' 
-      ? recordedVolume  // Already combined during upload
-      : recordedVolume + recordedDebitVolume;
+    // Use standardized volume calculation
+    const totalRecordedVolume = calculateTransactionVolume(transaction);
     
     // Skip transactions with no meaningful data
     if (agentPayout === 0 && totalRecordedVolume === 0) return;

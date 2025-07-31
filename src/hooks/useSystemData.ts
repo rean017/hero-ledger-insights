@@ -2,6 +2,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateLocationCommissions } from "@/utils/commissionCalculations";
+import { calculateLocationVolume, calculateTotalVolume } from "@/utils/volumeCalculations";
 import { format } from "date-fns";
 
 interface SystemDataOptions {
@@ -68,9 +69,9 @@ export const useSystemData = (options: SystemDataOptions) => {
         locations || []
       );
 
-      // Calculate aggregated stats
+      // Calculate aggregated stats using standardized volume calculation
       const stats = {
-        totalRevenue: transactions?.reduce((sum, t) => sum + ((Number(t.volume) || 0) + (Number(t.debit_volume) || 0)), 0) || 0,
+        totalRevenue: calculateTotalVolume(transactions || []),
         totalAgentPayouts: transactions?.reduce((sum, t) => sum + (Number(t.agent_payout) || 0), 0) || 0,
         locationsCount: locations?.length || 0,
         transactionsCount: transactions?.length || 0
@@ -81,16 +82,12 @@ export const useSystemData = (options: SystemDataOptions) => {
         const locationAssignments = assignments?.filter(a => a.location_id === location.id) || [];
         const locationCommissions = commissions.filter(c => c.locationId === location.id);
         
-        // Calculate actual volume from transactions for this location
-        const locationTransactions = transactions?.filter(t => 
-          t.location_id === location.id || t.account_id === location.account_id
-        ) || [];
-        
-        const totalVolume = locationTransactions.reduce((sum, t) => {
-          const bankCardVolume = Number(t.volume) || 0;
-          const debitCardVolume = Number(t.debit_volume) || 0;
-          return sum + bankCardVolume + debitCardVolume;
-        }, 0);
+        // Calculate actual volume using standardized utility
+        const totalVolume = calculateLocationVolume(
+          transactions || [], 
+          location.id, 
+          location.account_id
+        );
         
         const totalCommission = locationCommissions.reduce((sum, c) => 
           sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0
@@ -106,6 +103,19 @@ export const useSystemData = (options: SystemDataOptions) => {
           commissions: locationCommissions
         };
       }) || [];
+
+      // Enhanced debugging for volume calculations
+      console.log('📊 VOLUME CALCULATION DEBUG:', {
+        timeFrame,
+        totalSystemRevenue: stats.totalRevenue,
+        sampleLocationVolumes: enrichedLocations.slice(0, 3).map(l => ({
+          name: l.name,
+          totalVolume: l.totalVolume,
+          transactionCount: transactions?.filter(t => 
+            t.location_id === l.id || t.account_id === l.account_id
+          ).length || 0
+        }))
+      });
 
       console.log('✅ SYSTEM DATA: Successfully processed', {
         locations: locations?.length,

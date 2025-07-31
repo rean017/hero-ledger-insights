@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { calculateLocationCommissions, groupCommissionsByAgent } from "@/utils/commissionCalculations";
+import { calculateTransactionVolume } from "@/utils/volumeCalculations";
 
 const Dashboard = () => {
   // Changed default to march since that's where the data is
@@ -175,14 +176,8 @@ const Dashboard = () => {
       const processorBreakdown: Record<string, { count: number; totalVolume: number; totalBankCard: number; totalDebit: number }> = {};
       
       transactions?.forEach(t => {
-        // For TRNXN uploads, volume already contains the combined bankcard + debit volume (stored as volume, debit_volume is 0)
-        // For other processors, we need to add volume + debit_volume
-        const bankCardVolume = Number(t.volume) || 0;
-        const debitCardVolume = Number(t.debit_volume) || 0;
-        const totalTransactionVolume = t.processor === 'TRNXN' 
-          ? bankCardVolume  // Already combined during upload
-          : bankCardVolume + debitCardVolume;  // Need to combine for other processors
-        
+        // Use standardized volume calculation
+        const totalTransactionVolume = calculateTransactionVolume(t);
         totalRevenue += totalTransactionVolume;
         
         const agentPayout = Number(t.agent_payout) || 0;
@@ -195,8 +190,8 @@ const Dashboard = () => {
         }
         processorBreakdown[processor].count++;
         processorBreakdown[processor].totalVolume += totalTransactionVolume;
-        processorBreakdown[processor].totalBankCard += bankCardVolume;
-        processorBreakdown[processor].totalDebit += debitCardVolume;
+        processorBreakdown[processor].totalBankCard += (Number(t.volume) || 0);
+        processorBreakdown[processor].totalDebit += (Number(t.debit_volume) || 0);
       });
 
       console.log('=== DASHBOARD PROCESSOR BREAKDOWN ===');
