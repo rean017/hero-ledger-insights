@@ -148,26 +148,6 @@ export const useSystemData = (options: SystemDataOptions) => {
         };
       }) || [];
 
-      // Enhanced debugging for volume calculations
-      const trnxnTransactionCount = transactions?.filter(t => t.processor === 'TRNXN').length || 0;
-      console.log('📊 VOLUME CALCULATION DEBUG:', {
-        timeFrame,
-        dateRange,
-        totalSystemRevenue: stats.totalRevenue,
-        totalTransactions: transactions?.length || 0,
-        trnxnTransactions: trnxnTransactionCount,
-        sampleLocationVolumes: enrichedLocations.slice(0, 3).map(l => ({
-          name: l.name,
-          totalVolume: l.totalVolume,
-          transactionCount: transactions?.filter(t => 
-            t.location_id === l.id || t.account_id === l.account_id
-          ).length || 0
-        }))
-      });
-      
-      if (trnxnTransactionCount === 0) {
-        console.log('⚠️ WARNING: No TRNXN transactions found in current date range. All TRNXN data is dated 2025-06-01 - switch to June timeframe to see TRNXN volumes!');
-      }
 
       console.log('✅ SYSTEM DATA: Successfully processed', {
         locations: locations?.length,
