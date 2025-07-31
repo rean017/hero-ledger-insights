@@ -96,12 +96,23 @@ export const useSystemData = (options: SystemDataOptions) => {
           dateRange: { from: dateRange.from, to: dateRange.to }
         });
         
+        // CRITICAL: Check if we're calling calculateLocationVolume multiple times or with wrong data
+        console.log(`🚀 ABOUT TO CALL calculateLocationVolume for ${location.name}:`, {
+          locationName: location.name,
+          locationId: location.id,
+          accountId: location.account_id,
+          totalTransactionsAvailable: transactions?.length || 0,
+          isExpectedBrickAndBrew: location.name.toLowerCase().includes('brick') || location.account_id === '1058'
+        });
+        
         // Calculate actual volume using standardized utility
         const totalVolume = calculateLocationVolume(
           transactions || [], 
           location.id, 
           location.account_id
         );
+        
+        console.log(`✅ VOLUME CALCULATION COMPLETE for ${location.name}: $${totalVolume}`);
         
         // Enhanced debugging for TRNXN locations specifically
         if (allMatchingTransactions.some(t => t.processor === 'TRNXN') || location.name.toLowerCase().includes('brick')) {
