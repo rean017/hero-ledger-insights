@@ -89,6 +89,18 @@ export const useSystemData = (options: SystemDataOptions) => {
           location.account_id
         );
         
+        // Debug volume calculation per location
+        if (location.name.toLowerCase().includes('brick')) {
+          console.log(`🚨 BRICK & BREW DEBUG - Location: ${location.name}`, {
+            locationId: location.id,
+            accountId: location.account_id,
+            calculatedVolume: totalVolume,
+            matchingTransactions: transactions?.filter(t => 
+              t.location_id === location.id || t.account_id === location.account_id
+            ).length || 0
+          });
+        }
+        
         const totalCommission = locationCommissions.reduce((sum, c) => 
           sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0
         );

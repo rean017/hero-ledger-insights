@@ -21,11 +21,11 @@ export const calculateTransactionVolume = (transaction: TransactionLike): number
   // For TRNXN: volume field already contains combined Bankcard + Debit volume
   // For all other processors: add volume + debit_volume
   if (transaction.processor === 'TRNXN') {
-    console.log(`📊 TRNXN Volume: ${volume} (already combined)`);
+    console.log(`🎯 TRNXN Volume (${transaction.processor}): ${volume} (pre-combined, NOT adding debit_volume: ${debitVolume})`);
     return volume;
   } else {
     const total = volume + debitVolume;
-    console.log(`📊 ${transaction.processor || 'Unknown'} Volume: ${volume} + ${debitVolume} = ${total}`);
+    console.log(`🎯 ${transaction.processor || 'Unknown'} Volume: ${volume} + ${debitVolume} = ${total}`);
     return total;
   }
 };
@@ -61,7 +61,20 @@ export const calculateLocationVolume = (
     return hasLocation || hasAccount;
   });
   
+  // Enhanced debugging for each location's transactions
+  if (locationTransactions.length > 0) {
+    console.log(`🔍 Location Transactions Debug (${locationId || accountId}):`, {
+      transactionCount: locationTransactions.length,
+      transactions: locationTransactions.map(t => ({
+        processor: t.processor,
+        volume: t.volume,
+        debit_volume: t.debit_volume,
+        calculated: calculateTransactionVolume(t)
+      }))
+    });
+  }
+  
   const total = calculateTotalVolume(locationTransactions);
-  console.log(`📊 Location Volume (${locationId}): ${total} from ${locationTransactions.length} transactions`);
+  console.log(`🎯 Final Location Volume (${locationId || accountId}): $${total.toLocaleString()} from ${locationTransactions.length} transactions`);
   return total;
 };

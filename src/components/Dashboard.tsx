@@ -176,12 +176,24 @@ const Dashboard = () => {
       const processorBreakdown: Record<string, { count: number; totalVolume: number; totalBankCard: number; totalDebit: number }> = {};
       
       transactions?.forEach(t => {
-        // Use standardized volume calculation
+        // Use standardized volume calculation with enhanced debugging
         const totalTransactionVolume = calculateTransactionVolume(t);
         totalRevenue += totalTransactionVolume;
         
         const agentPayout = Number(t.agent_payout) || 0;
         totalAgentPayoutsFromTransactions += agentPayout;
+        
+        // Enhanced debugging for TRNXN transactions
+        if (t.processor === 'TRNXN') {
+          console.log(`🔍 DASHBOARD TRNXN Transaction:`, {
+            processor: t.processor,
+            account_id: t.account_id,
+            volume: t.volume,
+            debit_volume: t.debit_volume,
+            calculatedVolume: totalTransactionVolume,
+            shouldEqualVolume: t.volume
+          });
+        }
         
         // Track processor breakdown
         const processor = t.processor || 'Unknown';
