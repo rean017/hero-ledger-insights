@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,45 +42,98 @@ export const SimpleUpload = () => {
   });
 
   const parseFile = (file: File) => {
-    Papa.parse(file, {
-      header: true,
-      complete: (results) => {
-        const parsedData: ParsedRow[] = [];
-        
-        results.data.forEach((row: any) => {
-          // Look for location column (various possible names)
-          const location = row['Location'] || row['location'] || row['DBA'] || row['dba'] || row['Name'] || row['name'] || '';
+    const fileExtension = file.name.toLowerCase().split('.').pop();
+    
+    if (fileExtension === 'csv') {
+      // Parse CSV with Papa Parse
+      Papa.parse(file, {
+        header: true,
+        complete: (results) => {
+          processData(results.data);
+        },
+        error: (error) => {
+          toast({
+            title: "Error parsing CSV file",
+            description: error.message,
+            variant: "destructive"
+          });
+        }
+      });
+    } else if (['xlsx', 'xls', 'numbers'].includes(fileExtension || '')) {
+      // Parse Excel/Numbers with XLSX
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
           
-          // Look for volume column (various possible names)
-          const volumeValue = row['Volume'] || row['volume'] || row['Amount'] || row['amount'] || row['Total'] || row['total'] || '0';
-          const volume = parseFloat(String(volumeValue).replace(/[,$]/g, '')) || 0;
-          
-          // Look for agent payout column (various possible names)
-          const payoutValue = row['Agent Payout'] || row['agent_payout'] || row['Payout'] || row['payout'] || row['Commission'] || row['commission'] || '0';
-          const agentPayout = parseFloat(String(payoutValue).replace(/[,$]/g, '')) || 0;
-          
-          if (location && volume > 0) {
-            parsedData.push({
-              location: location.trim(),
-              volume,
-              agentPayout
+          // Convert to object format with headers
+          if (jsonData.length > 1) {
+            const headers = jsonData[0] as string[];
+            const rows = jsonData.slice(1).map(row => {
+              const obj: any = {};
+              headers.forEach((header, index) => {
+                obj[header] = (row as any[])[index] || '';
+              });
+              return obj;
+            });
+            processData(rows);
+          } else {
+            toast({
+              title: "No data found",
+              description: "The file appears to be empty",
+              variant: "destructive"
             });
           }
-        });
-        
-        setData(parsedData);
-        toast({
-          title: "File parsed successfully",
-          description: `Found ${parsedData.length} valid records`
-        });
-      },
-      error: (error) => {
-        toast({
-          title: "Error parsing file",
-          description: error.message,
-          variant: "destructive"
+        } catch (error) {
+          toast({
+            title: "Error parsing file",
+            description: "Unable to read this file format. Please try exporting as CSV.",
+            variant: "destructive"
+          });
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      toast({
+        title: "Unsupported file format",
+        description: "Please upload a CSV, Excel, or Numbers file",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const processData = (rawData: any[]) => {
+    const parsedData: ParsedRow[] = [];
+    
+    rawData.forEach((row: any) => {
+      // Look for location column (various possible names)
+      const location = row['Location'] || row['location'] || row['DBA'] || row['dba'] || row['Name'] || row['name'] || '';
+      
+      // Look for volume column (various possible names)
+      const volumeValue = row['Volume'] || row['volume'] || row['Amount'] || row['amount'] || row['Total'] || row['total'] || '0';
+      const volume = parseFloat(String(volumeValue).replace(/[,$]/g, '')) || 0;
+      
+      // Look for agent payout column (various possible names)
+      const payoutValue = row['Agent Payout'] || row['agent_payout'] || row['Payout'] || row['payout'] || row['Commission'] || row['commission'] || row['Net Agent Payout'] || row['net_agent_payout'] || '0';
+      const agentPayout = parseFloat(String(payoutValue).replace(/[,$]/g, '')) || 0;
+      
+      if (location && volume > 0) {
+        parsedData.push({
+          location: location.trim(),
+          volume,
+          agentPayout
         });
       }
+    });
+    
+    setData(parsedData);
+    toast({
+      title: "File parsed successfully",
+      description: `Found ${parsedData.length} valid records`
     });
   };
 
