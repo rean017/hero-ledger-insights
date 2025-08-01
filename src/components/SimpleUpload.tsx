@@ -18,6 +18,7 @@ interface ParsedRow {
   location: string;
   volume: number;
   agentPayout: number;
+  agentName?: string;
 }
 
 export const SimpleUpload = () => {
@@ -126,11 +127,15 @@ export const SimpleUpload = () => {
       const payoutValue = row['Agent Payout'] || row['agent_payout'] || row['Payout'] || row['payout'] || row['Commission'] || row['commission'] || row['Net Agent Payout'] || row['net_agent_payout'] || '0';
       const agentPayout = parseFloat(String(payoutValue).replace(/[,$]/g, '')) || 0;
       
+      // Look for agent name column (various possible names)
+      const agentName = row['Agent'] || row['agent'] || row['Agent Name'] || row['agent_name'] || row['Rep'] || row['rep'] || row['Representative'] || row['representative'] || '';
+      
       if (location && volume > 0) {
         parsedData.push({
           location: location.trim(),
           volume,
-          agentPayout
+          agentPayout,
+          agentName: agentName ? agentName.trim() : undefined
         });
       }
     });
@@ -205,6 +210,53 @@ export const SimpleUpload = () => {
           locationId = newLocation.id;
         }
 
+        // Create agent assignment if agent name exists and payout > 0
+        if (row.agentName && row.agentPayout > 0) {
+          // First, ensure the agent exists
+          const { data: existingAgent } = await supabase
+            .from('agents')
+            .select('id')
+            .eq('name', row.agentName)
+            .maybeSingle();
+
+          if (!existingAgent) {
+            // Create new agent
+            const { error: agentError } = await supabase
+              .from('agents')
+              .insert([{
+                name: row.agentName,
+                is_active: true
+              }]);
+
+            if (agentError) throw agentError;
+          }
+
+          // Check if assignment already exists
+          const { data: existingAssignment } = await supabase
+            .from('location_agent_assignments')
+            .select('id')
+            .eq('location_id', locationId)
+            .eq('agent_name', row.agentName)
+            .maybeSingle();
+
+          if (!existingAssignment) {
+            // Calculate commission rate based on payout vs volume
+            const commissionRate = row.volume > 0 ? (row.agentPayout / row.volume) : 0;
+
+            // Create assignment
+            const { error: assignmentError } = await supabase
+              .from('location_agent_assignments')
+              .insert([{
+                location_id: locationId,
+                agent_name: row.agentName,
+                commission_rate: commissionRate,
+                is_active: true
+              }]);
+
+            if (assignmentError) throw assignmentError;
+          }
+        }
+
         // Insert transaction
         const { error: transactionError } = await supabase
           .from('transactions')
@@ -212,6 +264,7 @@ export const SimpleUpload = () => {
             location_id: locationId,
             volume: row.volume,
             agent_payout: row.agentPayout,
+            agent_name: row.agentName,
             transaction_date: format(selectedDate, 'yyyy-MM-dd'),
             processor: 'Generic',
             raw_data: { upload_id: uploadId }

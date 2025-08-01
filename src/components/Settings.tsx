@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import DataCleanupUtility from "./DataCleanupUtility";
 import LocationDataDebugger from "./LocationDataDebugger";
+import { DataRepairUtility } from "./DataRepairUtility";
 
 interface SettingsState {
   defaultTimeFrame: string;
@@ -329,6 +330,7 @@ const Settings = () => {
         </TabsContent>
 
         <TabsContent value="cleanup" className="space-y-4">
+          <DataRepairUtility />
           <DataCleanupUtility />
         </TabsContent>
 
