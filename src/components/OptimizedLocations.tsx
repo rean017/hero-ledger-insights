@@ -1,20 +1,42 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, ArrowUpDown, Filter } from "lucide-react";
+import { Search, ArrowUpDown, Filter, Calendar } from "lucide-react";
 import { useSystemData } from "@/hooks/useSystemData";
 import { useOptimizedSearch } from "@/hooks/useOptimizedSearch";
+import { useAvailableMonths } from "@/hooks/useAvailableMonths";
 import LocationCard from "./LocationCard";
 import LocationSummaryCards from "./LocationSummaryCards";
 import SystemHealthIndicator from "./SystemHealthIndicator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Badge } from "@/components/ui/badge";
 
 const OptimizedLocations = () => {
   const [timeFrame, setTimeFrame] = useState("march");
   const [customDateRange, setCustomDateRange] = useState<{ from: Date; to: Date } | undefined>();
+  
+  // Get available months from database
+  const { data: availableMonths, isLoading: loadingMonths } = useAvailableMonths();
+  
+  // Auto-select the most recent month with data on mount
+  useEffect(() => {
+    if (availableMonths && availableMonths.length > 0 && timeFrame === "march") {
+      const mostRecentMonth = availableMonths[0]; // Already sorted newest first
+      const monthToTimeFrame = {
+        '2025-03': 'march',
+        '2025-04': 'april', 
+        '2025-05': 'may',
+        '2025-06': 'june'
+      };
+      const mappedTimeFrame = monthToTimeFrame[mostRecentMonth as keyof typeof monthToTimeFrame];
+      if (mappedTimeFrame) {
+        setTimeFrame(mappedTimeFrame);
+      }
+    }
+  }, [availableMonths, timeFrame]);
 
   const { data, isLoading, error, invalidateCache } = useSystemData({
     timeFrame,
@@ -39,13 +61,16 @@ const OptimizedLocations = () => {
   };
 
   const timeFrames = [
-    { value: "march", label: "March" },
-    { value: "april", label: "April" },
-    { value: "may", label: "May" },
-    { value: "june", label: "June" }
+    { value: "march", label: "March", monthKey: "2025-03" },
+    { value: "april", label: "April", monthKey: "2025-04" },
+    { value: "may", label: "May", monthKey: "2025-05" },
+    { value: "june", label: "June", monthKey: "2025-06" }
   ];
+  
+  // Check which timeframes have data
+  const hasData = (monthKey: string) => availableMonths?.includes(monthKey) || false;
 
-  if (isLoading) {
+  if (isLoading || loadingMonths) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-center h-64">
@@ -98,9 +123,16 @@ const OptimizedLocations = () => {
                   <ToggleGroupItem 
                     key={frame.value}
                     value={frame.value} 
-                    className="px-3 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                    className="px-3 py-2 text-sm font-medium rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm relative"
                   >
-                    {frame.label}
+                    <div className="flex items-center gap-1">
+                      {frame.label}
+                      {hasData(frame.monthKey) && (
+                        <Badge variant="secondary" className="h-2 w-2 p-0 bg-green-500">
+                          <span className="sr-only">Has data</span>
+                        </Badge>
+                      )}
+                    </div>
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
