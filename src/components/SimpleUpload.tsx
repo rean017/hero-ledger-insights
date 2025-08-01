@@ -26,7 +26,9 @@ export const SimpleUpload = () => {
     accept: {
       'text/csv': ['.csv'],
       'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.apple.numbers': ['.numbers'],
+      'application/x-iwork-numbers-sffnumbers': ['.numbers']
     },
     multiple: false,
     onDrop: (acceptedFiles) => {
