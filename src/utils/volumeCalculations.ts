@@ -63,9 +63,17 @@ export const calculateLocationVolume = (
       return false;
     }
     
-    const hasLocation = locationId && (t as any).location_id === locationId;
-    const hasAccount = accountId && (t as any).account_id === accountId;
-    const match = hasLocation || hasAccount;
+    // For TRNXN transactions, match by account_id only since location_id is null
+    // For other processors, match by location_id OR account_id
+    const transactionLocationId = (t as any).location_id;
+    const transactionAccountId = (t as any).account_id;
+    
+    let match = false;
+    if (locationId && transactionLocationId === locationId) {
+      match = true;
+    } else if (accountId && transactionAccountId === accountId) {
+      match = true;
+    }
     
     if (match) {
       processedTransactionIds.add(transactionId);
