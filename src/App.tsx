@@ -4,11 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import Dashboard from "./components/Dashboard";
 import Sidebar from "./components/Sidebar";
-import SmartFileUpload from "./components/SmartFileUpload";
+import { SimpleUpload } from "./components/SimpleUpload";
 import AgentManagement from "./components/AgentManagement";
 import UnifiedLocations from "./components/UnifiedLocations";
 import PLReports from "./components/PLReports";
-import UploadManagement from "./components/UploadManagement";
 import LocationCommissionReport from "./components/LocationCommissionReport";
 import Settings from "./components/Settings";
 
@@ -22,9 +21,7 @@ function App() {
       case "dashboard":
         return <Dashboard />;
       case "upload":
-        return <SmartFileUpload />;
-      case "upload-management":
-        return <UploadManagement />;
+        return <SimpleUpload />;
       case "agents":
         return <AgentManagement />;
       case "locations":
