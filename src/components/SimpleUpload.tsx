@@ -164,6 +164,21 @@ export const SimpleUpload = () => {
     setIsUploading(true);
     
     try {
+      // Create file upload record
+      const { data: fileUpload, error: fileUploadError } = await supabase
+        .from('file_uploads')
+        .insert([{
+          filename: file?.name || 'Unknown',
+          processor: 'Generic',
+          rows_processed: data.length,
+          status: 'processing'
+        }])
+        .select('id')
+        .single();
+
+      if (fileUploadError) throw fileUploadError;
+      const uploadId = fileUpload.id;
+
       // Process each row
       for (const row of data) {
         // Find or create location
@@ -198,11 +213,18 @@ export const SimpleUpload = () => {
             volume: row.volume,
             agent_payout: row.agentPayout,
             transaction_date: format(selectedDate, 'yyyy-MM-dd'),
-            processor: 'SIMPLE'
+            processor: 'Generic',
+            raw_data: { upload_id: uploadId }
           }]);
 
         if (transactionError) throw transactionError;
       }
+
+      // Update file upload status
+      await supabase
+        .from('file_uploads')
+        .update({ status: 'completed' })
+        .eq('id', uploadId);
 
       setUploadComplete(true);
       toast({

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import Dashboard from "./components/Dashboard";
 import Sidebar from "./components/Sidebar";
 import { SimpleUpload } from "./components/SimpleUpload";
+import UploadManagement from "./components/UploadManagement";
 import AgentManagement from "./components/AgentManagement";
 import UnifiedLocations from "./components/UnifiedLocations";
 import PLReports from "./components/PLReports";
@@ -22,6 +23,8 @@ function App() {
         return <Dashboard />;
       case "upload":
         return <SimpleUpload />;
+      case "upload-management":
+        return <UploadManagement />;
       case "agents":
         return <AgentManagement />;
       case "locations":
