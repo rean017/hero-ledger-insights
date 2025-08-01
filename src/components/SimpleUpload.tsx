@@ -7,8 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Upload, FileText, CheckCircle, AlertCircle, CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface ParsedRow {
   location: string;
@@ -19,6 +23,7 @@ interface ParsedRow {
 export const SimpleUpload = () => {
   const [file, setFile] = useState<File | null>(null);
   const [data, setData] = useState<ParsedRow[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
   const { toast } = useToast();
@@ -147,6 +152,15 @@ export const SimpleUpload = () => {
       return;
     }
 
+    if (!selectedDate) {
+      toast({
+        title: "Date required",
+        description: "Please select the month for this data",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsUploading(true);
     
     try {
@@ -157,7 +171,7 @@ export const SimpleUpload = () => {
           .from('locations')
           .select('id')
           .eq('name', row.location)
-          .single();
+          .maybeSingle();
 
         let locationId = existingLocation?.id;
 
@@ -183,7 +197,7 @@ export const SimpleUpload = () => {
             location_id: locationId,
             volume: row.volume,
             agent_payout: row.agentPayout,
-            transaction_date: new Date().toISOString().split('T')[0],
+            transaction_date: format(selectedDate, 'yyyy-MM-dd'),
             processor: 'SIMPLE'
           }]);
 
@@ -281,6 +295,33 @@ export const SimpleUpload = () => {
                     Showing first 10 records of {data.length}
                   </p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Transaction Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !selectedDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {selectedDate ? format(selectedDate, "MMMM yyyy") : "Select month for this data"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="flex gap-2">
