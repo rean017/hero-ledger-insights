@@ -83,55 +83,12 @@ export const useSystemData = (options: SystemDataOptions) => {
         const locationAssignments = assignments?.filter(a => a.location_id === location.id) || [];
         const locationCommissions = commissions.filter(c => c.locationId === location.id);
         
-        // Enhanced debugging for raw transactions before volume calculation
-        const allMatchingTransactions = transactions?.filter(t => 
-          t.location_id === location.id || t.account_id === location.account_id
-        ) || [];
-        
-        console.log(`🔍 VOLUME DEBUG - ${location.name}:`, {
-          locationId: location.id,
-          accountId: location.account_id,
-          matchingTransactions: allMatchingTransactions.length,
-          sampleTransaction: allMatchingTransactions[0],
-          dateRange: { from: dateRange.from, to: dateRange.to }
-        });
-        
-        // CRITICAL: Check if we're calling calculateLocationVolume multiple times or with wrong data
-        console.log(`🚀 ABOUT TO CALL calculateLocationVolume for ${location.name}:`, {
-          locationName: location.name,
-          locationId: location.id,
-          accountId: location.account_id,
-          totalTransactionsAvailable: transactions?.length || 0,
-          isExpectedBrickAndBrew: location.name.toLowerCase().includes('brick') || location.account_id === '1058'
-        });
-        
-        // Calculate actual volume using standardized utility
+        // Calculate actual volume using standardized utility (this is the CORRECT volume)
         const totalVolume = calculateLocationVolume(
           transactions || [], 
           location.id, 
           location.account_id
         );
-        
-        console.log(`✅ VOLUME CALCULATION COMPLETE for ${location.name}: $${totalVolume}`);
-        
-        // Enhanced debugging for TRNXN locations specifically
-        if (allMatchingTransactions.some(t => t.processor === 'TRNXN') || location.name.toLowerCase().includes('brick')) {
-          console.log(`🚨 TRNXN LOCATION DEBUG - ${location.name}:`, {
-            locationId: location.id,
-            accountId: location.account_id,
-            calculatedVolume: totalVolume,
-            expectedVolume: 177088.88, // What we expect for Brick & Brew
-            rawTransactions: allMatchingTransactions.map(t => ({
-              processor: t.processor,
-              volume: t.volume,
-              debit_volume: t.debit_volume,
-              transaction_date: t.transaction_date,
-              account_id: t.account_id,
-              location_id: t.location_id,
-              calculatedVolume: t.processor === 'TRNXN' ? Number(t.volume) : (Number(t.volume) || 0) + (Number(t.debit_volume) || 0)
-            }))
-          });
-        }
         
         const totalCommission = locationCommissions.reduce((sum, c) => 
           sum + (c.agentName === 'Merchant Hero' ? c.merchantHeroPayout : c.agentPayout), 0
