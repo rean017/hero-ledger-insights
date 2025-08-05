@@ -146,6 +146,7 @@ export const SimpleUpload = () => {
                          row['Gross Volume'] || row['gross_volume'] ||
                          row['Transaction Amount'] || row['transaction_amount'] ||
                          row['Sales Volume'] || row['sales_volume'] ||
+                         row['Sales Amount'] || row['sales_amount'] ||
                          row['Card Volume'] || row['card_volume'] ||
                          row['Net Sales'] || row['net_sales'] || '0';
       const volume = parseFloat(String(volumeValue).replace(/[,$]/g, '')) || 0;
