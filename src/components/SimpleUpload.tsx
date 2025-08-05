@@ -115,20 +115,64 @@ export const SimpleUpload = () => {
   const processData = (rawData: any[]) => {
     const parsedData: ParsedRow[] = [];
     
+    // Debug: Log the column headers found in the file
+    if (rawData.length > 0) {
+      const headers = Object.keys(rawData[0]);
+      console.log('🔍 File Headers Found:', headers);
+      toast({
+        title: "File headers detected",
+        description: `Headers: ${headers.slice(0, 5).join(', ')}${headers.length > 5 ? '...' : ''}`,
+      });
+    }
+    
     rawData.forEach((row: any) => {
-      // Look for location column (various possible names)
-      const location = row['Location'] || row['location'] || row['DBA'] || row['dba'] || row['Name'] || row['name'] || '';
+      // Enhanced location column matching (includes Maverick-specific terms)
+      const location = row['Location'] || row['location'] || 
+                      row['DBA'] || row['dba'] || 
+                      row['Name'] || row['name'] ||
+                      row['Business Name'] || row['business_name'] ||
+                      row['DBA Name'] || row['dba_name'] ||
+                      row['Merchant Name'] || row['merchant_name'] ||
+                      row['Account Name'] || row['account_name'] ||
+                      row['Client Name'] || row['client_name'] ||
+                      row['Store Name'] || row['store_name'] || '';
       
-      // Look for volume column (various possible names)
-      const volumeValue = row['Volume'] || row['volume'] || row['Amount'] || row['amount'] || row['Total'] || row['total'] || '0';
+      // Enhanced volume column matching (includes Maverick-specific terms)
+      const volumeValue = row['Volume'] || row['volume'] || 
+                         row['Amount'] || row['amount'] || 
+                         row['Total'] || row['total'] ||
+                         row['Processing Volume'] || row['processing_volume'] ||
+                         row['Monthly Volume'] || row['monthly_volume'] ||
+                         row['Gross Volume'] || row['gross_volume'] ||
+                         row['Transaction Amount'] || row['transaction_amount'] ||
+                         row['Sales Volume'] || row['sales_volume'] ||
+                         row['Card Volume'] || row['card_volume'] ||
+                         row['Net Sales'] || row['net_sales'] || '0';
       const volume = parseFloat(String(volumeValue).replace(/[,$]/g, '')) || 0;
       
-      // Look for agent payout column (various possible names)
-      const payoutValue = row['Agent Payout'] || row['agent_payout'] || row['Payout'] || row['payout'] || row['Commission'] || row['commission'] || row['Net Agent Payout'] || row['net_agent_payout'] || '0';
+      // Enhanced agent payout column matching (includes Maverick-specific terms)
+      const payoutValue = row['Agent Payout'] || row['agent_payout'] || 
+                         row['Payout'] || row['payout'] || 
+                         row['Commission'] || row['commission'] || 
+                         row['Net Agent Payout'] || row['net_agent_payout'] ||
+                         row['Residual Amount'] || row['residual_amount'] ||
+                         row['Commission Amount'] || row['commission_amount'] ||
+                         row['Residual Payout'] || row['residual_payout'] ||
+                         row['Monthly Residual'] || row['monthly_residual'] ||
+                         row['Agent Commission'] || row['agent_commission'] ||
+                         row['Rep Commission'] || row['rep_commission'] ||
+                         row['Residual'] || row['residual'] || '0';
       const agentPayout = parseFloat(String(payoutValue).replace(/[,$]/g, '')) || 0;
       
-      // Look for agent name column (various possible names)
-      const agentName = row['Agent'] || row['agent'] || row['Agent Name'] || row['agent_name'] || row['Rep'] || row['rep'] || row['Representative'] || row['representative'] || '';
+      // Enhanced agent name column matching (includes Maverick-specific terms)
+      const agentName = row['Agent'] || row['agent'] || 
+                       row['Agent Name'] || row['agent_name'] || 
+                       row['Rep'] || row['rep'] || 
+                       row['Representative'] || row['representative'] ||
+                       row['Sales Rep'] || row['sales_rep'] ||
+                       row['Account Rep'] || row['account_rep'] ||
+                       row['ISO Rep'] || row['iso_rep'] ||
+                       row['Partner'] || row['partner'] || '';
       
       if (location && volume > 0) {
         parsedData.push({
@@ -141,10 +185,21 @@ export const SimpleUpload = () => {
     });
     
     setData(parsedData);
-    toast({
-      title: "File parsed successfully",
-      description: `Found ${parsedData.length} valid records`
-    });
+    
+    // Enhanced feedback with debugging info
+    if (parsedData.length === 0 && rawData.length > 0) {
+      const headers = Object.keys(rawData[0]);
+      toast({
+        title: "No valid records found",
+        description: `Check if your file has the right columns. Found headers: ${headers.join(', ')}`,
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "File parsed successfully",
+        description: `Found ${parsedData.length} valid records`
+      });
+    }
   };
 
   const handleUpload = async () => {
