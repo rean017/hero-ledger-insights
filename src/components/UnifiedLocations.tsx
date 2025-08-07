@@ -50,7 +50,7 @@ const UnifiedLocations = () => {
   const [customDateRange, setCustomDateRange] = useState<{ from: Date; to: Date } | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   
-  // Changed default to march since that's where the data is
+  // Default to June since that's where the actual transaction data exists (2025-06-01)
   const timeFrames = [
     { value: "march", label: "March" },
     { value: "april", label: "April" },
@@ -58,7 +58,7 @@ const UnifiedLocations = () => {
     { value: "june", label: "June" },
     { value: "custom", label: "Custom" }
   ];
-  const [timeFrame, setTimeFrame] = useState("march");
+  const [timeFrame, setTimeFrame] = useState("june");
   
   const { toast } = useToast();
 
@@ -330,9 +330,13 @@ const UnifiedLocations = () => {
     location.agentNames?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
-  const dataStatus = locations && locations.length > 0 ? 
-    `📊 Showing data for ${timeFrame.toUpperCase()} (${locations.length} locations)` :
-    `⚠️ No data found for ${timeFrame.toUpperCase()}`;
+  // Enhanced data status with helpful messaging
+  const hasData = locations && locations.length > 0 && locations.some(loc => loc.totalVolume > 0);
+  const dataStatus = hasData ? 
+    `📊 Showing data for ${timeFrame.toUpperCase()} (${locations?.length || 0} locations)` :
+    locations && locations.length > 0 ?
+      `⚠️ No transaction data found for ${timeFrame.toUpperCase()}. Try selecting June or a custom date range.` :
+      `⚠️ No locations found for ${timeFrame.toUpperCase()}`;
 
   if (isLoading || isMonthlyDataLoading) {
     return (
@@ -340,7 +344,7 @@ const UnifiedLocations = () => {
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Locations & Accounts</h2>
           <p className="text-muted-foreground">Manage locations, accounts, and agent assignments</p>
-          <p className={`text-sm mt-1 ${monthlyData && monthlyData.length > 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
+          <p className={`text-sm mt-1 ${hasData ? 'text-emerald-600' : 'text-orange-600'}`}>
             {dataStatus}
           </p>
         </div>
@@ -357,7 +361,7 @@ const UnifiedLocations = () => {
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Locations & Accounts</h2>
           <p className="text-muted-foreground">Manage locations, accounts, and agent assignments</p>
-          <p className={`text-sm mt-1 ${monthlyData && monthlyData.length > 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
+          <p className={`text-sm mt-1 ${hasData ? 'text-emerald-600' : 'text-orange-600'}`}>
             {dataStatus}
           </p>
         </div>
