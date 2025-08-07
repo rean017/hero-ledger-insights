@@ -41,7 +41,7 @@ export const useSystemData = (options: SystemDataOptions) => {
     queryKey: ['system-data', timeFrame, customDateRange],
     queryFn: async () => {
       console.log('🚀 SYSTEM DATA: Fetching unified data for', timeFrame, dateRange);
-      console.log('📅 IMPORTANT: TRNXN transactions are dated 2025-06-01. Current timeframe may not include TRNXN data!');
+      console.log('📅 Date range:', dateRange);
       
       // Fetch all data concurrently
       const [
@@ -106,12 +106,13 @@ export const useSystemData = (options: SystemDataOptions) => {
       }) || [];
 
 
-      console.log('✅ SYSTEM DATA: Successfully processed', {
-        locations: locations?.length,
-        transactions: transactions?.length,
-        commissions: commissions.length,
-        stats
-      });
+       console.log('✅ SYSTEM DATA: Successfully processed', {
+         locations: locations?.length,
+         transactions: transactions?.length,
+         commissions: commissions.length,
+         stats,
+         sampleEnrichedLocation: enrichedLocations[0]
+       });
 
       return {
         locations: enrichedLocations,
