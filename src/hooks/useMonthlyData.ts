@@ -41,25 +41,24 @@ export const useMonthlyData = (timeFrame: string, customDateRange: { from: Date;
         return plData;
       }
 
-      // Fallback: Check transactions table for Maverick data and aggregate it
-      console.log('📊 MAVERICK DEBUG: No P&L data found, checking transactions table...');
+      // Fallback: Check transactions table and aggregate across all processors
+      console.log('📊 P&L DEBUG: No P&L data found, aggregating transactions across all processors...');
       
       const { data: transactions, error: transError } = await supabase
         .from('transactions')
         .select('*')
-        .eq('processor', 'Maverick')
         .gte('transaction_date', fromFormatted)
         .lte('transaction_date', toFormatted);
 
       if (transError) {
-        console.error('📊 MAVERICK DEBUG: Error fetching transactions:', transError);
+        console.error('📊 P&L DEBUG: Error fetching transactions:', transError);
         return [];
       }
 
-      console.log('📊 MAVERICK DEBUG: Maverick transactions found:', transactions?.length || 0, 'records');
+      console.log('📊 P&L DEBUG: Transactions found for aggregation:', transactions?.length || 0, 'records');
 
       if (!transactions || transactions.length === 0) {
-        console.log('📊 MAVERICK DEBUG: No Maverick transactions found for date range');
+        console.log('📊 P&L DEBUG: No transactions found for date range');
         return [];
       }
 
@@ -81,9 +80,9 @@ export const useMonthlyData = (timeFrame: string, customDateRange: { from: Date;
 
       // Create aggregated P&L data structure
       const aggregatedData = [{
-        id: 'maverick-aggregated',
+        id: 'aggregated-all-processors',
         month: fromFormatted,
-        processor: 'Maverick',
+        processor: 'All',
         total_volume: totalVolume,
         total_debit_volume: totalDebitVolume,
         total_agent_payouts: totalAgentPayouts,

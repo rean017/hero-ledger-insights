@@ -306,7 +306,7 @@ const UnifiedLocations = () => {
       console.log('🎉 UNIFIED LOCATIONS: Final enriched locations:', enrichedLocations.length);
       return enrichedLocations;
     },
-    enabled: !isMonthlyDataLoading && !!dateRange
+    enabled: !!dateRange
   });
 
   const handleTimeFrameChange = (value: string) => {
