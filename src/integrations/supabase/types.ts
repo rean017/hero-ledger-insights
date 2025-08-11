@@ -38,6 +38,50 @@ export type Database = {
         }
         Relationships: []
       }
+      facts: {
+        Row: {
+          created_at: string
+          id: string
+          is_zero_volume: boolean | null
+          location_id: string
+          mh_net_payout: number
+          month: string
+          total_volume: number
+          updated_at: string
+          upload_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_zero_volume?: boolean | null
+          location_id: string
+          mh_net_payout?: number
+          month: string
+          total_volume?: number
+          updated_at?: string
+          upload_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_zero_volume?: boolean | null
+          location_id?: string
+          mh_net_payout?: number
+          month?: string
+          total_volume?: number
+          updated_at?: string
+          upload_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           created_at: string
@@ -174,6 +218,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      upload_audits: {
+        Row: {
+          created_at: string
+          id: string
+          month: string
+          original_filename: string
+          row_count: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: string
+          original_filename: string
+          row_count: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: string
+          original_filename?: string
+          row_count?: number
+        }
+        Relationships: []
       }
     }
     Views: {

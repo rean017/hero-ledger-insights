@@ -21,33 +21,41 @@ export const useMonthlyData = (timeFrame: string, customDateRange: { from: Date;
 
       console.log('📊 MAVERICK DEBUG: Formatted dates - From:', fromFormatted, 'To:', toFormatted);
 
-      // Check monthly_data table directly
-      const { data: monthlyData, error: monthlyError } = await supabase
-        .from('monthly_data')
-        .select('*')
+      // Check facts table directly 
+      const { data: factsData, error: factsError } = await supabase
+        .from('facts')
+        .select(`
+          total_volume,
+          mh_net_payout,
+          month,
+          locations (
+            name
+          )
+        `)
         .gte('month', fromFormatted)
         .lte('month', toFormatted)
         .order('month');
 
-      if (monthlyError) {
-        console.error('📊 DEBUG: Error fetching monthly data:', monthlyError);
+      if (factsError) {
+        console.error('📊 DEBUG: Error fetching facts data:', factsError);
+        return [];
       } else {
-        console.log('📊 DEBUG: Monthly data found:', monthlyData?.length || 0, 'records');
+        console.log('📊 DEBUG: Facts data found:', factsData?.length || 0, 'records');
       }
 
-      // If we have monthly data, use it directly
-      if (monthlyData && monthlyData.length > 0) {
-        console.log('📊 DEBUG: Using monthly data');
-        return monthlyData.map(item => ({
-          id: item.id,
+      // If we have facts data, use it directly
+      if (factsData && factsData.length > 0) {
+        console.log('📊 DEBUG: Using facts data');
+        return factsData.map(item => ({
+          id: `facts-${item.month}`,
           month: item.month,
-          processor: 'Monthly',
-          total_volume: item.volume,
+          processor: 'Facts',
+          total_volume: item.total_volume,
           total_debit_volume: 0,
-          total_agent_payouts: item.agent_payout,
-          net_income: item.volume - item.agent_payout,
-          created_at: item.created_at,
-          updated_at: item.updated_at
+          total_agent_payouts: item.mh_net_payout,
+          net_income: item.total_volume - item.mh_net_payout,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }));
       }
 

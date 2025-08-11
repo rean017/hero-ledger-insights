@@ -29,12 +29,12 @@ interface PLReportData {
 export const SimpleReports = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
 
-  // Get available months
+  // Get available months from facts table
   const { data: availableMonths = [] } = useQuery({
     queryKey: ['available-months'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('monthly_data')
+        .from('facts')
         .select('month')
         .order('month', { ascending: false });
       
@@ -52,58 +52,49 @@ export const SimpleReports = () => {
     }
   }, [availableMonths, selectedMonth]);
 
-  // Get commission report data
+  // Get commission report data from facts table
   const { data: commissionData = [], isLoading: isCommissionLoading } = useQuery({
     queryKey: ['commission-report', selectedMonth],
     queryFn: async (): Promise<CommissionReportData[]> => {
       if (!selectedMonth) return [];
 
       const { data, error } = await supabase
-        .from('monthly_data')
-        .select('*')
+        .from('facts')
+        .select(`
+          total_volume,
+          mh_net_payout,
+          locations (
+            name
+          )
+        `)
         .eq('month', selectedMonth);
       
       if (error) throw error;
 
-      // Group by agent
-      const agentMap = new Map<string, CommissionReportData>();
-      
-      data.forEach(row => {
-        if (!agentMap.has(row.agent_name)) {
-          agentMap.set(row.agent_name, {
-            agentName: row.agent_name,
-            totalVolume: 0,
-            totalPayout: 0,
-            merchantHeroPayout: 0,
-            avgBPS: 0,
-            locationCount: 0
-          });
-        }
-        
-        const agent = agentMap.get(row.agent_name)!;
-        agent.totalVolume += Number(row.volume);
-        agent.totalPayout += Number(row.agent_payout);
-        agent.locationCount += 1;
-      });
+      // Since we're now using MH net payout structure, create a single summary
+      const totalVolume = data.reduce((sum, row) => sum + Number(row.total_volume), 0);
+      const totalPayout = data.reduce((sum, row) => sum + Number(row.mh_net_payout), 0);
+      const merchantHeroPayout = totalVolume - totalPayout;
+      const avgBPS = totalVolume > 0 ? (totalPayout / totalVolume) * 10000 : 0;
 
-      // Calculate derived values
-      const result = Array.from(agentMap.values()).map(agent => ({
-        ...agent,
-        merchantHeroPayout: agent.totalVolume - agent.totalPayout,
-        avgBPS: agent.totalVolume > 0 ? (agent.totalPayout / agent.totalVolume) * 10000 : 0
-      }));
-
-      return result.sort((a, b) => b.totalVolume - a.totalVolume);
+      return [{
+        agentName: 'Merchant Hero',
+        totalVolume,
+        totalPayout,
+        merchantHeroPayout,
+        avgBPS,
+        locationCount: data.length
+      }];
     },
     enabled: !!selectedMonth
   });
 
-  // Get P&L report data (all months)
+  // Get P&L report data (all months) from facts table
   const { data: plData = [], isLoading: isPLLoading } = useQuery({
     queryKey: ['pl-report'],
     queryFn: async (): Promise<PLReportData[]> => {
       const { data, error } = await supabase
-        .from('monthly_data')
+        .from('facts')
         .select('*')
         .order('month', { ascending: false });
       
@@ -123,8 +114,8 @@ export const SimpleReports = () => {
         }
         
         const monthData = monthMap.get(row.month)!;
-        monthData.totalVolume += Number(row.volume);
-        monthData.totalPayout += Number(row.agent_payout);
+        monthData.totalVolume += Number(row.total_volume);
+        monthData.totalPayout += Number(row.mh_net_payout);
       });
 
       // Calculate net income
@@ -233,10 +224,10 @@ export const SimpleReports = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Agent Name</TableHead>
-                      <TableHead>Locations</TableHead>
-                      <TableHead>Total Volume</TableHead>
-                      <TableHead>Agent Payout</TableHead>
+                  <TableHead>Agent/Company</TableHead>
+                  <TableHead>Locations</TableHead>
+                  <TableHead>Total Volume</TableHead>
+                      <TableHead>MH Net Payout</TableHead>
                       <TableHead>Merchant Hero Payout</TableHead>
                       <TableHead>Avg BPS</TableHead>
                     </TableRow>

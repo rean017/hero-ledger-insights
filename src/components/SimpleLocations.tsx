@@ -11,9 +11,8 @@ import { format, parseISO } from 'date-fns';
 
 interface LocationData {
   location_name: string;
-  agent_name: string;
-  volume: number;
-  agent_payout: number;
+  total_volume: number;
+  mh_net_payout: number;
   month: string;
 }
 
@@ -22,12 +21,12 @@ export const SimpleLocations = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAgent, setFilterAgent] = useState<string>('');
 
-  // Get available months
+  // Get available months from facts table
   const { data: availableMonths = [] } = useQuery({
     queryKey: ['available-months'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('monthly_data')
+        .from('facts')
         .select('month')
         .order('month', { ascending: false });
       
@@ -45,41 +44,50 @@ export const SimpleLocations = () => {
     }
   }, [availableMonths, selectedMonth]);
 
-  // Get location data for selected month
+  // Get location data for selected month from facts table
   const { data: locationData = [], isLoading } = useQuery({
     queryKey: ['location-data', selectedMonth],
     queryFn: async (): Promise<LocationData[]> => {
       if (!selectedMonth) return [];
 
       const { data, error } = await supabase
-        .from('monthly_data')
-        .select('*')
+        .from('facts')
+        .select(`
+          total_volume,
+          mh_net_payout,
+          month,
+          locations (
+            name
+          )
+        `)
         .eq('month', selectedMonth)
-        .order('location_name');
+        .order('locations(name)');
       
       if (error) throw error;
-      return data;
+      
+      return data.map(item => ({
+        location_name: item.locations?.name || '',
+        total_volume: item.total_volume,
+        mh_net_payout: item.mh_net_payout,
+        month: item.month
+      }));
     },
     enabled: !!selectedMonth
   });
 
-  // Get unique agents for filter
-  const uniqueAgents = React.useMemo(() => {
-    return [...new Set(locationData.map(location => location.agent_name))];
-  }, [locationData]);
+  // Get unique agents for filter (simplified - just show "Merchant Hero")
+  const uniqueAgents = ['Merchant Hero'];
 
   // Filter location data
   const filteredData = React.useMemo(() => {
     return locationData.filter(location => {
       const matchesSearch = searchTerm === '' || 
-        location.location_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        location.agent_name.toLowerCase().includes(searchTerm.toLowerCase());
+        location.location_name.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchesAgent = filterAgent === '' || location.agent_name === filterAgent;
-      
-      return matchesSearch && matchesAgent;
+      // Since we only have Merchant Hero now, no agent filtering needed
+      return matchesSearch;
     });
-  }, [locationData, searchTerm, filterAgent]);
+  }, [locationData, searchTerm]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -131,25 +139,12 @@ export const SimpleLocations = () => {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search locations or agents..."
+              placeholder="Search locations..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
             />
           </div>
-          <Select value={filterAgent} onValueChange={setFilterAgent}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by agent" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All agents</SelectItem>
-              {uniqueAgents.map(agent => (
-                <SelectItem key={agent} value={agent}>
-                  {agent}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       )}
 
@@ -166,26 +161,22 @@ export const SimpleLocations = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Location Name</TableHead>
-                  <TableHead>Assigned Agent</TableHead>
                   <TableHead>Volume</TableHead>
-                  <TableHead>Agent Payout</TableHead>
+                  <TableHead>MH Net Payout</TableHead>
                   <TableHead>Merchant Hero Payout</TableHead>
                   <TableHead>BPS</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredData.map((location, index) => {
-                  const merchantHeroPayout = location.volume - location.agent_payout;
-                  const bps = calculateBPS(location.agent_payout, location.volume);
+                  const merchantHeroPayout = location.total_volume - location.mh_net_payout;
+                  const bps = calculateBPS(location.mh_net_payout, location.total_volume);
 
                   return (
                     <TableRow key={`${location.location_name}-${index}`}>
                       <TableCell className="font-medium">{location.location_name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{location.agent_name}</Badge>
-                      </TableCell>
-                      <TableCell>{formatCurrency(location.volume)}</TableCell>
-                      <TableCell>{formatCurrency(location.agent_payout)}</TableCell>
+                      <TableCell>{formatCurrency(location.total_volume)}</TableCell>
+                      <TableCell>{formatCurrency(location.mh_net_payout)}</TableCell>
                       <TableCell>{formatCurrency(merchantHeroPayout)}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">

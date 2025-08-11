@@ -18,12 +18,12 @@ interface MonthlyStats {
 export const SimpleDashboard = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
 
-  // Get available months
+  // Get available months from facts table
   const { data: availableMonths = [] } = useQuery({
     queryKey: ['available-months'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('monthly_data')
+        .from('facts')
         .select('month')
         .order('month', { ascending: false });
       
@@ -41,7 +41,7 @@ export const SimpleDashboard = () => {
     }
   }, [availableMonths, selectedMonth]);
 
-  // Get monthly statistics
+  // Get monthly statistics from facts and locations
   const { data: monthlyStats, isLoading } = useQuery({
     queryKey: ['monthly-stats', selectedMonth],
     queryFn: async (): Promise<MonthlyStats> => {
@@ -54,17 +54,23 @@ export const SimpleDashboard = () => {
       };
 
       const { data, error } = await supabase
-        .from('monthly_data')
-        .select('*')
+        .from('facts')
+        .select(`
+          total_volume,
+          mh_net_payout,
+          locations (
+            name
+          )
+        `)
         .eq('month', selectedMonth);
       
       if (error) throw error;
 
-      const totalVolume = data.reduce((sum, row) => sum + Number(row.volume), 0);
-      const totalAgentPayout = data.reduce((sum, row) => sum + Number(row.agent_payout), 0);
+      const totalVolume = data.reduce((sum, row) => sum + Number(row.total_volume), 0);
+      const totalAgentPayout = data.reduce((sum, row) => sum + Number(row.mh_net_payout), 0);
       const netIncome = totalVolume - totalAgentPayout;
-      const totalLocations = new Set(data.map(row => row.location_name)).size;
-      const totalAgents = new Set(data.map(row => row.agent_name)).size;
+      const totalLocations = data.length;
+      const totalAgents = 1; // For now, since we're tracking MH net payout
 
       return {
         totalVolume,
