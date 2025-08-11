@@ -11,11 +11,9 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: BarChart3 },
     { id: "upload", label: "Upload Data", icon: Upload },
-    { id: "upload-management", label: "Upload Management", icon: FileText },
     { id: "agents", label: "Agent Management", icon: Users },
     { id: "locations", label: "Locations", icon: MapPin },
-    { id: "commissions", label: "Commission Reports", icon: Calculator },
-    { id: "pl-reports", label: "P&L Reports", icon: DollarSign },
+    { id: "reports", label: "Reports", icon: FileText },
     { id: "settings", label: "Settings", icon: Settings },
   ];
 

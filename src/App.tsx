@@ -2,14 +2,12 @@
 import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
-import Dashboard from "./components/Dashboard";
 import Sidebar from "./components/Sidebar";
-import { SimpleUpload } from "./components/SimpleUpload";
-import UploadManagement from "./components/UploadManagement";
-import AgentManagement from "./components/AgentManagement";
-import UnifiedLocations from "./components/UnifiedLocations";
-import PLReports from "./components/PLReports";
-import LocationCommissionReport from "./components/LocationCommissionReport";
+import { SimpleDashboard } from "./components/SimpleDashboard";
+import { SimpleAgentManagement } from "./components/SimpleAgentManagement";
+import { SimpleLocations } from "./components/SimpleLocations";
+import { SimpleReports } from "./components/SimpleReports";
+import { SimpleFileUpload } from "./components/SimpleFileUpload";
 import Settings from "./components/Settings";
 
 const queryClient = new QueryClient();
@@ -20,23 +18,19 @@ function App() {
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard":
-        return <Dashboard />;
+        return <SimpleDashboard />;
       case "upload":
-        return <SimpleUpload />;
-      case "upload-management":
-        return <UploadManagement />;
+        return <SimpleFileUpload />;
       case "agents":
-        return <AgentManagement />;
+        return <SimpleAgentManagement />;
       case "locations":
-        return <UnifiedLocations />;
-      case "commissions":
-        return <LocationCommissionReport />;
-      case "pl-reports":
-        return <PLReports />;
+        return <SimpleLocations />;
+      case "reports":
+        return <SimpleReports />;
       case "settings":
         return <Settings />;
       default:
-        return <Dashboard />;
+        return <SimpleDashboard />;
     }
   };
 

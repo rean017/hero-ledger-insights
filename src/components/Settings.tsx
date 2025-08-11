@@ -330,12 +330,27 @@ const Settings = () => {
         </TabsContent>
 
         <TabsContent value="cleanup" className="space-y-4">
-          <DataRepairUtility />
-          <DataCleanupUtility />
+          <Card>
+            <CardHeader>
+              <CardTitle>Data Cleanup</CardTitle>
+              <CardDescription>Simplified commission tracker - data cleanup not needed</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Upload fresh monthly data to replace existing records.</p>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="debug" className="space-y-4">
-          <LocationDataDebugger />
+          <Card>
+            <CardHeader>
+              <CardTitle>Debug Tools</CardTitle>
+              <CardDescription>Streamlined app - minimal debugging needed</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Check browser console for upload and data processing logs.</p>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

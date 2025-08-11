@@ -21,24 +21,34 @@ export const useMonthlyData = (timeFrame: string, customDateRange: { from: Date;
 
       console.log('📊 MAVERICK DEBUG: Formatted dates - From:', fromFormatted, 'To:', toFormatted);
 
-      // First, check for P&L data in pl_data table
-      const { data: plData, error: plError } = await supabase
-        .from('pl_data')
+      // Check monthly_data table directly
+      const { data: monthlyData, error: monthlyError } = await supabase
+        .from('monthly_data')
         .select('*')
         .gte('month', fromFormatted)
         .lte('month', toFormatted)
         .order('month');
 
-      if (plError) {
-        console.error('📊 MAVERICK DEBUG: Error fetching P&L data:', plError);
+      if (monthlyError) {
+        console.error('📊 DEBUG: Error fetching monthly data:', monthlyError);
       } else {
-        console.log('📊 MAVERICK DEBUG: P&L data found:', plData?.length || 0, 'records');
+        console.log('📊 DEBUG: Monthly data found:', monthlyData?.length || 0, 'records');
       }
 
-      // If we have P&L data, use it
-      if (plData && plData.length > 0) {
-        console.log('📊 MAVERICK DEBUG: Using P&L data from pl_data table');
-        return plData;
+      // If we have monthly data, use it directly
+      if (monthlyData && monthlyData.length > 0) {
+        console.log('📊 DEBUG: Using monthly data');
+        return monthlyData.map(item => ({
+          id: item.id,
+          month: item.month,
+          processor: 'Monthly',
+          total_volume: item.volume,
+          total_debit_volume: 0,
+          total_agent_payouts: item.agent_payout,
+          net_income: item.volume - item.agent_payout,
+          created_at: item.created_at,
+          updated_at: item.updated_at
+        }));
       }
 
       // Fallback: Check transactions table and aggregate across all processors

@@ -18,7 +18,6 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          is_active: boolean
           name: string
           notes: string | null
           updated_at: string
@@ -26,7 +25,6 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          is_active?: boolean
           name: string
           notes?: string | null
           updated_at?: string
@@ -34,147 +32,66 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
-          is_active?: boolean
           name?: string
           notes?: string | null
           updated_at?: string
         }
         Relationships: []
-      }
-      file_uploads: {
-        Row: {
-          created_at: string
-          errors: Json | null
-          filename: string
-          id: string
-          processor: string
-          rows_processed: number | null
-          status: string
-        }
-        Insert: {
-          created_at?: string
-          errors?: Json | null
-          filename: string
-          id?: string
-          processor: string
-          rows_processed?: number | null
-          status?: string
-        }
-        Update: {
-          created_at?: string
-          errors?: Json | null
-          filename?: string
-          id?: string
-          processor?: string
-          rows_processed?: number | null
-          status?: string
-        }
-        Relationships: []
-      }
-      location_agent_assignments: {
-        Row: {
-          agent_name: string
-          commission_rate: number
-          created_at: string
-          id: string
-          is_active: boolean | null
-          location_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          agent_name: string
-          commission_rate?: number
-          created_at?: string
-          id?: string
-          is_active?: boolean | null
-          location_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          agent_name?: string
-          commission_rate?: number
-          created_at?: string
-          id?: string
-          is_active?: boolean | null
-          location_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "location_agent_assignments_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       locations: {
         Row: {
-          account_id: string | null
-          account_type: string | null
           created_at: string
           id: string
-          is_franchise: boolean | null
           name: string
           notes: string | null
           updated_at: string
         }
         Insert: {
-          account_id?: string | null
-          account_type?: string | null
           created_at?: string
           id?: string
-          is_franchise?: boolean | null
           name: string
           notes?: string | null
           updated_at?: string
         }
         Update: {
-          account_id?: string | null
-          account_type?: string | null
           created_at?: string
           id?: string
-          is_franchise?: boolean | null
           name?: string
           notes?: string | null
           updated_at?: string
         }
         Relationships: []
       }
-      pl_data: {
+      monthly_data: {
         Row: {
+          agent_name: string
+          agent_payout: number
           created_at: string
           id: string
+          location_name: string
           month: string
-          net_income: number
-          processor: string
-          total_agent_payouts: number
-          total_debit_volume: number
-          total_volume: number
           updated_at: string
+          volume: number
         }
         Insert: {
+          agent_name: string
+          agent_payout?: number
           created_at?: string
           id?: string
+          location_name: string
           month: string
-          net_income?: number
-          processor: string
-          total_agent_payouts?: number
-          total_debit_volume?: number
-          total_volume?: number
           updated_at?: string
+          volume?: number
         }
         Update: {
+          agent_name?: string
+          agent_payout?: number
           created_at?: string
           id?: string
+          location_name?: string
           month?: string
-          net_income?: number
-          processor?: string
-          total_agent_payouts?: number
-          total_debit_volume?: number
-          total_volume?: number
           updated_at?: string
+          volume?: number
         }
         Relationships: []
       }
