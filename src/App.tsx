@@ -8,6 +8,7 @@ import { SimpleAgentManagement } from "./components/SimpleAgentManagement";
 import { SimpleLocations } from "./components/SimpleLocations";
 import { SimpleReports } from "./components/SimpleReports";
 import { EnhancedFileUpload } from "./components/EnhancedFileUpload";
+import { UploadManagement } from "./components/UploadManagement";
 import Settings from "./components/Settings";
 
 const queryClient = new QueryClient();
@@ -21,6 +22,8 @@ function App() {
         return <SimpleDashboard />;
       case "upload":
         return <EnhancedFileUpload />;
+      case "management":
+        return <UploadManagement />;
       case "agents":
         return <SimpleAgentManagement />;
       case "locations":
