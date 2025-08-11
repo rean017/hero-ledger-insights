@@ -18,12 +18,12 @@ interface MonthlyStats {
 export const SimpleDashboard = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
 
-  // Get available months from facts table
+  // Get available months from new stable schema - facts_monthly_location table
   const { data: availableMonths = [] } = useQuery({
-    queryKey: ['available-months'],
+    queryKey: ['available-months-new'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('facts')
+        .from('facts_monthly_location')
         .select('month')
         .order('month', { ascending: false });
       
@@ -41,9 +41,9 @@ export const SimpleDashboard = () => {
     }
   }, [availableMonths, selectedMonth]);
 
-  // Get monthly statistics from facts and locations
+  // Get monthly statistics from new stable schema
   const { data: monthlyStats, isLoading } = useQuery({
-    queryKey: ['monthly-stats', selectedMonth],
+    queryKey: ['monthly-stats-new', selectedMonth],
     queryFn: async (): Promise<MonthlyStats> => {
       if (!selectedMonth) return {
         totalVolume: 0,
@@ -54,11 +54,11 @@ export const SimpleDashboard = () => {
       };
 
       const { data, error } = await supabase
-        .from('facts')
+        .from('facts_monthly_location')
         .select(`
           total_volume,
           mh_net_payout,
-          locations (
+          locations_new (
             name
           )
         `)

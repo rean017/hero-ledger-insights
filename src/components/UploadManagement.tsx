@@ -28,19 +28,19 @@ export const UploadManagement = () => {
     try {
       setLoading(true);
       
-      // Get upload audits first
+      // Get upload data from new stable schema - uploads table
       const { data: uploadData, error: uploadError } = await supabase
-        .from('upload_audits')
+        .from('uploads')
         .select('id, original_filename, row_count, month, created_at')
         .order('created_at', { ascending: false });
 
       if (uploadError) throw uploadError;
 
-      // Get facts count for each upload
+      // Get facts count for each upload from facts_monthly_location table
       const uploadsWithCounts = await Promise.all(
         uploadData.map(async (upload) => {
           const { count, error } = await supabase
-            .from('facts')
+            .from('facts_monthly_location')
             .select('*', { count: 'exact', head: true })
             .eq('upload_id', upload.id);
 
@@ -72,20 +72,20 @@ export const UploadManagement = () => {
     try {
       setDeletingId(uploadId);
 
-      // Delete facts first, then upload audit
+      // Delete facts first, then upload (using new stable schema)
       const { error: factsError } = await supabase
-        .from('facts')
+        .from('facts_monthly_location')
         .delete()
         .eq('upload_id', uploadId);
 
       if (factsError) throw factsError;
 
-      const { error: auditError } = await supabase
-        .from('upload_audits')
+      const { error: uploadError } = await supabase
+        .from('uploads')
         .delete()
         .eq('id', uploadId);
 
-      if (auditError) throw auditError;
+      if (uploadError) throw uploadError;
 
       toast({
         title: "Upload Deleted",

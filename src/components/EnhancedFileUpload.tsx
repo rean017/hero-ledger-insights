@@ -320,12 +320,12 @@ export const EnhancedFileUpload = () => {
     setError(null);
     
     try {
-      // Prepare data for the RPC call
+      // Prepare data for the RPC call using new stable schema
       const locations = parsedData.map(row => row.location);
       const volumes = parsedData.map(row => row.volume);
       const mhNets = parsedData.map(row => row.agentNet);
 
-      // Call the PostgreSQL RPC function directly
+      // Call the PostgreSQL RPC function directly (stable schema)
       const { data, error } = await supabase.rpc('mh_upload_master', {
         p_month: normalizedMonth,
         p_filename: file!.name,
