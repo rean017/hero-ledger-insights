@@ -256,6 +256,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      mh_upload_master: {
+        Args: {
+          p_month: string
+          p_filename: string
+          p_locations: string[]
+          p_volumes: number[]
+          p_mh_nets: number[]
+        }
+        Returns: Json
+      }
       set_user_admin: {
         Args: { user_email: string }
         Returns: undefined

@@ -241,74 +241,40 @@ export const EnhancedFileUpload = () => {
     setError(null);
     
     try {
-      // Create upload audit
-      const { data: auditData, error: auditError } = await supabase
-        .from('upload_audits')
-        .insert({
-          original_filename: file!.name,
-          row_count: parsedData.length,
-          month: normalizedMonth
-        })
-        .select()
-        .single();
-      
-      if (auditError) throw auditError;
-      
-      // Process each row
-      for (const row of parsedData) {
-        if (!row.location.trim()) continue;
-        
-        // Upsert location by case-insensitive name
-        const { data: locationData, error: locationError } = await supabase
-          .from('locations')
-          .select('id')
-          .ilike('name', row.location.trim())
-          .maybeSingle();
-        
-        let locationId;
-        
-        if (locationData) {
-          locationId = locationData.id;
-        } else {
-          // Create new location
-          const { data: newLocation, error: createError } = await supabase
-            .from('locations')
-            .insert({ name: row.location.trim() })
-            .select('id')
-            .single();
-          
-          if (createError) throw createError;
-          locationId = newLocation.id;
-        }
-        
-        // Insert/update facts
-        const { error: factsError } = await supabase
-          .from('facts')
-          .upsert({
-            month: normalizedMonth,
-            location_id: locationId,
-            total_volume: row.volume,
-            mh_net_payout: row.agentNet,
-            upload_id: auditData.id
-          }, {
-            onConflict: 'month,location_id'
-          });
-        
-        if (factsError) throw factsError;
+      // Use the new bulk upload endpoint
+      const payload = {
+        month: monthInput.replace(/\//g, '-'),
+        filename: file!.name,
+        rows: parsedData.map(row => ({
+          location: row.location,
+          volume: row.volume,
+          agent_net: row.agentNet
+        }))
+      };
+
+      const response = await supabase.functions.invoke('uploads-master', {
+        body: payload
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Upload failed');
       }
+
+      const result = response.data;
       
       setUploadComplete(true);
       toast({
         title: "Upload Successful",
-        description: `Uploaded ${parsedData.length} records for ${monthInput}`
+        description: `Imported ${result.inserted} rows • ${result.new_locations} new locations`
       });
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload error:', error);
-      setError('Upload failed. Please try again.');
+      const errorMessage = error.message || 'Upload failed. Please try again.';
+      setError(errorMessage);
       toast({
         title: "Upload Failed",
-        description: "Please try again",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
