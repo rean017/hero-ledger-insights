@@ -320,31 +320,31 @@ export const EnhancedFileUpload = () => {
     setError(null);
     
     try {
-      // Use the new bulk upload endpoint
-      const payload = {
-        month: monthInput.replace(/\//g, '-'),
-        filename: file!.name,
-        rows: parsedData.map(row => ({
-          location: row.location,
-          volume: row.volume,
-          agent_net: row.agentNet
-        }))
-      };
+      // Prepare data for the RPC call
+      const locations = parsedData.map(row => row.location);
+      const volumes = parsedData.map(row => row.volume);
+      const mhNets = parsedData.map(row => row.agentNet);
 
-      const response = await supabase.functions.invoke('uploads-master', {
-        body: payload
+      // Call the PostgreSQL RPC function directly
+      const { data, error } = await supabase.rpc('mh_upload_master', {
+        p_month: normalizedMonth,
+        p_filename: file!.name,
+        p_locations: locations,
+        p_volumes: volumes,
+        p_mh_nets: mhNets
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Upload failed');
+      if (error) {
+        throw new Error(error.message || 'Upload failed');
       }
 
-      const result = response.data;
-      
+      // Parse the JSON response
+      const result = data as any;
+
       setUploadComplete(true);
       toast({
         title: "Upload Successful",
-        description: `Imported ${result.inserted} rows • ${result.new_locations} new locations`
+        description: `Imported ${result.inserted} rows • ${result.new_locations} new locations • ${result.zero_count} zero-volume`
       });
       
     } catch (error: any) {
