@@ -396,14 +396,13 @@ export const EnhancedFileUpload = () => {
                     <div>
                       <Label>Location/DBA</Label>
                       <Select 
-                        value={columnMapping.location || ''} 
+                        value={columnMapping.location || undefined} 
                         onValueChange={(value) => handleMappingChange('location', value || null)}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select column" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
                           {headers.map(header => (
                             <SelectItem key={header} value={header}>{header}</SelectItem>
                           ))}
@@ -414,14 +413,13 @@ export const EnhancedFileUpload = () => {
                     <div>
                       <Label>Volume</Label>
                       <Select 
-                        value={columnMapping.volume || ''} 
+                        value={columnMapping.volume || undefined} 
                         onValueChange={(value) => handleMappingChange('volume', value || null)}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select column" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
                           {headers.map(header => (
                             <SelectItem key={header} value={header}>{header}</SelectItem>
                           ))}
@@ -432,14 +430,13 @@ export const EnhancedFileUpload = () => {
                     <div>
                       <Label>Agent Net Payout</Label>
                       <Select 
-                        value={columnMapping.agentNet || ''} 
+                        value={columnMapping.agentNet || undefined} 
                         onValueChange={(value) => handleMappingChange('agentNet', value || null)}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select column" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
                           {headers.map(header => (
                             <SelectItem key={header} value={header}>{header}</SelectItem>
                           ))}
