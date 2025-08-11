@@ -82,6 +82,57 @@ export type Database = {
           },
         ]
       }
+      facts_monthly_location: {
+        Row: {
+          created_at: string
+          id: string
+          is_zero_volume: boolean | null
+          location_id: string
+          mh_net_payout: number
+          month: string
+          total_volume: number
+          updated_at: string
+          upload_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_zero_volume?: boolean | null
+          location_id: string
+          mh_net_payout: number
+          month: string
+          total_volume: number
+          updated_at?: string
+          upload_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_zero_volume?: boolean | null
+          location_id?: string
+          mh_net_payout?: number
+          month?: string
+          total_volume?: number
+          updated_at?: string
+          upload_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facts_monthly_location_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations_new"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "facts_monthly_location_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           created_at: string
@@ -103,6 +154,27 @@ export type Database = {
           name?: string
           notes?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      locations_new: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
         }
         Relationships: []
       }
@@ -233,6 +305,30 @@ export type Database = {
           month: string
           original_filename: string
           row_count: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: string
+          original_filename?: string
+          row_count?: number
+        }
+        Relationships: []
+      }
+      uploads: {
+        Row: {
+          created_at: string
+          id: string
+          month: string
+          original_filename: string
+          row_count: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: string
+          original_filename: string
+          row_count?: number
         }
         Update: {
           created_at?: string
