@@ -26,16 +26,22 @@ interface ColumnMapping {
 }
 
 const COLUMN_ALIASES = {
-  location: ['dba', 'location', 'locationname', 'merchant', 'business', 'store', 'accountname'],
-  volume: ['volume', 'totalvolume', 'monthlyvolume', 'tpv', 'grossvolume'],
-  agentNet: ['agentnetpayout', 'netpayout', 'agentpayout', 'net', 'residuals']
+  location: [
+    'dba', 'location', 'locationname', 'merchant', 'business', 'storename', 
+    'account', 'accountname', 'customer', 'client'
+  ],
+  volume: [
+    'volume', 'totalvolume', 'monthlyvolume', 'tpv', 'grossvolume', 
+    'sales', 'salesvolume', 'processingvolume', 'netvolume'
+  ],
+  agent_net: [
+    'agentnet', 'agentnetpayout', 'agentnetrevenue', 'netpayout', 'netrevenue', 
+    'residuals', 'commission', 'agentpayout'
+  ]
 };
 
 const normalizeHeader = (header: string): string => {
-  return header
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-    .trim();
+  return String(header || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 };
 
 const parseNumber = (value: any): number => {
@@ -72,6 +78,56 @@ const normalizeMonth = (monthInput: string): string | null => {
   
   // Return as YYYY-MM-01
   return `${year}-${month.toString().padStart(2, '0')}-01`;
+};
+
+const findHeaderRow = (rows: any[][]): { headerIndex: number; headers: string[] } => {
+  const scoreRow = (row: any[]): number => {
+    const normalizedCells = row.map(cell => normalizeHeader(String(cell || '')));
+    let score = 0;
+    
+    const hasMatch = (aliases: string[]) => 
+      normalizedCells.some(cell => aliases.includes(cell));
+    
+    if (hasMatch(COLUMN_ALIASES.location)) score++;
+    if (hasMatch(COLUMN_ALIASES.volume)) score++;
+    if (hasMatch(COLUMN_ALIASES.agent_net)) score++;
+    
+    return score;
+  };
+
+  const searchRows = rows.slice(0, Math.min(10, rows.length));
+  let bestScore = -1;
+  let bestIndex = 0;
+
+  searchRows.forEach((row, index) => {
+    const score = scoreRow(row);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+
+  return {
+    headerIndex: bestIndex,
+    headers: rows[bestIndex]?.map(h => String(h || '').trim()) || []
+  };
+};
+
+const autoMapHeaders = (headers: string[]): ColumnMapping => {
+  const mapping: ColumnMapping = { location: null, volume: null, agentNet: null };
+  
+  const findColumn = (aliases: string[]): string | null => {
+    const headerIndex = headers.findIndex(header => 
+      aliases.includes(normalizeHeader(header))
+    );
+    return headerIndex >= 0 ? headers[headerIndex] : null;
+  };
+
+  mapping.location = findColumn(COLUMN_ALIASES.location);
+  mapping.volume = findColumn(COLUMN_ALIASES.volume);
+  mapping.agentNet = findColumn(COLUMN_ALIASES.agent_net);
+
+  return mapping;
 };
 
 export const EnhancedFileUpload = () => {
@@ -116,10 +172,10 @@ export const EnhancedFileUpload = () => {
     
     if (fileExtension === 'csv') {
       Papa.parse(file, {
-        header: true,
+        header: false, // We'll handle headers ourselves
         skipEmptyLines: true,
         complete: (results) => {
-          processFileData(results.data, Object.keys(results.data[0] || {}));
+          processFileData(results.data as string[][], file.name);
         },
         error: (error) => {
           setError('Failed to parse CSV file');
@@ -133,26 +189,30 @@ export const EnhancedFileUpload = () => {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
           
-          // Auto-pick first non-empty worksheet
-          let selectedSheet = null;
-          for (const sheetName of workbook.SheetNames) {
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet);
-            if (jsonData.length > 0) {
-              selectedSheet = worksheet;
-              break;
-            }
-          }
+          // Find first sheet with data
+          const sheetName = workbook.SheetNames.find(name => {
+            const sheet = workbook.Sheets[name];
+            const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { 
+              header: 1, 
+              raw: false, 
+              blankrows: false 
+            });
+            return rows.flat().some(v => String(v || '').trim().length > 0);
+          }) || workbook.SheetNames[0];
           
-          if (!selectedSheet) {
+          if (!sheetName) {
             setError('No data found in any worksheet');
             return;
           }
           
-          const jsonData = XLSX.utils.sheet_to_json(selectedSheet);
-          const fileHeaders = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { 
+            header: 1, 
+            raw: false, 
+            blankrows: false 
+          });
           
-          processFileData(jsonData, fileHeaders);
+          processFileData(rows, file.name);
         } catch (error) {
           setError('Failed to parse Excel file');
           console.error('Excel parsing error:', error);
@@ -162,49 +222,68 @@ export const EnhancedFileUpload = () => {
     }
   };
 
-  const processFileData = (data: any[], fileHeaders: string[]) => {
-    // Filter out empty rows
-    const filteredData = data.filter(row => 
-      Object.values(row).some(value => value !== null && value !== undefined && String(value).trim() !== '')
+  const processFileData = (rows: string[][], filename: string) => {
+    if (!rows.length) {
+      setError('No data found in file');
+      return;
+    }
+
+    // Find header row and extract headers
+    const { headerIndex, headers } = findHeaderRow(rows);
+    
+    // Get data rows (everything after header row)
+    const dataRows = rows.slice(headerIndex + 1).filter(row => 
+      row.some(cell => String(cell || '').trim().length > 0)
     );
     
-    setRawData(filteredData);
-    setHeaders(fileHeaders);
+    if (!headers.length) {
+      setError('No valid headers found in file');
+      return;
+    }
+
+    if (!dataRows.length) {
+      setError('No data rows found after headers');
+      return;
+    }
+
+    setRawData(dataRows);
+    setHeaders(headers);
     
     // Auto-map headers
-    const mapping: ColumnMapping = { location: null, volume: null, agentNet: null };
-    
-    fileHeaders.forEach(header => {
-      const normalized = normalizeHeader(header);
-      
-      Object.entries(COLUMN_ALIASES).forEach(([field, aliases]) => {
-        if (aliases.includes(normalized)) {
-          mapping[field as keyof ColumnMapping] = header;
-        }
-      });
-    });
-    
+    const mapping = autoMapHeaders(headers);
     setColumnMapping(mapping);
     
-    if (!mapping.location || !mapping.volume || !mapping.agentNet) {
-      setError("We found a file but couldn't map required headers. Map them below.");
-    } else {
+    // Check if we have all required mappings
+    const mappedCount = Object.values(mapping).filter(v => v !== null).length;
+    
+    if (mappedCount >= 2) {
       setError(null);
-      generatePreview(filteredData, mapping);
+      generatePreview(dataRows, mapping, headers);
+    } else {
+      setError('We loaded your file. Map the three columns below. We\'ll remember your choices for next time.');
     }
   };
 
-  const generatePreview = (data: any[], mapping: ColumnMapping) => {
+  const generatePreview = (data: string[][], mapping: ColumnMapping, headers: string[]) => {
     if (!mapping.location || !mapping.volume || !mapping.agentNet) {
       setParsedData([]);
       return;
     }
     
+    const locationIndex = headers.indexOf(mapping.location);
+    const volumeIndex = headers.indexOf(mapping.volume);
+    const agentNetIndex = headers.indexOf(mapping.agentNet);
+    
+    if (locationIndex === -1 || volumeIndex === -1 || agentNetIndex === -1) {
+      setParsedData([]);
+      return;
+    }
+    
     const parsed = data.map(row => ({
-      location: String(row[mapping.location!] || '').trim(),
-      volume: parseNumber(row[mapping.volume!]),
-      agentNet: parseNumber(row[mapping.agentNet!])
-    })).filter(row => row.location); // Only include rows with a location
+      location: String(row[locationIndex] || '').trim(),
+      volume: parseNumber(row[volumeIndex]),
+      agentNet: parseNumber(row[agentNetIndex])
+    })).filter(row => row.location.length > 0);
     
     setParsedData(parsed);
     
@@ -218,7 +297,7 @@ export const EnhancedFileUpload = () => {
   const handleMappingChange = (field: keyof ColumnMapping, header: string | null) => {
     const newMapping = { ...columnMapping, [field]: header };
     setColumnMapping(newMapping);
-    generatePreview(rawData, newMapping);
+    generatePreview(rawData, newMapping, headers);
   };
 
   const handleUpload = async () => {
@@ -349,9 +428,9 @@ export const EnhancedFileUpload = () => {
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle className="h-5 w-5 text-red-600" />
-                  <p className="text-sm text-red-800">{error}</p>
+                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <AlertCircle className="h-5 w-5 text-blue-600" />
+                  <p className="text-sm text-blue-800">{error}</p>
                 </div>
               )}
 
@@ -413,11 +492,11 @@ export const EnhancedFileUpload = () => {
                 </div>
               )}
 
-              {parsedData.length > 0 && (
+              {parsedData.length > 0 && !error && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-green-600" />
-                    <h4 className="font-medium">{parsedData.length} records found</h4>
+                    <h4 className="font-medium">✓ {parsedData.length} records found</h4>
                   </div>
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
