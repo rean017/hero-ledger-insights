@@ -62,22 +62,14 @@ const parseNumber = (value: any): number => {
   return isNegative ? -num : num;
 };
 
-const normalizeMonth = (monthInput: string): string | null => {
-  if (!monthInput) return null;
-  
-  // Handle formats like 2025/6, 2025-6, 2025-06, etc.
-  const cleaned = monthInput.replace(/[\/\-\s]/g, '-');
-  const parts = cleaned.split('-');
-  
-  if (parts.length !== 2) return null;
-  
-  const year = parseInt(parts[0]);
-  const month = parseInt(parts[1]);
-  
-  if (year < 2000 || year > 2100 || month < 1 || month > 12) return null;
-  
-  // Return as YYYY-MM-01
-  return `${year}-${month.toString().padStart(2, '0')}-01`;
+const normalizeMonthInput = (s: string) => {
+  const t = (s || '').trim().replace(/\//g, '-');
+  const m = /^(\d{4})-(\d{1,2})$/.exec(t);
+  if (!m) throw new Error('Invalid month — use YYYY-MM');
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) throw new Error('Invalid month — use 01-12');
+  return `${year}-${String(month).padStart(2,'0')}`;
 };
 
 const findHeaderRow = (rows: any[][]): { headerIndex: number; headers: string[] } => {
@@ -310,9 +302,16 @@ export const EnhancedFileUpload = () => {
       return;
     }
     
-    const normalizedMonth = normalizeMonth(monthInput);
-    if (!normalizedMonth) {
-      setError("Enter a month like 2025-06.");
+    let month: string;
+    try {
+      month = normalizeMonthInput(monthInput);
+    } catch (e: any) {
+      setError(e.message);
+      toast({
+        title: "Invalid Month",
+        description: e.message,
+        variant: "destructive"
+      });
       return;
     }
     
@@ -320,25 +319,35 @@ export const EnhancedFileUpload = () => {
     setError(null);
     
     try {
-      // Call the server API route with mapped data
+      // Build payload rows with canonical keys the API expects
+      const rows = parsedData.map(row => ({
+        location: row.location,
+        volume: row.volume,
+        agent_net: row.agentNet
+      }));
+
       const resp = await fetch('/api/uploads/master', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          month: monthInput,
-          filename: file?.name || 'upload',
-          rows: parsedData.map(row => ({
-            location: row.location,
-            volume: row.volume,
-            agent_net: row.agentNet
-          }))
+          month,
+          rows,
+          filename: file?.name || 'upload'
         }),
       });
       
       const json = await resp.json();
       
       if (!resp.ok) {
-        throw new Error(json.error || 'Upload failed');
+        // Show real server error, not a generic message
+        const errorMessage = json.error || 'Upload failed';
+        setError(errorMessage);
+        toast({
+          title: "Upload Failed",
+          description: errorMessage,
+          variant: "destructive"
+        });
+        return;
       }
 
       setUploadComplete(true);
@@ -529,7 +538,7 @@ export const EnhancedFileUpload = () => {
               <div className="space-y-2">
                 <Label>Month (YYYY-MM)</Label>
                 <Input
-                  placeholder="2025-06 or 2025/6"
+                  placeholder="YYYY-MM"
                   value={monthInput}
                   onChange={(e) => setMonthInput(e.target.value)}
                   className="w-48"
