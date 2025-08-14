@@ -121,6 +121,14 @@ export const UploadManagement = () => {
 
   const formatMonth = (month: string) => {
     try {
+      // Handle date strings like "2025-06-01" by extracting year and month
+      const dateMatch = month.match(/^(\d{4})-(\d{2})-?\d*$/);
+      if (dateMatch) {
+        const [, year, monthNum] = dateMatch;
+        // Create date using local timezone to avoid timezone issues
+        const date = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+        return format(date, 'MMMM yyyy');
+      }
       return format(new Date(month), 'MMMM yyyy');
     } catch {
       return month;
