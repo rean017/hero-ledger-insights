@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_location_terms: {
+        Row: {
+          agent_id: string
+          bps: number
+          created_at: string
+          id: string
+          location_id: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          bps?: number
+          created_at?: string
+          id?: string
+          location_id: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          bps?: number
+          created_at?: string
+          id?: string
+          location_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_location_terms_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_location_terms_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations_new"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_location_terms_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "v_locations_month"
+            referencedColumns: ["location_id"]
+          },
+          {
+            foreignKeyName: "agent_location_terms_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "v_locations_month_with_flags"
+            referencedColumns: ["location_id"]
+          },
+        ]
+      }
       agents: {
         Row: {
           created_at: string
@@ -329,7 +385,30 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_locations_month: {
+        Row: {
+          agent_count: number | null
+          agent_net_payout: number | null
+          location_id: string | null
+          location_name: string | null
+          month: string | null
+          total_volume: number | null
+        }
+        Relationships: []
+      }
+      v_locations_month_with_flags: {
+        Row: {
+          agent_count: number | null
+          agent_net_payout: number | null
+          is_zero_volume: boolean | null
+          location_id: string | null
+          location_name: string | null
+          margin_ratio: number | null
+          month: string | null
+          total_volume: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_current_user_role: {
@@ -339,6 +418,19 @@ export type Database = {
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      mh_get_locations: {
+        Args: { p_has_agents?: boolean; p_month?: string; p_query?: string }
+        Returns: {
+          agent_count: number
+          agent_net_payout: number
+          is_zero_volume: boolean
+          location_id: string
+          location_name: string
+          margin_ratio: number
+          month: string
+          total_volume: number
+        }[]
       }
       mh_upload_master: {
         Args: {

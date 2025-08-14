@@ -6,33 +6,43 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MapPin, Search, RefreshCw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 interface LocationData {
+  location_id: string;
   location_name: string;
   total_volume: number;
-  mh_net_payout: number;
+  agent_net_payout: number;
+  agent_count: number;
+  is_zero_volume: boolean;
+  margin_ratio: number;
   month: string;
 }
 
 export const SimpleLocations = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterAgent, setFilterAgent] = useState<string>('');
+  const [hasAgentsFilter, setHasAgentsFilter] = useState<'all' | 'yes' | 'no'>('all');
 
-  // Get available months from facts table
+  // Get available months from facts_monthly_location table
   const { data: availableMonths = [] } = useQuery({
-    queryKey: ['available-months'],
+    queryKey: ['available-months-new'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('facts')
+        .from('facts_monthly_location')
         .select('month')
         .order('month', { ascending: false });
       
       if (error) throw error;
       
-      const uniqueMonths = [...new Set(data.map(d => d.month))];
+      // Convert dates to YYYY-MM format
+      const uniqueMonths = [...new Set(data.map(d => {
+        const date = new Date(d.month);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      }))].sort((a, b) => b.localeCompare(a));
+      
       return uniqueMonths;
     }
   });
@@ -44,50 +54,32 @@ export const SimpleLocations = () => {
     }
   }, [availableMonths, selectedMonth]);
 
-  // Get location data for selected month from facts table
-  const { data: locationData = [], isLoading } = useQuery({
-    queryKey: ['location-data', selectedMonth],
+  // Get location data using the new RPC
+  const { data: locationData = [], isLoading, refetch } = useQuery({
+    queryKey: ['location-data-rpc', selectedMonth, searchTerm, hasAgentsFilter],
     queryFn: async (): Promise<LocationData[]> => {
-      if (!selectedMonth) return [];
+      const agentFlag = hasAgentsFilter === 'yes' ? true : hasAgentsFilter === 'no' ? false : null;
+      
+      const { data, error } = await supabase.rpc('mh_get_locations', {
+        p_month: selectedMonth || null,
+        p_query: searchTerm || null,
+        p_has_agents: agentFlag
+      });
 
-      const { data, error } = await supabase
-        .from('facts')
-        .select(`
-          total_volume,
-          mh_net_payout,
-          month,
-          locations (
-            name
-          )
-        `)
-        .eq('month', selectedMonth)
-        .order('locations(name)');
-      
-      if (error) throw error;
-      
-      return data.map(item => ({
-        location_name: item.locations?.name || '',
-        total_volume: item.total_volume,
-        mh_net_payout: item.mh_net_payout,
-        month: item.month
-      }));
+      if (error) {
+        console.error('Error fetching location data:', error);
+        throw error;
+      }
+
+      return data as LocationData[];
     },
     enabled: !!selectedMonth
   });
 
-  // Get unique agents for filter (simplified - just show "Merchant Hero")
-  const uniqueAgents = ['Merchant Hero'];
-
-  // Filter location data
-  const filteredData = React.useMemo(() => {
-    return locationData.filter(location => {
-      const matchesSearch = searchTerm === '' || 
-        location.location_name.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // Since we only have Merchant Hero now, no agent filtering needed
-      return matchesSearch;
-    });
-  }, [locationData, searchTerm]);
+  // Manual refresh function
+  const handleRefresh = () => {
+    refetch();
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -99,11 +91,14 @@ export const SimpleLocations = () => {
   };
 
   const formatMonthDisplay = (monthStr: string) => {
-    try {
-      return format(parseISO(monthStr), 'MMMM yyyy');
-    } catch {
-      return monthStr;
-    }
+    if (!monthStr) return '';
+    const [year, month] = monthStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+  };
+
+  const formatPercentage = (ratio: number) => {
+    return `${(ratio * 100).toFixed(2)}%`;
   };
 
   const calculateBPS = (payout: number, volume: number) => {
@@ -142,9 +137,23 @@ export const SimpleLocations = () => {
               placeholder="Search locations..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleRefresh()}
               className="pl-9"
             />
           </div>
+          <Select value={hasAgentsFilter} onValueChange={(value: 'all' | 'yes' | 'no') => setHasAgentsFilter(value)}>
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Locations</SelectItem>
+              <SelectItem value="yes">Has Agents</SelectItem>
+              <SelectItem value="no">No Agents</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={handleRefresh} disabled={isLoading} variant="outline">
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
       )}
 
@@ -153,7 +162,7 @@ export const SimpleLocations = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5" />
-              Locations for {formatMonthDisplay(selectedMonth)} ({filteredData.length})
+              Locations for {formatMonthDisplay(selectedMonth)} ({locationData.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -161,27 +170,40 @@ export const SimpleLocations = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Location Name</TableHead>
-                  <TableHead>Volume</TableHead>
-                  <TableHead>MH Net Payout</TableHead>
-                  <TableHead>Merchant Hero Payout</TableHead>
-                  <TableHead>BPS</TableHead>
+                  <TableHead className="text-right">Volume</TableHead>
+                  <TableHead className="text-right">Agent Net Payout</TableHead>
+                  <TableHead className="text-right">BPS</TableHead>
+                  <TableHead className="text-right">Margin %</TableHead>
+                  <TableHead className="text-center"># Agents</TableHead>
+                  <TableHead className="text-center">Zero Vol?</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.map((location, index) => {
-                  const merchantHeroPayout = location.total_volume - location.mh_net_payout;
-                  const bps = calculateBPS(location.mh_net_payout, location.total_volume);
+                {locationData.map((location) => {
+                  const bps = calculateBPS(location.agent_net_payout, location.total_volume);
 
                   return (
-                    <TableRow key={`${location.location_name}-${index}`}>
+                    <TableRow key={location.location_id}>
                       <TableCell className="font-medium">{location.location_name}</TableCell>
-                      <TableCell>{formatCurrency(location.total_volume)}</TableCell>
-                      <TableCell>{formatCurrency(location.mh_net_payout)}</TableCell>
-                      <TableCell>{formatCurrency(merchantHeroPayout)}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">{formatCurrency(location.total_volume)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(location.agent_net_payout)}</TableCell>
+                      <TableCell className="text-right">
                         <Badge variant="secondary">
                           {bps.toFixed(0)} BPS
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{formatPercentage(location.margin_ratio)}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={location.agent_count > 0 ? "default" : "secondary"}>
+                          {location.agent_count}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {location.is_zero_volume && (
+                          <Badge variant="destructive" className="text-xs">
+                            ⚑
+                          </Badge>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -189,7 +211,7 @@ export const SimpleLocations = () => {
               </TableBody>
             </Table>
 
-            {filteredData.length === 0 && (
+            {locationData.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
                 No locations found matching your search criteria.
               </div>
