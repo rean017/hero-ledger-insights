@@ -317,27 +317,33 @@ export const EnhancedFileUpload = () => {
         agent_net: row.agentNet
       }));
 
-      const resp = await fetch('/api/uploads/master', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          month,
-          rows,
-          filename: file?.name || 'upload'
-        }),
+      // Robust fetch with JSON fallback
+      const postJSON = async (url: string, payload: any) => {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        let body: any = null;
+        const text = await resp.text(); // read once
+        try { 
+          body = text ? JSON.parse(text) : null; // try JSON
+        } catch { 
+          body = { error: text || 'Unknown error' }; // fallback
+        }
+
+        return { ok: resp.ok, status: resp.status, body };
+      };
+
+      const { ok, body } = await postJSON('/api/uploads/master', {
+        month,
+        rows,
+        filename: file?.name || 'upload'
       });
       
-      let json: any = {};
-      try {
-        json = await resp.json();
-      } catch (parseError) {
-        console.error('Failed to parse response as JSON:', parseError);
-        throw new Error('Server returned invalid response');
-      }
-      
-      if (!resp.ok) {
-        // Show real server error, not a generic message
-        const errorMessage = json.error || `Server error: ${resp.status}`;
+      if (!ok) {
+        const errorMessage = body?.error || 'Upload failed';
         setError(errorMessage);
         toast({
           title: "Upload Failed",
@@ -350,7 +356,7 @@ export const EnhancedFileUpload = () => {
       setUploadComplete(true);
       toast({
         title: "Upload Successful",
-        description: `Imported ${json.inserted} • New locations ${json.new_locations} • Zero-volume ${json.zero_count}`
+        description: `Imported ${body.inserted} • New locations ${body.new_locations} • Zero-volume ${body.zero_count}`
       });
       
     } catch (error: any) {
