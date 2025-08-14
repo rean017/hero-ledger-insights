@@ -72,6 +72,7 @@ export type Database = {
       }
       agents: {
         Row: {
+          active: boolean
           created_at: string
           id: string
           name: string
@@ -79,6 +80,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          active?: boolean
           created_at?: string
           id?: string
           name: string
@@ -86,6 +88,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          active?: boolean
           created_at?: string
           id?: string
           name?: string
@@ -436,6 +439,21 @@ export type Database = {
           total_volume: number
         }[]
       }
+      mh_create_agent: {
+        Args: { p_name: string; p_notes?: string }
+        Returns: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+      }
+      mh_delete_agent: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
       mh_diag_month_counts: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -465,6 +483,22 @@ export type Database = {
           month: string
           total_volume: number
         }[]
+      }
+      mh_update_agent: {
+        Args: {
+          p_active?: boolean
+          p_id: string
+          p_name: string
+          p_notes: string
+        }
+        Returns: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+        }
       }
       mh_upload_master: {
         Args: {

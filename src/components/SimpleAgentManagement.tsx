@@ -89,24 +89,29 @@ export const SimpleAgentManagement = () => {
     }
   });
 
-  // Create/Update agent mutation
+  // Create/Update agent mutation using RPCs
   const agentMutation = useMutation({
     mutationFn: async (agentData: { name: string; notes: string }) => {
       if (selectedAgent) {
         // Update existing agent
-        const { error } = await supabase
-          .from('agents')
-          .update(agentData)
-          .eq('id', selectedAgent.id);
+        const { data, error } = await supabase.rpc('mh_update_agent', {
+          p_id: selectedAgent.id,
+          p_name: agentData.name,
+          p_notes: agentData.notes || null,
+          p_active: true
+        });
         
-        if (error) throw error;
+        if (error) throw new Error(error.message);
+        return data;
       } else {
         // Create new agent
-        const { error } = await supabase
-          .from('agents')
-          .insert(agentData);
+        const { data, error } = await supabase.rpc('mh_create_agent', {
+          p_name: agentData.name,
+          p_notes: agentData.notes || null
+        });
         
-        if (error) throw error;
+        if (error) throw new Error(error.message);
+        return data;
       }
     },
     onSuccess: () => {
@@ -120,10 +125,10 @@ export const SimpleAgentManagement = () => {
         description: selectedAgent ? "Agent updated successfully" : "Agent created successfully"
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to save agent",
+        description: error.message || "Failed to save agent",
         variant: "destructive"
       });
     }
