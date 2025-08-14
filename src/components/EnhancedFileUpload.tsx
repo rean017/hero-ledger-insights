@@ -317,33 +317,31 @@ export const EnhancedFileUpload = () => {
         agent_net: row.agentNet
       }));
 
-      // Robust fetch with JSON fallback
+      // Robust fetch helper with detailed error handling
       const postJSON = async (url: string, payload: any) => {
         const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-
+        const text = await resp.text();
         let body: any = null;
-        const text = await resp.text(); // read once
         try { 
-          body = text ? JSON.parse(text) : null; // try JSON
+          body = text ? JSON.parse(text) : null; 
         } catch { 
-          body = { error: text || 'Unknown error' }; // fallback
+          body = { error: text || 'Unknown error' }; 
         }
-
         return { ok: resp.ok, status: resp.status, body };
       };
 
-      const { ok, body } = await postJSON('/api/uploads/master', {
+      const { ok, status, body } = await postJSON('/api/uploads/master', {
         month,
         rows,
         filename: file?.name || 'upload'
       });
       
       if (!ok) {
-        const errorMessage = body?.error || 'Upload failed';
+        const errorMessage = body?.error || `Upload failed (HTTP ${status})`;
         setError(errorMessage);
         toast({
           title: "Upload Failed",
