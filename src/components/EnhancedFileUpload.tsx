@@ -27,8 +27,8 @@ interface ColumnMapping {
 
 const COLUMN_ALIASES = {
   location: [
-    'dba', 'location', 'locationname', 'merchant', 'business', 'storename', 
-    'account', 'accountname', 'customer', 'client'
+    'dba', 'location', 'locationname', 'business', 'store', 'storename', 
+    'account', 'accountname', 'customer', 'client', 'merchant'
   ],
   volume: [
     'volume', 'totalvolume', 'monthlyvolume', 'tpv', 'grossvolume', 
@@ -538,6 +538,8 @@ export const EnhancedFileUpload = () => {
               <div className="space-y-2">
                 <Label>Month (YYYY-MM)</Label>
                 <Input
+                  type="text"
+                  inputMode="numeric"
                   placeholder="YYYY-MM"
                   value={monthInput}
                   onChange={(e) => setMonthInput(e.target.value)}
@@ -545,18 +547,21 @@ export const EnhancedFileUpload = () => {
                 />
               </div>
 
-              <div className="flex gap-2">
-                <Button 
-                  onClick={handleUpload} 
-                  disabled={!parsedData.length || !monthInput || isUploading || !!error}
-                  className="flex-1"
-                >
-                  {isUploading ? 'Uploading...' : 'Upload Data'}
-                </Button>
-                <Button variant="outline" onClick={clearData}>
-                  Clear
-                </Button>
-              </div>
+              <form noValidate>
+                <div className="flex gap-2">
+                  <Button 
+                    type="button"
+                    onClick={handleUpload} 
+                    disabled={!parsedData.length || !monthInput || isUploading || !!error}
+                    className="flex-1"
+                  >
+                    {isUploading ? 'Uploading...' : 'Upload Data'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={clearData}>
+                    Clear
+                  </Button>
+                </div>
+              </form>
 
               {uploadComplete && (
                 <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
