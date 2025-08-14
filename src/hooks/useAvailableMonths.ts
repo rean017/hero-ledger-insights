@@ -26,3 +26,11 @@ export const useAvailableMonths = () => {
     refetchOnWindowFocus: false
   });
 };
+
+// Safe label from 'YYYY-MM' without Date()
+export function fmtMonthLabel(ym: string) {
+  const [y, mm] = ym.split('-');
+  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const i = Math.min(Math.max(parseInt(mm || '1', 10) - 1, 0), 11);
+  return `${names[i]} ${y}`;
+}
