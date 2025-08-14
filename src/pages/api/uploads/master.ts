@@ -1,10 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 const normalizeMonth = (input: string) => {
-  const s = input.replace(/\//g, '-');
-  const dt = new Date(`${s}-01T00:00:00Z`);
-  if (Number.isNaN(dt.getTime())) throw new Error('Invalid month');
-  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-01`;
+  const base = (input || '').replace(/\//g, '-').trim();   // 2025/6 → 2025-6
+  const m = /^(\d{4})-(\d{1,2})$/.exec(base);
+  if (!m) throw new Error('Invalid month — use YYYY-MM');
+  const y = +m[1], mm = +m[2]; if (mm < 1 || mm > 12) throw new Error('Invalid month — use 01–12');
+  return `${y}-${String(mm).padStart(2,'0')}-01`;          // store first-of-month
 };
 
 const toNumber = (v: any) => {
@@ -39,10 +40,7 @@ export default async function handler(req: any, res: any) {
     
     if (locs.length === 0) return res.status(400).json({ error: 'No valid rows after mapping' });
 
-    const supa = createClient(
-      'https://twyskqhuxzqzclzoejmd.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3eXNrcWh1eHpxemNsem9lam1kIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTQ4NDI5OCwiZXhwIjoyMDY1MDYwMjk4fQ.VWvR0Bq6Kw5-mEJJ5xR0sHJjKl7g_EZEyxw_4V2vOJY'
-    );
+    const supa = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     
     const { data, error } = await supa.rpc('mh_upload_master', {
       p_month: monthStart,
@@ -55,6 +53,6 @@ export default async function handler(req: any, res: any) {
     if (error) return res.status(400).json({ error: error.message, code: error.code });
     return res.status(200).json(data);
   } catch (e: any) {
-    return res.status(500).json({ error: e.message || 'Upload failed' });
+    return res.status(400).json({ error: e.message || 'Upload failed' });
   }
 }
