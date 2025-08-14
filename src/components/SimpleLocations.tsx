@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Search, RefreshCw, Bug } from 'lucide-react';
+import { MapPin, Search, RefreshCw, UserPlus } from 'lucide-react';
 import MonthPicker from './MonthPicker';
 import { fmtMonthLabel } from '../hooks/useAvailableMonths';
+import { AssignAgentModal } from './AssignAgentModal';
 
 interface LocationData {
   location_id: string;
@@ -28,6 +29,8 @@ export const SimpleLocations = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [hasAgentsFilter, setHasAgentsFilter] = useState<'all' | 'yes' | 'no'>('all');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
 
   // Get location data using the new RPC
   const { data: locationData = [], isLoading, refetch } = useQuery({
@@ -233,6 +236,7 @@ export const SimpleLocations = () => {
                   <TableHead className="text-right">Margin %</TableHead>
                   <TableHead className="text-center"># Agents</TableHead>
                   <TableHead className="text-center">Zero Vol?</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -261,6 +265,18 @@ export const SimpleLocations = () => {
                             ⚑
                           </Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedLocation(location);
+                            setAssignModalOpen(true);
+                          }}
+                        >
+                          <UserPlus className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
@@ -295,6 +311,21 @@ export const SimpleLocations = () => {
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {selectedLocation && (
+        <AssignAgentModal
+          open={assignModalOpen}
+          onClose={() => {
+            setAssignModalOpen(false);
+            setSelectedLocation(null);
+          }}
+          location={{
+            location_id: selectedLocation.location_id,
+            location_name: selectedLocation.location_name,
+          }}
+          onUpdate={handleRefresh}
+        />
       )}
     </div>
   );

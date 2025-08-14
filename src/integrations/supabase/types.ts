@@ -68,6 +68,20 @@ export type Database = {
             referencedRelation: "v_locations_month_with_flags"
             referencedColumns: ["location_id"]
           },
+          {
+            foreignKeyName: "fk_terms_agent"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_terms_location"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
         ]
       }
       agents: {
@@ -471,6 +485,15 @@ export type Database = {
           month: string
         }[]
       }
+      mh_get_location_terms: {
+        Args: { p_location_id: string }
+        Returns: {
+          agent_id: string
+          agent_name: string
+          bps: number
+          term_id: string
+        }[]
+      }
       mh_get_locations: {
         Args: { p_has_agents?: boolean; p_month?: string; p_query?: string }
         Returns: {
@@ -483,6 +506,21 @@ export type Database = {
           month: string
           total_volume: number
         }[]
+      }
+      mh_remove_location_agent_term: {
+        Args: { p_agent_id: string; p_location_id: string }
+        Returns: undefined
+      }
+      mh_set_location_agent_term: {
+        Args: { p_agent_id: string; p_bps: number; p_location_id: string }
+        Returns: {
+          agent_id: string
+          bps: number
+          created_at: string
+          id: string
+          location_id: string
+          updated_at: string
+        }
       }
       mh_update_agent: {
         Args: {
