@@ -385,6 +385,12 @@ export type Database = {
       }
     }
     Views: {
+      v_available_months: {
+        Row: {
+          month: string | null
+        }
+        Relationships: []
+      }
       v_locations_month: {
         Row: {
           agent_count: number | null
@@ -418,6 +424,12 @@ export type Database = {
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      mh_get_available_months: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          month: string
+        }[]
       }
       mh_get_locations: {
         Args: { p_has_agents?: boolean; p_month?: string; p_query?: string }
