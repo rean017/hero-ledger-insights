@@ -77,37 +77,50 @@ export const SimpleLocations = () => {
     }).format(amount);
   };
 
-  const runDiagnostics = async () => {
+  const runLocationsDiagnostics = async () => {
     if (!selectedMonth) { 
       console.info('🔍 [diag] No month selected'); 
       return; 
     }
 
-    console.info('=== DIAGNOSTICS for', selectedMonth, '===');
+    console.info('=== LOCATIONS DIAGNOSTICS ===');
 
-    // 1) What months/row counts are in the table?
-    const mc = await supabase.rpc('mh_diag_month_counts');
-    console.info('🔍 [diag] month_counts:', mc.error ?? mc.data);
+    // 1) What months are actually in facts_monthly_location?
+    const counts = await supabase.rpc('mh_diag_month_counts');
+    console.info('🔍 [months in facts_monthly_location]', counts.error ?? counts.data);
 
-    // 2) Peek raw facts rows for selected month
+    // 2) Peek raw facts rows for selected month (using date format)
     const peek = await supabase
       .from('facts_monthly_location')
       .select('month, location_id, total_volume, mh_net_payout')
-      .eq('month', selectedMonth)
+      .gte('month', `${selectedMonth}-01`)
+      .lt('month', `${selectedMonth}-32`)
       .limit(5);
-    console.info('🔍 [diag] first 5 facts for month:', peek.error ?? peek.data);
+    console.info(`🔍 [first 5 rows for ${selectedMonth}]`, peek.error ?? peek.data);
 
     // 3) Call the Locations RPC exactly as the page does
-    const { data, error } = await supabase.rpc('mh_get_locations', {
+    const rpc = await supabase.rpc('mh_get_locations', {
       p_month: selectedMonth,
       p_query: searchTerm || null,
       p_has_agents: hasAgentsFilter === 'yes' ? true : hasAgentsFilter === 'no' ? false : null
     });
-    console.info('🔍 [diag] mh_get_locations:', error ?? data);
+    console.info('🔍 [mh_get_locations]', rpc.error ?? rpc.data);
 
     console.info('=== END DIAGNOSTICS ===');
-    
     setShowDiagnostics(true);
+  };
+
+  const normalizeMonthsAndRefresh = async () => {
+    console.info('🧹 [normalize] Starting month normalization...');
+    
+    const res = await supabase.rpc('mh_fix_month_strings');
+    console.info('🧹 [mh_fix_month_strings]', res.error ?? res.data);
+
+    // Re-run diagnostics & refresh data
+    if (selectedMonth) {
+      await runLocationsDiagnostics();
+    }
+    refetch();
   };
 
   const formatPercentage = (ratio: number) => {
@@ -132,8 +145,11 @@ export const SimpleLocations = () => {
             onChange={setSelectedMonth}
             className="w-48 border rounded px-3 py-2 bg-background"
           />
-          <Button onClick={runDiagnostics} variant="outline" size="sm">
-            <Bug className="h-4 w-4" />
+          <Button onClick={runLocationsDiagnostics} variant="outline" size="sm" title="Run Diagnostics">
+            🐞
+          </Button>
+          <Button onClick={normalizeMonthsAndRefresh} variant="outline" size="sm" title="Normalize months & refresh" className="ml-1">
+            🧹
           </Button>
         </div>
       </div>

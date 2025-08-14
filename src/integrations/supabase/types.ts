@@ -432,6 +432,10 @@ export type Database = {
           rows: number
         }[]
       }
+      mh_fix_month_strings: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       mh_get_available_months: {
         Args: Record<PropertyKey, never>
         Returns: {
