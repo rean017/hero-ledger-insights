@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { normalizeMonthInput } from '@/utils/month';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
@@ -62,15 +62,6 @@ const parseNumber = (value: any): number => {
   return isNegative ? -num : num;
 };
 
-const normalizeMonthInput = (s: string) => {
-  const t = (s || '').trim().replace(/\//g, '-');
-  const m = /^(\d{4})-(\d{1,2})$/.exec(t);
-  if (!m) throw new Error('Invalid month — use YYYY-MM');
-  const year = Number(m[1]);
-  const month = Number(m[2]);
-  if (month < 1 || month > 12) throw new Error('Invalid month — use 01-12');
-  return `${year}-${String(month).padStart(2,'0')}`;
-};
 
 const findHeaderRow = (rows: any[][]): { headerIndex: number; headers: string[] } => {
   const scoreRow = (row: any[]): number => {
@@ -336,11 +327,17 @@ export const EnhancedFileUpload = () => {
         }),
       });
       
-      const json = await resp.json();
+      let json: any = {};
+      try {
+        json = await resp.json();
+      } catch (parseError) {
+        console.error('Failed to parse response as JSON:', parseError);
+        throw new Error('Server returned invalid response');
+      }
       
       if (!resp.ok) {
         // Show real server error, not a generic message
-        const errorMessage = json.error || 'Upload failed';
+        const errorMessage = json.error || `Server error: ${resp.status}`;
         setError(errorMessage);
         toast({
           title: "Upload Failed",
