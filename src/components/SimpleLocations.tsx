@@ -12,6 +12,7 @@ import { MapPin, Search, RefreshCw, UserPlus } from 'lucide-react';
 import MonthPicker from './MonthPicker';
 import { fmtMonthLabel } from '../hooks/useAvailableMonths';
 import { AssignAgentModal } from './AssignAgentModal';
+import LocationsGrid from './LocationsGrid';
 
 interface LocationData {
   location_id: string;
@@ -218,80 +219,37 @@ export const SimpleLocations = () => {
       )}
 
       {selectedMonth && locationData.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5" />
-              Locations for {fmtMonthLabel(selectedMonth)} ({locationData.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Location Name</TableHead>
-                  <TableHead className="text-right">Volume</TableHead>
-                  <TableHead className="text-right">Agent Net Payout</TableHead>
-                  <TableHead className="text-right">BPS</TableHead>
-                  <TableHead className="text-right">Margin %</TableHead>
-                  <TableHead className="text-center"># Agents</TableHead>
-                  <TableHead className="text-center">Zero Vol?</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {locationData.map((location) => {
-                  const bps = calculateBPS(location.agent_net_payout, location.total_volume);
-
-                  return (
-                    <TableRow key={location.location_id}>
-                      <TableCell className="font-medium">{location.location_name}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(location.total_volume)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(location.agent_net_payout)}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="secondary">
-                          {bps.toFixed(0)} BPS
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">{formatPercentage(location.margin_ratio)}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={location.agent_count > 0 ? "default" : "secondary"}>
-                          {location.agent_count}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {location.is_zero_volume && (
-                          <Badge variant="destructive" className="text-xs">
-                            ⚑
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            console.log('Opening assign modal for location:', location.location_id, location.location_name);
-                            setSelectedLocation(location);
-                            setAssignModalOpen(true);
-                          }}
-                        >
-                          <UserPlus className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-
-            {locationData.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No locations found matching your search criteria.
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            <h2 className="text-xl font-semibold">Locations for {fmtMonthLabel(selectedMonth)} ({locationData.length})</h2>
+          </div>
+          
+          <LocationsGrid
+            data={locationData.map((location) => ({
+              id: location.location_id,
+              name: location.location_name,
+              volume: location.total_volume,
+              agent_net_payout: location.agent_net_payout,
+              bps: calculateBPS(location.agent_net_payout, location.total_volume),
+              margin_pct: location.margin_ratio,
+              agents_count: location.agent_count,
+              zero_volume: location.is_zero_volume
+            }))}
+            onAssign={(locationId) => {
+              const location = locationData.find(loc => loc.location_id === locationId);
+              if (location) {
+                console.log('Opening assign modal for location:', location.location_id, location.location_name);
+                setSelectedLocation(location);
+                setAssignModalOpen(true);
+              }
+            }}
+            onMore={(locationId) => {
+              // Future: implement more actions menu
+              console.log('More actions for location:', locationId);
+            }}
+          />
+        </div>
       ) : selectedMonth ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
