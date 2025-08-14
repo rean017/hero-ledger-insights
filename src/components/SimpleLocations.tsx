@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import dayjs from 'dayjs';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -34,10 +35,13 @@ export const SimpleLocations = () => {
     queryFn: async (): Promise<LocationData[]> => {
       const agentFlag = hasAgentsFilter === 'yes' ? true : hasAgentsFilter === 'no' ? false : null;
       
-      console.info('📍 [locations] load month=', selectedMonth, 'query=', searchTerm, 'hasAgents=', agentFlag);
+      // Convert selectedMonth to consistent YYYY-MM format
+      const monthKey = dayjs(selectedMonth, ['MMMM YYYY', 'YYYY-MM-DD', 'YYYY-MM']).format('YYYY-MM');
+      
+      console.info('📍 [locations] load month=', selectedMonth, '→ formatted=', monthKey, 'query=', searchTerm, 'hasAgents=', agentFlag);
       
       const { data, error } = await supabase.rpc('mh_get_locations', {
-        p_month: selectedMonth || null,
+        p_month: monthKey || null,
         p_query: searchTerm || null,
         p_has_agents: agentFlag
       });
@@ -98,8 +102,9 @@ export const SimpleLocations = () => {
     console.info(`🔍 [first 5 rows for ${selectedMonth}]`, peek.error ?? peek.data);
 
     // 3) Call the Locations RPC exactly as the page does
+    const monthKey = dayjs(selectedMonth, ['MMMM YYYY', 'YYYY-MM-DD', 'YYYY-MM']).format('YYYY-MM');
     const rpc = await supabase.rpc('mh_get_locations', {
-      p_month: selectedMonth,
+      p_month: monthKey,
       p_query: searchTerm || null,
       p_has_agents: hasAgentsFilter === 'yes' ? true : hasAgentsFilter === 'no' ? false : null
     });
