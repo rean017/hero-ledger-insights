@@ -291,30 +291,6 @@ export type Database = {
           },
         ]
       }
-      upload_audits: {
-        Row: {
-          created_at: string
-          id: string
-          month: string
-          original_filename: string
-          row_count: number
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          month: string
-          original_filename: string
-          row_count: number
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          month?: string
-          original_filename?: string
-          row_count?: number
-        }
-        Relationships: []
-      }
       uploads: {
         Row: {
           created_at: string

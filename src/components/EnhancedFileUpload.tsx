@@ -320,31 +320,31 @@ export const EnhancedFileUpload = () => {
     setError(null);
     
     try {
-      // Prepare data for the RPC call using new stable schema
-      const locations = parsedData.map(row => row.location);
-      const volumes = parsedData.map(row => row.volume);
-      const mhNets = parsedData.map(row => row.agentNet);
-
-      // Call the PostgreSQL RPC function directly (stable schema)
-      const { data, error } = await supabase.rpc('mh_upload_master', {
-        p_month: normalizedMonth,
-        p_filename: file!.name,
-        p_locations: locations,
-        p_volumes: volumes,
-        p_mh_nets: mhNets
+      // Call the server API route with mapped data
+      const resp = await fetch('/api/uploads/master', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: monthInput,
+          filename: file?.name || 'upload',
+          rows: parsedData.map(row => ({
+            location: row.location,
+            volume: row.volume,
+            agent_net: row.agentNet
+          }))
+        }),
       });
-
-      if (error) {
-        throw new Error(error.message || 'Upload failed');
+      
+      const json = await resp.json();
+      
+      if (!resp.ok) {
+        throw new Error(json.error || 'Upload failed');
       }
-
-      // Parse the JSON response
-      const result = data as any;
 
       setUploadComplete(true);
       toast({
         title: "Upload Successful",
-        description: `Imported ${result.inserted} rows • ${result.new_locations} new locations • ${result.zero_count} zero-volume`
+        description: `Imported ${json.inserted} • New locations ${json.new_locations} • Zero-volume ${json.zero_count}`
       });
       
     } catch (error: any) {

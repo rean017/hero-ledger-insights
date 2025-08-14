@@ -18,9 +18,9 @@ interface MonthlyStats {
 export const SimpleDashboard = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
 
-  // Get available months from new stable schema - facts_monthly_location table
+  // Get available months from stable schema
   const { data: availableMonths = [] } = useQuery({
-    queryKey: ['available-months-new'],
+    queryKey: ['available-months'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('facts_monthly_location')
@@ -58,7 +58,7 @@ export const SimpleDashboard = () => {
         .select(`
           total_volume,
           mh_net_payout,
-          locations_new (
+          locations (
             name
           )
         `)

@@ -29,12 +29,12 @@ interface PLReportData {
 export const SimpleReports = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
 
-  // Get available months from facts table
+  // Get available months from stable facts table
   const { data: availableMonths = [] } = useQuery({
     queryKey: ['available-months'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('facts')
+        .from('facts_monthly_location')
         .select('month')
         .order('month', { ascending: false });
       
@@ -59,7 +59,7 @@ export const SimpleReports = () => {
       if (!selectedMonth) return [];
 
       const { data, error } = await supabase
-        .from('facts')
+        .from('facts_monthly_location')
         .select(`
           total_volume,
           mh_net_payout,
@@ -94,7 +94,7 @@ export const SimpleReports = () => {
     queryKey: ['pl-report'],
     queryFn: async (): Promise<PLReportData[]> => {
       const { data, error } = await supabase
-        .from('facts')
+        .from('facts_monthly_location')
         .select('*')
         .order('month', { ascending: false });
       
