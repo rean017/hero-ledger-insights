@@ -322,7 +322,7 @@ export const EnhancedFileUpload = () => {
       const postToFunction = async (payload: any) => {
         const base = getFunctionsUrl();
         if (!base) {
-          throw new Error('Functions URL not configured. Go to Settings and set MH_FUNCTIONS_URL to: https://twyskqhuxzqzclzoejmd.supabase.co/functions/v1');
+          throw new Error('Functions URL not configured. This should not happen with auto-configuration.');
         }
         const url = `${base}/mh_upload_master_http`;
 

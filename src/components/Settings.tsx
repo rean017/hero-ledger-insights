@@ -51,8 +51,14 @@ const Settings = () => {
       }
     }
     
-    // Load functions URL
-    setFunctionsUrlState(getFunctionsUrl());
+    // Load functions URL (with auto-configuration)
+    const currentUrl = getFunctionsUrl();
+    setFunctionsUrlState(currentUrl);
+    
+    // Auto-save the default URL if none exists
+    if (!window.localStorage.getItem('MH_FUNCTIONS_URL')) {
+      setFunctionsUrl(currentUrl);
+    }
   }, []);
 
   // Save settings to localStorage whenever settings change
@@ -272,7 +278,10 @@ const Settings = () => {
                   className="w-full"
                 />
                 <div className="text-sm text-muted-foreground">
-                  Direct URL for Supabase Edge Function uploads (bypasses Next.js routing)
+                  Auto-configured for your project. Only change if needed.<br/>
+                  Test function: <a href={functionsUrl + '/mh_upload_master_http'} target="_blank" rel="noopener" className="text-primary hover:underline">
+                    {functionsUrl}/mh_upload_master_http
+                  </a> (should show 405 Method not allowed)
                 </div>
               </div>
 
