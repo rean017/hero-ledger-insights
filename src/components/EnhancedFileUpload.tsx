@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeMonthInput } from '@/utils/month';
+import { getFunctionsUrl } from '@/lib/runtimeConfig';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
@@ -317,17 +318,20 @@ export const EnhancedFileUpload = () => {
         agent_net: row.agentNet
       }));
 
-      // Call Supabase Edge Function for reliable uploads (no 404s)
+      // Emergency 404 bypass - call function directly with absolute URL
       const postToFunction = async (payload: any) => {
-        const FUNCTIONS_URL = `https://twyskqhuxzqzclzoejmd.supabase.co/functions/v1`;
-        const url = `${FUNCTIONS_URL}/mh_upload_master_http`;
-        
+        const base = getFunctionsUrl();
+        if (!base) {
+          throw new Error('Functions URL not configured. Go to Settings and set MH_FUNCTIONS_URL to: https://twyskqhuxzqzclzoejmd.supabase.co/functions/v1');
+        }
+        const url = `${base}/mh_upload_master_http`;
+
         const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        
+
         const text = await resp.text();
         let body: any = null;
         try { 
@@ -335,17 +339,17 @@ export const EnhancedFileUpload = () => {
         } catch { 
           body = { error: text || 'Unknown error' }; 
         }
-        return { ok: resp.ok, status: resp.status, body };
+        return { ok: resp.ok, status: resp.status, body, url };
       };
 
-      const { ok, status, body } = await postToFunction({
+      const { ok, status, body, url } = await postToFunction({
         month,
         rows,
         filename: file?.name || 'upload'
       });
       
       if (!ok) {
-        const errorMessage = body?.error || `Upload failed (HTTP ${status})`;
+        const errorMessage = `${body?.error || `Upload failed (HTTP ${status})`} • ${url}`;
         setError(errorMessage);
         toast({
           title: "Upload Failed",

@@ -4,12 +4,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Settings as SettingsIcon, Palette, Database, Wrench, Bug } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getFunctionsUrl, setFunctionsUrl } from "@/lib/runtimeConfig";
 // Removed complex utility imports - simplified commission tracker
 
 interface SettingsState {
@@ -31,6 +33,7 @@ const Settings = () => {
     nightMode: false,
     heroMode: false,
   });
+  const [functionsUrl, setFunctionsUrlState] = useState<string>('');
 
   // Load settings from localStorage on component mount
   useEffect(() => {
@@ -47,6 +50,9 @@ const Settings = () => {
         document.documentElement.classList.add("hero-mode");
       }
     }
+    
+    // Load functions URL
+    setFunctionsUrlState(getFunctionsUrl());
   }, []);
 
   // Save settings to localStorage whenever settings change
@@ -150,6 +156,15 @@ const Settings = () => {
     });
   };
 
+  const handleFunctionsUrlChange = (url: string) => {
+    setFunctionsUrlState(url);
+    setFunctionsUrl(url);
+    toast({
+      title: "Functions URL Updated",
+      description: "Upload endpoint has been configured.",
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -245,6 +260,20 @@ const Settings = () => {
                     <SelectItem value="gbp">£ GBP</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="functions-url">Functions URL (Emergency 404 Bypass)</Label>
+                <Input
+                  id="functions-url"
+                  value={functionsUrl}
+                  onChange={(e) => handleFunctionsUrlChange(e.target.value)}
+                  placeholder="https://twyskqhuxzqzclzoejmd.supabase.co/functions/v1"
+                  className="w-full"
+                />
+                <div className="text-sm text-muted-foreground">
+                  Direct URL for Supabase Edge Function uploads (bypasses Next.js routing)
+                </div>
               </div>
 
               <div>
