@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Users, Plus, Edit, DollarSign, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import MonthPicker from './MonthPicker';
 
 interface Agent {
   id: string;
@@ -31,6 +32,7 @@ export const SimpleAgentManagement = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [agentName, setAgentName] = useState('');
   const [agentNotes, setAgentNotes] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -50,11 +52,16 @@ export const SimpleAgentManagement = () => {
 
   // Fetch agent statistics from monthly_data
   const { data: agentStats = {} } = useQuery({
-    queryKey: ['agent-stats'],
+    queryKey: ['agent-stats', selectedMonth],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('monthly_data')
-        .select('*');
+      let query = supabase.from('monthly_data').select('*');
+      
+      if (selectedMonth) {
+        const monthDate = new Date(selectedMonth + '-01');
+        query = query.eq('month', monthDate.toISOString().split('T')[0]);
+      }
+      
+      const { data, error } = await query;
       
       if (error) throw error;
 
@@ -178,7 +185,17 @@ export const SimpleAgentManagement = () => {
           <p className="text-muted-foreground">Manage agents and view their performance</p>
         </div>
         
-        <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Month:</label>
+            <MonthPicker
+              value={selectedMonth}
+              onChange={setSelectedMonth}
+              className="w-40"
+            />
+          </div>
+          
+          <Dialog open={isEditing} onOpenChange={setIsEditing}>
           <DialogTrigger asChild>
             <Button onClick={() => {
               setSelectedAgent(null);
@@ -224,6 +241,7 @@ export const SimpleAgentManagement = () => {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {agents.length === 0 ? (
