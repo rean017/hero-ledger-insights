@@ -1,4 +1,3 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -6,19 +5,17 @@ export const useAvailableMonths = () => {
   return useQuery({
     queryKey: ['available-months'],
     queryFn: async () => {
-      console.log('🗓️ Fetching available months from RPC...');
+      console.info('🗓️ [months] Fetching available months from RPC...');
       
       const { data, error } = await supabase.rpc('mh_get_available_months');
 
       if (error) {
-        console.error('❌ Error fetching available months:', error);
+        console.error('❌ [months] rpc error:', error);
         throw error;
       }
 
-      console.log('📅 Available months from RPC:', data);
-      
-      // RPC returns array of {month: string}, extract just the month values
       const months = (data as { month: string }[]).map(row => row.month);
+      console.info('📅 [months] loaded:', months);
       
       return months;
     },
@@ -27,10 +24,11 @@ export const useAvailableMonths = () => {
   });
 };
 
-// Safe label from 'YYYY-MM' without Date()
+// Safe label from 'YYYY-MM' without Date() to avoid timezone issues
 export function fmtMonthLabel(ym: string) {
   const [y, mm] = ym.split('-');
-  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const i = Math.min(Math.max(parseInt(mm || '1', 10) - 1, 0), 11);
-  return `${names[i]} ${y}`;
+  const names = ['January','February','March','April','May','June','July',
+                 'August','September','October','November','December'];
+  const idx = Math.min(Math.max(parseInt(mm || '1', 10) - 1, 0), 11);
+  return `${names[idx]} ${y}`;
 }

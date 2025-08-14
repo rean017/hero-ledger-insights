@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Search, RefreshCw } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { MapPin, Search, RefreshCw, Bug } from 'lucide-react';
+import MonthPicker from './MonthPicker';
+import { fmtMonthLabel } from '../hooks/useAvailableMonths';
 
 interface LocationData {
   location_id: string;
@@ -25,40 +26,15 @@ export const SimpleLocations = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [hasAgentsFilter, setHasAgentsFilter] = useState<'all' | 'yes' | 'no'>('all');
-
-  // Get available months from facts_monthly_location table
-  const { data: availableMonths = [] } = useQuery({
-    queryKey: ['available-months-new'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('facts_monthly_location')
-        .select('month')
-        .order('month', { ascending: false });
-      
-      if (error) throw error;
-      
-      // Convert dates to YYYY-MM format
-      const uniqueMonths = [...new Set(data.map(d => {
-        const date = new Date(d.month);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      }))].sort((a, b) => b.localeCompare(a));
-      
-      return uniqueMonths;
-    }
-  });
-
-  // Set default month to the latest available
-  React.useEffect(() => {
-    if (availableMonths.length > 0 && !selectedMonth) {
-      setSelectedMonth(availableMonths[0]);
-    }
-  }, [availableMonths, selectedMonth]);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Get location data using the new RPC
   const { data: locationData = [], isLoading, refetch } = useQuery({
     queryKey: ['location-data-rpc', selectedMonth, searchTerm, hasAgentsFilter],
     queryFn: async (): Promise<LocationData[]> => {
       const agentFlag = hasAgentsFilter === 'yes' ? true : hasAgentsFilter === 'no' ? false : null;
+      
+      console.info('📍 [locations] load month=', selectedMonth, 'query=', searchTerm, 'hasAgents=', agentFlag);
       
       const { data, error } = await supabase.rpc('mh_get_locations', {
         p_month: selectedMonth || null,
@@ -67,13 +43,24 @@ export const SimpleLocations = () => {
       });
 
       if (error) {
-        console.error('Error fetching location data:', error);
+        console.error('❌ [locations] rpc error:', error);
         throw error;
       }
 
       return data as LocationData[];
     },
     enabled: !!selectedMonth
+  });
+
+  // Diagnostics query
+  const { data: diagnostics } = useQuery({
+    queryKey: ['month-diagnostics'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('mh_diag_month_counts');
+      if (error) throw error;
+      return data as { month: string; rows: number }[];
+    },
+    enabled: showDiagnostics
   });
 
   // Manual refresh function
@@ -90,11 +77,9 @@ export const SimpleLocations = () => {
     }).format(amount);
   };
 
-  const formatMonthDisplay = (monthStr: string) => {
-    if (!monthStr) return '';
-    const [year, month] = monthStr.split('-');
-    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+  const runDiagnostics = () => {
+    setShowDiagnostics(true);
+    console.info('🔍 [diagnostics] running month counts...');
   };
 
   const formatPercentage = (ratio: number) => {
@@ -113,21 +98,45 @@ export const SimpleLocations = () => {
           <p className="text-muted-foreground">View location performance and agent assignments</p>
         </div>
         
-        <div className="w-48">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select month" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableMonths.map(month => (
-                <SelectItem key={month} value={month}>
-                  {formatMonthDisplay(month)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex gap-2">
+          <MonthPicker 
+            value={selectedMonth} 
+            onChange={setSelectedMonth}
+            className="w-48 border rounded px-3 py-2 bg-background"
+          />
+          <Button onClick={runDiagnostics} variant="outline" size="sm">
+            <Bug className="h-4 w-4" />
+          </Button>
         </div>
       </div>
+
+      {showDiagnostics && diagnostics && (
+        <Card>
+          <CardHeader>
+            <CardTitle>📊 Month Diagnostics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead>Row Count</TableHead>
+                  <TableHead>Display Name</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {diagnostics.map((diag) => (
+                  <TableRow key={diag.month}>
+                    <TableCell className="font-mono">{diag.month}</TableCell>
+                    <TableCell>{diag.rows}</TableCell>
+                    <TableCell>{fmtMonthLabel(diag.month)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {selectedMonth && (
         <div className="flex gap-4 mb-6">
@@ -162,7 +171,7 @@ export const SimpleLocations = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5" />
-              Locations for {formatMonthDisplay(selectedMonth)} ({locationData.length})
+              Locations for {fmtMonthLabel(selectedMonth)} ({locationData.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -224,7 +233,7 @@ export const SimpleLocations = () => {
             <MapPin className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No Data Available</h3>
             <p className="text-muted-foreground text-center">
-              No location data found for {formatMonthDisplay(selectedMonth)}.
+              No location data found for {fmtMonthLabel(selectedMonth)}.
             </p>
           </CardContent>
         </Card>

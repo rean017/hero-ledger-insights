@@ -425,6 +425,13 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      mh_diag_month_counts: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          month: string
+          rows: number
+        }[]
+      }
       mh_get_available_months: {
         Args: Record<PropertyKey, never>
         Returns: {
