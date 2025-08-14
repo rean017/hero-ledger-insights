@@ -89,12 +89,11 @@ export const SimpleLocations = () => {
     const counts = await supabase.rpc('mh_diag_month_counts');
     console.info('🔍 [months in facts_monthly_location]', counts.error ?? counts.data);
 
-    // 2) Peek raw facts rows for selected month (using date format)
+    // 2) Peek raw facts rows for selected month (using proper date query)
     const peek = await supabase
       .from('facts_monthly_location')
       .select('month, location_id, total_volume, mh_net_payout')
-      .gte('month', `${selectedMonth}-01`)
-      .lt('month', `${selectedMonth}-32`)
+      .eq('month', `${selectedMonth}-01`)
       .limit(5);
     console.info(`🔍 [first 5 rows for ${selectedMonth}]`, peek.error ?? peek.data);
 
