@@ -271,6 +271,7 @@ export const SimpleLocations = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => {
+                            console.log('Opening assign modal for location:', location.location_id, location.location_name);
                             setSelectedLocation(location);
                             setAssignModalOpen(true);
                           }}

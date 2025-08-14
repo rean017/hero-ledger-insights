@@ -51,22 +51,8 @@ export type Database = {
             foreignKeyName: "agent_location_terms_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
-            referencedRelation: "locations_new"
+            referencedRelation: "locations"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_location_terms_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "v_locations_month"
-            referencedColumns: ["location_id"]
-          },
-          {
-            foreignKeyName: "agent_location_terms_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "v_locations_month_with_flags"
-            referencedColumns: ["location_id"]
           },
           {
             foreignKeyName: "fk_terms_agent"
@@ -408,30 +394,6 @@ export type Database = {
         }
         Relationships: []
       }
-      v_locations_month: {
-        Row: {
-          agent_count: number | null
-          agent_net_payout: number | null
-          location_id: string | null
-          location_name: string | null
-          month: string | null
-          total_volume: number | null
-        }
-        Relationships: []
-      }
-      v_locations_month_with_flags: {
-        Row: {
-          agent_count: number | null
-          agent_net_payout: number | null
-          is_zero_volume: boolean | null
-          location_id: string | null
-          location_name: string | null
-          margin_ratio: number | null
-          month: string | null
-          total_volume: number | null
-        }
-        Relationships: []
-      }
     }
     Functions: {
       get_current_user_role: {
@@ -463,6 +425,14 @@ export type Database = {
           notes: string | null
           updated_at: string
         }
+      }
+      mh_debug_location_ids: {
+        Args: { p_name: string }
+        Returns: {
+          exact_count: number
+          found_id: string
+          ilike_count: number
+        }[]
       }
       mh_delete_agent: {
         Args: { p_id: string }
@@ -513,6 +483,17 @@ export type Database = {
       }
       mh_set_location_agent_term: {
         Args: { p_agent_id: string; p_bps: number; p_location_id: string }
+        Returns: {
+          agent_id: string
+          bps: number
+          created_at: string
+          id: string
+          location_id: string
+          updated_at: string
+        }
+      }
+      mh_set_location_agent_term_fuzzy: {
+        Args: { p_agent_id: string; p_bps: number; p_location: string }
         Returns: {
           agent_id: string
           bps: number

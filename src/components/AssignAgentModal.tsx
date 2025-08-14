@@ -97,13 +97,26 @@ export function AssignAgentModal({ open, onClose, location, onUpdate }: AssignAg
 
     setSaving(true);
     try {
-      const { error } = await supabase.rpc('mh_set_location_agent_term', {
+      // Log to verify we're sending the UUID
+      console.log('assigning', { locationId: location.location_id, agentId: selectedAgentId, bps });
+
+      // First try strict UUID
+      let { error } = await supabase.rpc('mh_set_location_agent_term', {
         p_location_id: location.location_id,
         p_agent_id: selectedAgentId,
         p_bps: bps
       });
-      
-      if (error) throw error;
+
+      if (error) {
+        // TEMPORARY fallback; remove once you're sure UUID is wired everywhere
+        console.warn('strict RPC failed; falling back to fuzzy', error);
+        const fuzzy = await supabase.rpc('mh_set_location_agent_term_fuzzy', {
+          p_location: location.location_id,
+          p_agent_id: selectedAgentId,
+          p_bps: bps
+        });
+        if (fuzzy.error) throw fuzzy.error;
+      }
       
       toast({
         title: "Success",
