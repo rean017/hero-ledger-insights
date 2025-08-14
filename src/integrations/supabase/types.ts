@@ -121,7 +121,7 @@ export type Database = {
             foreignKeyName: "facts_monthly_location_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
-            referencedRelation: "locations_new"
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
           {
@@ -299,22 +299,31 @@ export type Database = {
           created_at: string
           id: string
           month: string
+          new_locations: number | null
           original_filename: string
           row_count: number
+          rows_inserted: number | null
+          zero_count: number | null
         }
         Insert: {
           created_at?: string
           id?: string
           month: string
+          new_locations?: number | null
           original_filename: string
           row_count?: number
+          rows_inserted?: number | null
+          zero_count?: number | null
         }
         Update: {
           created_at?: string
           id?: string
           month?: string
+          new_locations?: number | null
           original_filename?: string
           row_count?: number
+          rows_inserted?: number | null
+          zero_count?: number | null
         }
         Relationships: []
       }
