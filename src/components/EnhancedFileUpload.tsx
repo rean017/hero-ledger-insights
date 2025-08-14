@@ -317,13 +317,17 @@ export const EnhancedFileUpload = () => {
         agent_net: row.agentNet
       }));
 
-      // Robust fetch helper with detailed error handling
-      const postJSON = async (url: string, payload: any) => {
+      // Call Supabase Edge Function for reliable uploads (no 404s)
+      const postToFunction = async (payload: any) => {
+        const FUNCTIONS_URL = `https://twyskqhuxzqzclzoejmd.supabase.co/functions/v1`;
+        const url = `${FUNCTIONS_URL}/mh_upload_master_http`;
+        
         const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
+        
         const text = await resp.text();
         let body: any = null;
         try { 
@@ -334,7 +338,7 @@ export const EnhancedFileUpload = () => {
         return { ok: resp.ok, status: resp.status, body };
       };
 
-      const { ok, status, body } = await postJSON('/api/uploads/master', {
+      const { ok, status, body } = await postToFunction({
         month,
         rows,
         filename: file?.name || 'upload'
