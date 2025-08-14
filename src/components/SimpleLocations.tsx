@@ -77,9 +77,37 @@ export const SimpleLocations = () => {
     }).format(amount);
   };
 
-  const runDiagnostics = () => {
+  const runDiagnostics = async () => {
+    if (!selectedMonth) { 
+      console.info('🔍 [diag] No month selected'); 
+      return; 
+    }
+
+    console.info('=== DIAGNOSTICS for', selectedMonth, '===');
+
+    // 1) What months/row counts are in the table?
+    const mc = await supabase.rpc('mh_diag_month_counts');
+    console.info('🔍 [diag] month_counts:', mc.error ?? mc.data);
+
+    // 2) Peek raw facts rows for selected month
+    const peek = await supabase
+      .from('facts_monthly_location')
+      .select('month, location_id, total_volume, mh_net_payout')
+      .eq('month', selectedMonth)
+      .limit(5);
+    console.info('🔍 [diag] first 5 facts for month:', peek.error ?? peek.data);
+
+    // 3) Call the Locations RPC exactly as the page does
+    const { data, error } = await supabase.rpc('mh_get_locations', {
+      p_month: selectedMonth,
+      p_query: searchTerm || null,
+      p_has_agents: hasAgentsFilter === 'yes' ? true : hasAgentsFilter === 'no' ? false : null
+    });
+    console.info('🔍 [diag] mh_get_locations:', error ?? data);
+
+    console.info('=== END DIAGNOSTICS ===');
+    
     setShowDiagnostics(true);
-    console.info('🔍 [diagnostics] running month counts...');
   };
 
   const formatPercentage = (ratio: number) => {
