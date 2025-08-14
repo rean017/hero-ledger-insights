@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import dayjs from 'dayjs';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,8 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, Download, TrendingUp } from 'lucide-react';
+import { FileText, Download, TrendingUp, Calculator } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useAgentReport, type AgentRow } from '../hooks/useAgentReport';
 
 interface CommissionReportData {
   agentName: string;
@@ -26,8 +28,12 @@ interface PLReportData {
   netIncome: number;
 }
 
+type Agent = { id: string; name: string };
+
 export const SimpleReports = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [agentReportMonth, setAgentReportMonth] = useState<string>(dayjs().format('YYYY-MM'));
 
   // Get available months from stable facts table
   const { data: availableMonths = [] } = useQuery({
@@ -44,6 +50,23 @@ export const SimpleReports = () => {
       return uniqueMonths;
     }
   });
+
+  // Get agents for the agent reports tab
+  const { data: agents = [] } = useQuery({
+    queryKey: ['agents'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('agents')
+        .select('id, name')
+        .order('name');
+      
+      if (error) throw error;
+      return data as Agent[];
+    }
+  });
+
+  // Use the agent report hook
+  const { rows: agentRows, totals: agentTotals, loading: agentLoading, error: agentError, monthKey } = useAgentReport(selectedAgent, agentReportMonth);
 
   // Set default month to the latest available
   React.useEffect(() => {
@@ -169,6 +192,25 @@ export const SimpleReports = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  const onExportAgentCsv = () => {
+    const header = ['Location', 'Month', 'Volume', 'BPS', 'Agent Commission'];
+    const lines = agentRows.map(r => [
+      `"${r.location_name.replace(/"/g,'""')}"`,
+      r.month_key,
+      String(r.total_volume ?? 0),
+      String(r.bps ?? 0),
+      String(r.commission ?? 0),
+    ].join(','));
+    const csv = [header.join(','), ...lines, '', `Totals,,${agentTotals.volume},,${agentTotals.commission}`].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agent-report-${selectedAgent ?? 'unknown'}-${monthKey ?? 'month'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -181,6 +223,7 @@ export const SimpleReports = () => {
       <Tabs defaultValue="commission" className="space-y-6">
         <TabsList>
           <TabsTrigger value="commission">Commission Reports</TabsTrigger>
+          <TabsTrigger value="agent">Agent Reports</TabsTrigger>
           <TabsTrigger value="pl">P&L Reports</TabsTrigger>
         </TabsList>
 
@@ -272,6 +315,141 @@ export const SimpleReports = () => {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="agent" className="space-y-6">
+          <div className="flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex flex-wrap gap-3 items-center">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-muted-foreground">Month</label>
+                <input
+                  type="month"
+                  value={agentReportMonth}
+                  onChange={(e) => setAgentReportMonth(e.target.value)}
+                  className="border border-border rounded px-3 py-2 bg-background"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-muted-foreground">Agent</label>
+                <Select value={selectedAgent ?? ''} onValueChange={(value) => setSelectedAgent(value || null)}>
+                  <SelectTrigger className="min-w-[220px]">
+                    <SelectValue placeholder="Select agent…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents.map(a => (
+                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Button
+              onClick={onExportAgentCsv}
+              disabled={!agentRows.length}
+              variant="outline"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          </div>
+
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground">Agent Volume</div>
+                <div className="text-2xl font-semibold">
+                  {agentTotals.volume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground">Agent Commission</div>
+                <div className="text-2xl font-semibold">
+                  {agentTotals.commission.toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground">Month</div>
+                <div className="text-2xl font-semibold">{monthKey ?? '—'}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                Agent Commission Report - {monthKey ?? 'No Month Selected'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Location</TableHead>
+                    <TableHead className="text-right">Volume</TableHead>
+                    <TableHead className="text-right">BPS</TableHead>
+                    <TableHead className="text-right">Agent Commission</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agentLoading && (
+                    <TableRow>
+                      <TableCell className="py-4 text-center text-muted-foreground" colSpan={4}>
+                        Loading…
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!agentLoading && !agentRows.length && (
+                    <TableRow>
+                      <TableCell className="py-4 text-center text-muted-foreground" colSpan={4}>
+                        {!selectedAgent ? 'Select an agent to view commission data.' : 'No data available for the selected agent and month.'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {agentRows.map(r => (
+                    <TableRow key={r.location_id}>
+                      <TableCell className="font-medium">{r.location_name}</TableCell>
+                      <TableCell className="text-right">
+                        {Number(r.total_volume).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="secondary">{r.bps} BPS</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(r.commission).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                {agentRows.length > 0 && (
+                  <tfoot className="bg-muted/50 font-medium">
+                    <TableRow>
+                      <TableCell className="text-right">Totals</TableCell>
+                      <TableCell className="text-right">
+                        {agentTotals.volume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </TableCell>
+                      <TableCell className="text-right">—</TableCell>
+                      <TableCell className="text-right">
+                        {agentTotals.commission.toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
+                      </TableCell>
+                    </TableRow>
+                  </tfoot>
+                )}
+              </Table>
+
+              {agentError && (
+                <div className="mt-4 text-destructive text-sm">{agentError}</div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="pl" className="space-y-6">

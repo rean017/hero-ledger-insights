@@ -425,6 +425,17 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      mh_agent_monthly_report: {
+        Args: { p_agent_id: string; p_month_key: string }
+        Returns: {
+          bps: number
+          commission: number
+          location_id: string
+          location_name: string
+          month_key: string
+          total_volume: number
+        }[]
+      }
       mh_diag_month_counts: {
         Args: Record<PropertyKey, never>
         Returns: {
