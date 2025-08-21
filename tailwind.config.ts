@@ -19,6 +19,18 @@ export default {
 		},
 		extend: {
 			colors: {
+				brand: {
+					50: 'hsl(var(--brand-50))',
+					100: 'hsl(var(--brand-100))',
+					200: 'hsl(var(--brand-200))',
+					300: 'hsl(var(--brand-300))',
+					400: 'hsl(var(--brand-400))',
+					500: 'hsl(var(--brand-500))',
+					600: 'hsl(var(--brand-600))',
+					700: 'hsl(var(--brand-700))',
+					800: 'hsl(var(--brand-800))',
+					900: 'hsl(var(--brand-900))',
+				},
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
@@ -66,7 +78,16 @@ export default {
 			borderRadius: {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
-				sm: 'calc(var(--radius) - 4px)'
+				sm: 'calc(var(--radius) - 4px)',
+				'xl2': '1rem'
+			},
+			boxShadow: {
+				card: '0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10)',
+				cardHover: '0 6px 16px rgba(16,24,40,.12)',
+			},
+			transitionTimingFunction: {
+				'soft-out': 'cubic-bezier(.22,1,.36,1)',
+				'soft-in': 'cubic-bezier(.12,0,.39,0)',
 			},
 			keyframes: {
 				'accordion-down': {

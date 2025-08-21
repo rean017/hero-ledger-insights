@@ -13,6 +13,7 @@ import MonthPicker from './MonthPicker';
 import { fmtMonthLabel } from '../hooks/useAvailableMonths';
 import { AssignAgentModal } from './AssignAgentModal';
 import LocationsGrid from './LocationsGrid';
+import LocationsSkeleton from './LocationsSkeleton';
 
 interface LocationData {
   location_id: string;
@@ -193,17 +194,17 @@ export const SimpleLocations = () => {
       {selectedMonth && (
         <div className="flex gap-4 mb-6">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
             <Input
               placeholder="Search locations..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleRefresh()}
-              className="pl-9"
+              className="pl-9 border-zinc-200 bg-white focus-brand"
             />
           </div>
           <Select value={hasAgentsFilter} onValueChange={(value: 'all' | 'yes' | 'no') => setHasAgentsFilter(value)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-48 border-zinc-200 bg-white focus-brand">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -212,13 +213,26 @@ export const SimpleLocations = () => {
               <SelectItem value="no">No Agents</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={handleRefresh} disabled={isLoading} variant="outline">
+          <Button 
+            onClick={handleRefresh} 
+            disabled={isLoading} 
+            variant="outline"
+            className="border-zinc-200 bg-white hover:bg-brand-50 hover:border-brand-200 focus-brand"
+          >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       )}
 
-      {selectedMonth && locationData.length > 0 ? (
+      {selectedMonth && isLoading ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            <h2 className="text-xl font-semibold">Loading locations...</h2>
+          </div>
+          <LocationsSkeleton />
+        </div>
+      ) : selectedMonth && locationData.length > 0 ? (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />

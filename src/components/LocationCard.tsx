@@ -1,6 +1,4 @@
 import { ReactNode } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { MoreVertical, Users } from "lucide-react";
 
 type LocationCardProps = {
@@ -39,60 +37,63 @@ export default function LocationCard({
   footer
 }: LocationCardProps) {
   return (
-    <Card className="group relative transition-all hover:shadow-md">
-      <CardContent className="p-4">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-base font-semibold leading-6 text-foreground">{name}</h3>
-            {isZeroVolume && (
-              <span className="mt-1 inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning ring-1 ring-warning/20">
-                Zero volume
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onAssign?.(id)}
-              className="hidden group-hover:inline-flex"
-            >
-              <Users className="h-3 w-3 mr-1" />
-              Assign
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onMore?.(id)}
-              className="h-8 w-8"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </div>
+    <div
+      className="group card-base card-hover focus-brand relative p-4"
+      tabIndex={0}
+      role="article"
+      aria-label={`Location ${name}`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-[15px] font-semibold leading-6 text-zinc-900">{name}</h3>
+          {isZeroVolume && (
+            <span className="mt-1 inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 ring-1 ring-inset ring-brand-200">
+              Zero volume
+            </span>
+          )}
         </div>
 
-        {/* Metrics grid */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Metric label="Volume" value={usd(volume)} />
-          <Metric label="Agent Net Payout" value={usd(agentNetPayout)} />
-          <Metric label="BPS" value={bpsFmt(bps)} />
-          <Metric label="Margin %" value={pct(marginPct)} />
-          <Metric label="# Agents" value={agentsCount.toString()} />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onAssign?.(id)}
+            className="invisible group-hover:visible rounded-md border border-brand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 hover:border-brand-400 focus-brand transition-all duration-150"
+            aria-label="Assign agents"
+            title="Assign agents"
+          >
+            <Users className="h-3 w-3 mr-1 inline" />
+            Assign
+          </button>
+          <button
+            onClick={() => onMore?.(id)}
+            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 focus-brand transition-colors duration-150"
+            aria-label="More actions"
+            title="More actions"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
         </div>
+      </div>
 
-        {footer && <div className="mt-4">{footer}</div>}
-      </CardContent>
-    </Card>
+      {/* Metrics grid */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Metric label="Volume" value={usd(volume)} />
+        <Metric label="Agent Net Payout" value={usd(agentNetPayout)} />
+        <Metric label="BPS" value={bpsFmt(bps)} />
+        <Metric label="Margin %" value={pct(marginPct)} />
+        <Metric label="# Agents" value={agentsCount.toString()} />
+      </div>
+
+      {footer && <div className="mt-4">{footer}</div>}
+    </div>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold text-foreground">{value}</div>
+    <div className="rounded-xl border border-zinc-100 px-3 py-2 transition-colors duration-150 hover:border-brand-200">
+      <div className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="mt-0.5 text-sm font-semibold text-zinc-900">{value}</div>
     </div>
   );
 }
