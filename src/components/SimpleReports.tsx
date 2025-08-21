@@ -155,8 +155,8 @@ export const SimpleReports = () => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   };
 
@@ -231,7 +231,7 @@ export const SimpleReports = () => {
           <div className="flex items-center justify-between">
             <div className="w-48">
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger>
+                <SelectTrigger className="focus-brand">
                   <SelectValue placeholder="Select month" />
                 </SelectTrigger>
                 <SelectContent>
@@ -248,6 +248,7 @@ export const SimpleReports = () => {
               <Button 
                 onClick={() => downloadCSV(commissionData, `commission-report-${selectedMonth}.csv`)}
                 variant="outline"
+                className="hover:bg-brand-50 hover:border-brand-200 focus-brand"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
@@ -326,14 +327,14 @@ export const SimpleReports = () => {
                   type="month"
                   value={agentReportMonth}
                   onChange={(e) => setAgentReportMonth(e.target.value)}
-                  className="border border-border rounded px-3 py-2 bg-background"
+                  className="border border-border rounded px-3 py-2 bg-background focus-brand"
                 />
               </div>
 
               <div className="flex items-center gap-2">
                 <label className="text-sm text-muted-foreground">Agent</label>
                 <Select value={selectedAgent ?? ''} onValueChange={(value) => setSelectedAgent(value || null)}>
-                  <SelectTrigger className="min-w-[220px]">
+                  <SelectTrigger className="min-w-[220px] focus-brand">
                     <SelectValue placeholder="Select agent…" />
                   </SelectTrigger>
                   <SelectContent>
@@ -349,6 +350,7 @@ export const SimpleReports = () => {
               onClick={onExportAgentCsv}
               disabled={!agentRows.length}
               variant="outline"
+              className="hover:bg-brand-50 hover:border-brand-200 focus-brand disabled:hover:bg-background"
             >
               <Download className="h-4 w-4 mr-2" />
               Export CSV

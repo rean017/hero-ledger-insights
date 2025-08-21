@@ -87,8 +87,8 @@ export const SimpleDashboard = () => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   };
 
@@ -110,7 +110,7 @@ export const SimpleDashboard = () => {
         
         <div className="w-48">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger>
+            <SelectTrigger className="focus-brand">
               <SelectValue placeholder="Select month" />
             </SelectTrigger>
             <SelectContent>
@@ -126,61 +126,61 @@ export const SimpleDashboard = () => {
 
       {selectedMonth && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card>
+          <Card className="card-base card-hover focus-brand transition-all duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Sales Volume</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-zinc-700">Total Sales Volume</CardTitle>
+              <TrendingUp className="h-4 w-4 text-brand-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold text-zinc-900">
                 {isLoading ? '...' : formatCurrency(monthlyStats?.totalVolume || 0)}
               </div>
-              <Badge variant="secondary" className="mt-2">
+              <Badge className="mt-2 bg-brand-50 text-brand-700 hover:bg-brand-100">
                 {formatMonthDisplay(selectedMonth)}
               </Badge>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="card-base card-hover focus-brand transition-all duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Agent Payout</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-zinc-700">Total Agent Payout</CardTitle>
+              <DollarSign className="h-4 w-4 text-brand-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold text-zinc-900">
                 {isLoading ? '...' : formatCurrency(monthlyStats?.totalAgentPayout || 0)}
               </div>
-              <Badge variant="secondary" className="mt-2">
+              <Badge className="mt-2 bg-brand-50 text-brand-700 hover:bg-brand-100">
                 Agent Commissions
               </Badge>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="card-base card-hover focus-brand transition-all duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Net Income</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-zinc-700">Net Income</CardTitle>
+              <TrendingUp className="h-4 w-4 text-brand-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold text-zinc-900">
                 {isLoading ? '...' : formatCurrency(monthlyStats?.netIncome || 0)}
               </div>
-              <Badge variant="secondary" className="mt-2">
+              <Badge className="mt-2 bg-brand-50 text-brand-700 hover:bg-brand-100">
                 After Commissions
               </Badge>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="card-base card-hover focus-brand transition-all duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Locations</CardTitle>
-              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-zinc-700">Active Locations</CardTitle>
+              <MapPin className="h-4 w-4 text-brand-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold text-zinc-900">
                 {isLoading ? '...' : monthlyStats?.totalLocations || 0}
               </div>
-              <Badge variant="secondary" className="mt-2">
+              <Badge className="mt-2 bg-brand-50 text-brand-700 hover:bg-brand-100">
                 {isLoading ? '...' : `${monthlyStats?.totalAgents || 0} Agents`}
               </Badge>
             </CardContent>

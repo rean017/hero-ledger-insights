@@ -168,8 +168,8 @@ export const SimpleAgentManagement = () => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   };
 
@@ -197,11 +197,14 @@ export const SimpleAgentManagement = () => {
           
           <Dialog open={isEditing} onOpenChange={setIsEditing}>
           <DialogTrigger asChild>
-            <Button onClick={() => {
-              setSelectedAgent(null);
-              setAgentName('');
-              setAgentNotes('');
-            }}>
+            <Button 
+              className="bg-brand-500 hover:bg-brand-600 text-white focus-brand"
+              onClick={() => {
+                setSelectedAgent(null);
+                setAgentName('');
+                setAgentNotes('');
+              }}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Add Agent
             </Button>
@@ -219,6 +222,7 @@ export const SimpleAgentManagement = () => {
                   value={agentName}
                   onChange={(e) => setAgentName(e.target.value)}
                   placeholder="Enter agent name"
+                  className="focus-brand"
                 />
               </div>
               <div>
@@ -228,13 +232,18 @@ export const SimpleAgentManagement = () => {
                   onChange={(e) => setAgentNotes(e.target.value)}
                   placeholder="Add any notes about this agent"
                   rows={3}
+                  className="focus-brand"
                 />
               </div>
               <div className="flex gap-2">
-                <Button onClick={handleSave} disabled={agentMutation.isPending}>
+                <Button 
+                  onClick={handleSave} 
+                  disabled={agentMutation.isPending}
+                  className="bg-brand-500 hover:bg-brand-600 text-white focus-brand"
+                >
                   {agentMutation.isPending ? 'Saving...' : 'Save'}
                 </Button>
-                <Button variant="outline" onClick={() => setIsEditing(false)}>
+                <Button variant="outline" onClick={() => setIsEditing(false)} className="hover:bg-brand-50 hover:border-brand-200 focus-brand">
                   Cancel
                 </Button>
               </div>
@@ -299,6 +308,7 @@ export const SimpleAgentManagement = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => handleEdit(agent)}
+                          className="hover:bg-brand-50 hover:border-brand-200 focus-brand"
                         >
                           <Edit className="h-3 w-3" />
                         </Button>

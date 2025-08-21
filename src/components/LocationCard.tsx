@@ -16,7 +16,7 @@ type LocationCardProps = {
 };
 
 const usd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n || 0);
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
 const pct = (n: number) =>
   `${((n || 0) * 100).toFixed(2)}%`;
@@ -57,7 +57,7 @@ export default function LocationCard({
         <div className="flex items-center gap-1">
           <button
             onClick={() => onAssign?.(id)}
-            className="invisible group-hover:visible rounded-md border border-brand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 hover:border-brand-400 focus-brand transition-all duration-150"
+            className="invisible group-hover:visible rounded-md border border-brand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 hover:border-brand-400 focus-brand transition-all duration-150 transform hover:scale-105"
             aria-label="Assign agents"
             title="Assign agents"
           >
@@ -66,7 +66,7 @@ export default function LocationCard({
           </button>
           <button
             onClick={() => onMore?.(id)}
-            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 focus-brand transition-colors duration-150"
+            className="rounded-md p-1.5 text-zinc-500 hover:bg-brand-50 hover:text-brand-600 focus-brand transition-all duration-150"
             aria-label="More actions"
             title="More actions"
           >
