@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { MoreVertical, Users } from "lucide-react";
+import { formatMoneyExact, formatBpsExact, formatPercentExact } from '@/lib/numberFormat';
 
 type LocationCardProps = {
   id: string;
@@ -15,13 +16,9 @@ type LocationCardProps = {
   footer?: ReactNode;                        // slot for custom extra
 };
 
-const usd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
-
-const pct = (n: number) =>
-  `${((n || 0) * 100).toFixed(2)}%`;
-
-const bpsFmt = (n: number) => `${Math.round(n || 0)} BPS`;
+const usd = (n: number) => formatMoneyExact(n || 0);
+const pct = (n: number) => formatPercentExact(n || 0);
+const bpsFmt = (n: number) => formatBpsExact(n || 0);
 
 export default function LocationCard({
   id,

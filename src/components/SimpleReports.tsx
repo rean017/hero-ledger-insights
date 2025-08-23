@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Download, TrendingUp, Calculator } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useAgentReport, type AgentRow } from '../hooks/useAgentReport';
+import { formatMoneyExact } from '@/lib/numberFormat';
 
 interface CommissionReportData {
   agentName: string;
@@ -151,14 +152,7 @@ export const SimpleReports = () => {
     }
   });
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatMoneyExact(amount);
 
   const formatMonthDisplay = (monthStr: string) => {
     try {

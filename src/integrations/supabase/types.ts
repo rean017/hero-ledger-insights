@@ -404,6 +404,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      mh_agent_locations: {
+        Args: { p_agent: string; p_month: string }
+        Returns: {
+          bps: number
+          location_id: string
+          location_name: string
+          payout: number
+          volume: number
+        }[]
+      }
       mh_agent_monthly_report: {
         Args: { p_agent_id: string; p_month_key: string }
         Returns: {
@@ -412,6 +422,17 @@ export type Database = {
           location_id: string
           location_name: string
           month_key: string
+          total_volume: number
+        }[]
+      }
+      mh_agent_summary: {
+        Args: { p_month: string }
+        Returns: {
+          agent_id: string
+          agent_name: string
+          avg_bps: number
+          location_count: number
+          total_payout: number
           total_volume: number
         }[]
       }
@@ -476,6 +497,14 @@ export type Database = {
           month: string
           total_volume: number
         }[]
+      }
+      mh_month_end: {
+        Args: { p_month: string }
+        Returns: string
+      }
+      mh_month_start: {
+        Args: { p_month: string }
+        Returns: string
       }
       mh_remove_location_agent_term: {
         Args: { p_agent_id: string; p_location_id: string }

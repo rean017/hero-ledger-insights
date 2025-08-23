@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Users, Plus, Edit, DollarSign, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import MonthPicker from './MonthPicker';
+import { useAgentSummary } from '@/hooks/useAgentSummary';
+import { formatMoneyExact, formatBpsExact } from '@/lib/numberFormat';
 
 interface Agent {
   id: string;
@@ -18,13 +20,6 @@ interface Agent {
   notes: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface AgentStats {
-  totalVolume: number;
-  totalPayout: number;
-  avgBPS: number;
-  locationCount: number;
 }
 
 export const SimpleAgentManagement = () => {
@@ -50,51 +45,8 @@ export const SimpleAgentManagement = () => {
     }
   });
 
-  // Fetch agent statistics from monthly_data
-  const { data: agentStats = {} } = useQuery({
-    queryKey: ['agent-stats', selectedMonth],
-    queryFn: async () => {
-      let query = supabase.from('monthly_data').select('*');
-      
-      if (selectedMonth) {
-        const monthDate = new Date(selectedMonth + '-01');
-        query = query.eq('month', monthDate.toISOString().split('T')[0]);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-
-      const stats: Record<string, AgentStats> = {};
-      
-      // Group by agent and calculate stats
-      data.forEach(row => {
-        if (!stats[row.agent_name]) {
-          stats[row.agent_name] = {
-            totalVolume: 0,
-            totalPayout: 0,
-            avgBPS: 0,
-            locationCount: 0
-          };
-        }
-        
-        stats[row.agent_name].totalVolume += Number(row.volume);
-        stats[row.agent_name].totalPayout += Number(row.agent_payout);
-      });
-
-      // Calculate average BPS and location counts
-      Object.keys(stats).forEach(agentName => {
-        const stat = stats[agentName];
-        stat.avgBPS = stat.totalVolume > 0 ? (stat.totalPayout / stat.totalVolume) * 10000 : 0;
-        
-        // Count unique locations per agent
-        const agentData = data.filter(row => row.agent_name === agentName);
-        stat.locationCount = new Set(agentData.map(row => row.location_name)).size;
-      });
-
-      return stats;
-    }
-  });
+  // Fetch agent statistics using the new RPC
+  const { data: agentStats, loading: statsLoading, error: statsError } = useAgentSummary(selectedMonth);
 
   // Create/Update agent mutation using RPCs
   const agentMutation = useMutation({
@@ -164,17 +116,17 @@ export const SimpleAgentManagement = () => {
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
 
-  if (isLoading) {
+  if (isLoading || statsLoading) {
     return <div>Loading agents...</div>;
+  }
+
+  if (statsError) {
+    return (
+      <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        Error loading agent statistics: {statsError}
+      </div>
+    );
   }
 
   return (
@@ -285,22 +237,22 @@ export const SimpleAgentManagement = () => {
               </TableHeader>
               <TableBody>
                 {agents.map((agent) => {
-                  const stats = agentStats[agent.name] || {
-                    totalVolume: 0,
-                    totalPayout: 0,
-                    avgBPS: 0,
-                    locationCount: 0
+                  const stats = agentStats?.find(s => s.agent_id === agent.id) || {
+                    location_count: 0,
+                    total_volume: 0,
+                    total_payout: 0,
+                    avg_bps: 0
                   };
 
                   return (
                     <TableRow key={agent.id}>
                       <TableCell className="font-medium">{agent.name}</TableCell>
-                      <TableCell>{stats.locationCount}</TableCell>
-                      <TableCell>{formatCurrency(stats.totalVolume)}</TableCell>
-                      <TableCell>{formatCurrency(stats.totalPayout)}</TableCell>
+                      <TableCell>{stats.location_count}</TableCell>
+                      <TableCell>{formatMoneyExact(Number(stats.total_volume))}</TableCell>
+                      <TableCell>{formatMoneyExact(Number(stats.total_payout))}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">
-                          {stats.avgBPS.toFixed(0)} BPS
+                          {formatBpsExact(Number(stats.avg_bps))}
                         </Badge>
                       </TableCell>
                       <TableCell>

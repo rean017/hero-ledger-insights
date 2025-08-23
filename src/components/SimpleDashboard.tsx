@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TrendingUp, DollarSign, MapPin, Users } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { formatMoneyExact } from '@/lib/numberFormat';
 
 interface MonthlyStats {
   totalVolume: number;
@@ -83,14 +84,7 @@ export const SimpleDashboard = () => {
     enabled: !!selectedMonth
   });
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatMoneyExact(amount);
 
   const formatMonthDisplay = (monthStr: string) => {
     try {
